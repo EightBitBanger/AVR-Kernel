@@ -22,6 +22,8 @@ void kInit(void) {
     
     ConsoleSetPrompt(prompt, sizeof(prompt));
     
+    fsMount(0x60000, 'C');
+    
     // Initiate memory storage
     struct Partition part = fsDeviceOpen(0x00000000);
     fsDeviceFormat(&part, 0, 32768, 32);

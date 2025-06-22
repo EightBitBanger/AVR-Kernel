@@ -13,26 +13,28 @@ struct MountPoint {
     uint8_t letter;
 };
 
-void fsMount(uint32_t device_address, uint8_t letter) {
+uint8_t fsMount(uint32_t device_address, uint8_t letter) {
     uppercase(&letter);
     struct MountPoint* mountPoint = (struct MountPoint*)malloc(sizeof(struct MountPoint));
     mountPoint->device_address = device_address;
     mountPoint->letter = letter;
     
     ListAddNode(&MountPointTableHead, (void*)mountPoint);
-    return;
+    return 1;
 }
 
-void fsUnmount(uint8_t letter) {
+uint8_t fsUnmount(uint8_t letter) {
     uppercase(&letter);
     uint32_t numberOfMountPoints = ListGetSize(MountPointTableHead);
     for (uint16_t i=0; i < numberOfMountPoints; i++) {
         struct Node* nodePtr = ListGetNode(MountPointTableHead, i);
         struct MountPoint* mountPoint = nodePtr->data;
-        if (mountPoint->letter == letter) 
+        if (mountPoint->letter == letter) {
             ListRemoveNode(&MountPointTableHead, mountPoint);
+            return 1;
+        }
     }
-    return;
+    return 0;
 }
 
 uint32_t fsMountGetNumberOfPoints(uint8_t letter) {

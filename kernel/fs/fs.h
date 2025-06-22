@@ -46,8 +46,8 @@ void fsInit(void);
 
 // Device mount points
 
-void fsMount(uint32_t device_address, uint8_t letter);
-void fsUnmount(uint8_t letter);
+uint8_t fsMount(uint32_t device_address, uint8_t letter);
+uint8_t fsUnmount(uint8_t letter);
 uint32_t fsMountGetNumberOfPoints(uint8_t letter);
 struct MountPoint* fsMountGetMountPointByIndex(uint16_t index);
 
