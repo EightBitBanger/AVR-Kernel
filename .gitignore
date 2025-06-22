@@ -1,16 +1,19 @@
 # Prerequisites
 *.d
+*.cbp
 
 # Object files
 *.o
 *.ko
 *.obj
 *.elf
+*.eep
 
 # Linker output
 *.ilk
 *.map
 *.exp
+*.lss
 
 # Precompiled Headers
 *.gch
@@ -30,6 +33,7 @@
 
 # Executables
 *.exe
+*.bat
 *.com
 *.out
 *.app
@@ -51,3 +55,8 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Only draw from these directories
+#*
+#!drivers/
+#!kernel/
