@@ -51,6 +51,7 @@ void fsInit(void);
 
 void fs_write_byte(uint32_t address, uint8_t data);
 void fs_read_byte(uint32_t address, uint8_t* data);
+void fsDeviceSetType(uint8_t device_type);
 
 // Device mount points
 
@@ -69,7 +70,8 @@ uint32_t fsDeviceGetSize(struct Partition part);
 uint32_t fsDeviceGetSectorSize(struct Partition part);
 DirectoryHandle fsDeviceGetRootDirectory(struct Partition part);
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size);
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type);
+void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type);
 
 uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type);
 

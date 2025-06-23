@@ -15,7 +15,7 @@
 
 //#include <kernel/command/boot/boot.h>
 //#include <kernel/command/format/format.h>
-//#include <kernel/command/list/list.h>
+#include <kernel/command/list/list.h>
 
 
 /*

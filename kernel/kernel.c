@@ -22,11 +22,33 @@ void kInit(void) {
     
     ConsoleSetPrompt(prompt, sizeof(prompt));
     
-    fsMount(0x60000, 'C');
+    /*
+    struct Partition partInit;
+    partInit.block_address = 0x60000;
+    partInit.block_size = 1024 * 8;
+    partInit.sector_size = 32;
+    partInit.sector_count = partInit.block_size / partInit.sector_size;
+    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
+    
+    DirectoryHandle rootDir = fsDeviceGetRootDirectory(partInit);
+    
+    uint8_t filename[] = "test_file";
+    FileHandle fileHandle = fsFileCreate(partInit, filename, 50);
+    
+    fsDirectoryAddFile(partInit, rootDir, fileHandle);
+    */
+    
+    /*
+    fsDeviceFormatLow(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
+    fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
+    */
+    
+    
+    //fsMount(0x60000, 'C');
     
     // Initiate memory storage
     struct Partition part = fsDeviceOpen(0x00000000);
-    fsDeviceFormat(&part, 0, 32768, 32);
+    fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY);
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
     fsWorkingDirectorySetRoot(rootDirectory);

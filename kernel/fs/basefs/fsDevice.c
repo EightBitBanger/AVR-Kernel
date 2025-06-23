@@ -20,6 +20,19 @@ void fs_read_byte(uint32_t address, uint8_t* data) {
     fsReadSectorByte(&fs_bus, address, data);
 }
 
+void fsDeviceSetType(uint8_t device_type) {
+    if (device_type == FS_DEVICE_TYPE_EEPROM) {
+        fsWriteSectorByte = bus_write_byte_eeprom;
+        fsReadSectorByte = bus_read_memory;
+        return;
+    }
+    
+    // Default
+    fsWriteSectorByte = bus_write_memory;
+    fsReadSectorByte = bus_read_memory;
+    return;
+}
+
 
 void fsInit(void) {
     
@@ -60,18 +73,7 @@ struct Partition fsDeviceOpen(uint32_t device_address) {
     // Check device type
     uint8_t typeIdentifier;
     fs_read_byte(part.block_address + DEVICE_OFFSET_TYPE, &typeIdentifier);
-    
-    switch (typeIdentifier) {
-    case FS_DEVICE_TYPE_EEPROM:
-        fsWriteSectorByte = bus_write_byte_eeprom;
-        fsReadSectorByte = bus_read_memory;
-        break;
-    default:
-    case FS_DEVICE_TYPE_MEMORY:
-        fsWriteSectorByte = bus_write_memory;
-        fsReadSectorByte = bus_read_memory;
-        break;
-    }
+    fsDeviceSetType(typeIdentifier);
     
     part.sector_count = part.block_size / part.sector_size;
     return part;
@@ -107,8 +109,8 @@ void fsDeviceSetCurrent(uint32_t device_address) {
     return;
 }
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size) {
-    
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type) {
+    fsDeviceSetType(device_type);
     part->block_size = end - begin;
     part->sector_size = sector_size;
     part->sector_count = part->block_size / part->sector_size;
@@ -117,7 +119,18 @@ void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32
     for (uint32_t i=0; i < part->sector_count; i++) 
         fs_write_byte(part->block_address + (i * part->sector_size), SECTOR_FREE);
     
-    fsDeviceConstructAllocationTable(part, FS_DEVICE_TYPE_MEMORY);
+    fsDeviceConstructAllocationTable(part, device_type);
+    return;
+}
+
+void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type) {
+    fsDeviceSetType(device_type);
+    part->block_size = end - begin;
+    part->sector_size = sector_size;
+    part->sector_count = part->block_size / part->sector_size;
+    
+    for (uint32_t i=0; i < part->block_size; i++) 
+        fs_write_byte(part->block_address + i, ' ');
     
     return;
 }
