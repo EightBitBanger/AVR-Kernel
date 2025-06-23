@@ -14,7 +14,7 @@
 //#include <kernel/command/graph/graph.h>
 
 //#include <kernel/command/boot/boot.h>
-//#include <kernel/command/format/format.h>
+#include <kernel/command/format/format.h>
 //#include <kernel/command/list/list.h>
 
 

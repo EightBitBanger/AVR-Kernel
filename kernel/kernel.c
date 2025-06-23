@@ -31,40 +31,24 @@ void kInit(void) {
     
     fsWorkingDirectorySetRoot(rootDirectory);
     
-    DirectoryHandle binDirectoryHandle;
-    
-    {
-    uint8_t filename[] = "bin";
-    binDirectoryHandle = fsDirectoryCreate(part, filename);
+    uint8_t binDirectoryName[] = "bin";
+    DirectoryHandle binDirectoryHandle = fsDirectoryCreate(part, binDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, binDirectoryHandle);
-    }
-    {
-    uint8_t filename[] = "sys";
-    DirectoryHandle directoryHandle = fsDirectoryCreate(part, filename);
-    fsDirectoryAddFile(part, rootDirectory, directoryHandle);
-    }
+    
+    uint8_t sysDirectoryName[] = "sys";
+    DirectoryHandle sysDirectoryHandle = fsDirectoryCreate(part, sysDirectoryName);
+    fsDirectoryAddFile(part, rootDirectory, sysDirectoryHandle);
+    
+    uint8_t mediaDirectoryName[] = "media";
+    DirectoryHandle mediaDirectoryHandle = fsDirectoryCreate(part, mediaDirectoryName);
+    fsDirectoryAddFile(part, rootDirectory, mediaDirectoryHandle);
+    
+    
     
     {
     uint8_t filename[] = "file";
     FileHandle fileHandle = fsFileCreate(part, filename, 128);
     fsDirectoryAddFile(part, rootDirectory, fileHandle);
-    }
-    {
-    uint8_t filename[] = "test";
-    FileHandle fileHandle = fsFileCreate(part, filename, 40);
-    fsDirectoryAddFile(part, rootDirectory, fileHandle);
-    }
-    
-    {
-    uint8_t filename[] = "prog";
-    FileHandle fileHandle = fsFileCreate(part, filename, 40);
-    fsDirectoryAddFile(part, binDirectoryHandle, fileHandle);
-    }
-    
-    {
-    uint8_t filename[] = "wtf";
-    FileHandle fileHandle = fsFileCreate(part, filename, 40);
-    fsDirectoryAddFile(part, binDirectoryHandle, fileHandle);
     }
     
     

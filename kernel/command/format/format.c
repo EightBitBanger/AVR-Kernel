@@ -5,6 +5,10 @@
 
 #include <kernel/command/format/format.h>
 
+#define FORMAT_CAPACITY_8K   8196
+#define FORMAT_CAPACITY_16K  16384
+#define FORMAT_CAPACITY_32K  32767
+
 void functionFORMAT(uint8_t* param, uint8_t param_length) {
     
     uint32_t deviceCapacity = 0;
@@ -65,7 +69,7 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
     uint32_t cyclesPerPercent = (deviceCapacityCurrent * 1024) / 100;
     
     uint32_t sector = 0;
-    uint32_t sector_size = fs_sector_size;
+    uint32_t sector_size = 32;
     
     ConsoleCursorDisable();
     
@@ -73,6 +77,8 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
     uint8_t percentageString[10] = {'0'};
     uint8_t percentageSymbole[1] = {'%'};
     uint8_t sectorCounter = 0;
+    
+    uint32_t device_address = fsDeviceGetCurrent();
     
     for (uint16_t i=0; i <= 1000; i++) {
         
@@ -102,7 +108,7 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
                 sectorCounter++;
                 
             } else {
-                fs_write_byte(sector, FORMAT_SECTOR_EMPTY);
+                fs_write_byte(device_address + sector, SECTOR_FREE);
                 sectorCounter = 0;
             }
             
@@ -121,15 +127,14 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
     _delay_ms(10);
     
     // Construct the root directory
-    fsDeviceConstructAllocationTable(0, deviceCapacityBytes, sector_size);
+    struct Partition part = fsDeviceOpen(device_address);
+    fsDeviceConstructAllocationTable(&part);
     
     // Finish as 100%
     ConsoleSetCursorPosition(0);
     
     uint8_t oneHundredPercentMsg[] = "100%";
     print( oneHundredPercentMsg, sizeof(oneHundredPercentMsg) );
-    
-    fsWorkingDirectoryClear();
     
     ConsoleCursorEnable();
     

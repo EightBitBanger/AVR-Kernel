@@ -69,7 +69,7 @@ int main(void) {
     
     //registerCommandNet();
     
-    //registerCommandFormat();
+    registerCommandFormat();
     //registerCommandBoot();
     
     #define DONT_INCLUDE_CONSOLE_COMMANDS

@@ -27,21 +27,6 @@ void fsInit(void) {
     return;
 }
 
-uint32_t fsDeviceSetCurrent(uint8_t deviceLetter) {
-    if (deviceLetter == 'x') 
-        return 0;
-    uint32_t address = 0x40000 + (0x10000 * deviceLetter) - 0x10000;
-    struct Partition part = fsDeviceOpen(address);
-    if (part.block_size == 0) 
-        return 0;
-    current_device = address;
-    return current_device;
-}
-
-uint32_t fsDeviceGetCurrent(void) {
-    return current_device;
-}
-
 struct Partition fsDeviceOpen(uint32_t deviceAddress) {
     struct Partition part;
     part.block_address = deviceAddress;
@@ -89,6 +74,15 @@ DirectoryHandle fsDeviceGetRootDirectory(struct Partition part) {
     return *((uint32_t*)&ptrBytes[0]);
 }
 
+uint32_t fsDeviceGetCurrent(void) {
+    return current_device;
+}
+
+void fsDeviceSetCurrent(uint32_t device_address) {
+    current_device = device_address;
+    return;
+}
+
 void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sectorSize) {
     
     part->block_size = end - begin;
@@ -98,6 +92,13 @@ void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32
     // Mark sectors as empty
     for (uint32_t i=0; i < part->sector_count; i++) 
         fs_write_byte(part->block_address + (i * part->sector_size), SECTOR_FREE);
+    
+    fsDeviceConstructAllocationTable(part);
+    
+    return;
+}
+
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part) {
     
     // Initiate device header and associated information
     for (uint32_t i=0; i < sizeof(DeviceHeaderString); i++) 
@@ -126,6 +127,6 @@ void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32
     for (uint8_t i=0; i < 4; i++) 
         fs_write_byte(part->block_address + i + DEVICE_OFFSET_SECT_SZ, sizeBytes[i]);
     
-    return;
+    return 1;
 }
 

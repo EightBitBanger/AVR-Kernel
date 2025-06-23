@@ -44,16 +44,21 @@ struct Partition {
 
 void fsInit(void);
 
+// Low level IO
+
+void fs_write_byte(uint32_t address, uint8_t data);
+void fs_read_byte(uint32_t address, uint8_t* data);
+
 // Device mount points
 
 uint8_t fsMount(uint32_t device_address, uint8_t letter);
 uint8_t fsUnmount(uint8_t letter);
+
 uint32_t fsMountGetNumberOfPoints(uint8_t letter);
 struct MountPoint* fsMountGetMountPointByIndex(uint16_t index);
 
 // Partition
-
-uint32_t fsDeviceSetCurrent(uint8_t deviceLetter);
+void fsDeviceSetCurrent(uint32_t device_address);
 uint32_t fsDeviceGetCurrent(void);
 
 struct Partition fsDeviceOpen(uint32_t deviceAddress);
@@ -62,6 +67,8 @@ uint32_t fsDeviceGetSectorSize(struct Partition part);
 DirectoryHandle fsDeviceGetRootDirectory(struct Partition part);
 
 void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sectorSize);
+
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part);
 
 // Files
 

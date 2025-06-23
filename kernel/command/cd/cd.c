@@ -9,8 +9,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     uppercase(&deviceLetter);
     
     // Get current device
-    fsDeviceGetCurrent();
-    struct Partition part = fsDeviceOpen(0x00000000);
+    struct Partition part = fsDeviceOpen( fsDeviceGetCurrent() );
     DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
     
     //
@@ -32,26 +31,8 @@ void functionCD(uint8_t* param, uint8_t param_length) {
         return;
     }
     
-    // The letter represents the hardware address 
-    // offset pointing to the device on the system bus
-    
-    if ((deviceLetter >= 'A') & (deviceLetter <= 'Z') & (param[1] == ':')) {
-        uint32_t device_address = fsDeviceSetCurrent(deviceLetter);
-        struct Partition checkPart = fsDeviceOpen(device_address);
-        if (checkPart.block_size == 0) {
-            uint8_t msgDeviceNotFound[]  = "Device not found";
-            print(msgDeviceNotFound, sizeof(msgDeviceNotFound));
-            printLn();
-            return;
-        }
-        
-        return;
-    }
-    
     // Drop to the root directory
     if ((param[0] == '/') & (param[1] == ' ')) {
-        //uint32_t device_address = fsDeviceGetCurrent();
-        
         uint8_t consolePrompt[] = "x>";
         ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
         
