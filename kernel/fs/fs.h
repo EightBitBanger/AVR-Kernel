@@ -64,14 +64,14 @@ struct MountPoint* fsMountGetMountPointByIndex(uint16_t index);
 void fsDeviceSetCurrent(uint32_t device_address);
 uint32_t fsDeviceGetCurrent(void);
 
-struct Partition fsDeviceOpen(uint32_t deviceAddress);
+struct Partition fsDeviceOpen(uint32_t device_address);
 uint32_t fsDeviceGetSize(struct Partition part);
 uint32_t fsDeviceGetSectorSize(struct Partition part);
 DirectoryHandle fsDeviceGetRootDirectory(struct Partition part);
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sectorSize);
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size);
 
-uint8_t fsDeviceConstructAllocationTable(struct Partition* part);
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type);
 
 // Files
 

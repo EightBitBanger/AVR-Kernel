@@ -35,9 +35,9 @@ void fsInit(void) {
     return;
 }
 
-struct Partition fsDeviceOpen(uint32_t deviceAddress) {
+struct Partition fsDeviceOpen(uint32_t device_address) {
     struct Partition part;
-    part.block_address = deviceAddress;
+    part.block_address = device_address;
     
     // Get device ID bytes
     uint8_t headerID[10];
@@ -107,22 +107,22 @@ void fsDeviceSetCurrent(uint32_t device_address) {
     return;
 }
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sectorSize) {
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size) {
     
     part->block_size = end - begin;
-    part->sector_size = sectorSize;
+    part->sector_size = sector_size;
     part->sector_count = part->block_size / part->sector_size;
     
     // Mark sectors as empty
     for (uint32_t i=0; i < part->sector_count; i++) 
         fs_write_byte(part->block_address + (i * part->sector_size), SECTOR_FREE);
     
-    fsDeviceConstructAllocationTable(part);
+    fsDeviceConstructAllocationTable(part, FS_DEVICE_TYPE_MEMORY);
     
     return;
 }
 
-uint8_t fsDeviceConstructAllocationTable(struct Partition* part) {
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type) {
     
     // Initiate device header and associated information
     for (uint32_t i=0; i < sizeof(DeviceHeaderString); i++) 
@@ -135,7 +135,7 @@ uint8_t fsDeviceConstructAllocationTable(struct Partition* part) {
         fs_write_byte(part->block_address + i + DEVICE_OFFSET_CAPACITY, sizeBytes[i]);
     
     // Set the device type
-    uint8_t deviceType = 'T';
+    uint8_t deviceType = FS_DEVICE_TYPE_MEMORY;
     fs_write_byte(part->block_address + DEVICE_OFFSET_TYPE, deviceType);
     
     // Set the root directory pointer

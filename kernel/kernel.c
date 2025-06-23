@@ -120,44 +120,31 @@ void kInit(void) {
         if (length == 0) 
             continue;
         
-        // Get the root directory from the storage device
+        // Only file system devices
+        if (devPtr->device_name[0] != 'f' || 
+            devPtr->device_name[1] != 's' || 
+            devPtr->device_name[2] != ' ') 
+            continue;
         
+        
+        // Get the root directory from the storage device
+        struct Partition devicePart = fsDeviceOpen( devPtr->hardware_address );
+        if (devicePart.block_size == 0) 
+            continue;
+        
+        //DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
         
         // Create device reference file
-        uint32_t fileHandle = fsFileCreate(part, devPtr->device_name, 40);
-        fsDirectoryAddFile(part, mountDirectoryHandle, fileHandle);
-        
-        uint8_t attrib[] = {' ','r','w','d'};
-        fsFileSetAttributes(part, fileHandle, attrib);
+        uint32_t directoryHandle = fsDirectoryCreate(part, devPtr->device_name);
+        fsDirectoryAddFile(part, mountDirectoryHandle, directoryHandle);
         
         // Initiate file
-        uint32_t fileSize = fsFileGetSize(part, fileHandle);
+        uint32_t fileSize = fsFileGetSize(part, directoryHandle);
         uint8_t fileBuffer[fileSize];
         for (unsigned int i=0; i < fileSize; i++) 
             fileBuffer[i] = ' ';
         
-        // Device file header
-        fileBuffer[0] = 'K';
-        fileBuffer[1] = 'D';
-        fileBuffer[2] = 'E';
-        fileBuffer[3] = 'V';
-        fileBuffer[4] = '\n';
-        
-        // Slot
-        fileBuffer[5] = 's';
-        fileBuffer[6] = 'l';
-        fileBuffer[7] = 'o';
-        fileBuffer[8] = 't';
-        fileBuffer[9] = '=';
-        fileBuffer[10] = devPtr->hardware_slot + '1';
-        fileBuffer[11] = '\n';
-        
-        // Address
-        fileBuffer[12] = '0';
-        fileBuffer[13] = 'x';
-        int_to_hex_string(devPtr->hardware_address, &fileBuffer[14]);
-        
-        File fileIndex = fsFileOpen(part, fileHandle);
+        File fileIndex = fsFileOpen(part, directoryHandle);
         fsFileWrite(part, fileIndex, fileBuffer, fileSize);
         fsFileClose(fileIndex);
         

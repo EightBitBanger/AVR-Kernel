@@ -56,7 +56,7 @@ int main(void) {
     //registerCommandMK();
     
     //registerCommandType();
-    registerCommandList();
+    //registerCommandList();
     //registerCommandRM();
     //registerCommandTASK();
     
@@ -69,7 +69,7 @@ int main(void) {
     
     //registerCommandNet();
     
-    registerCommandFormat();
+    //registerCommandFormat();
     //registerCommandBoot();
     
     #define DONT_INCLUDE_CONSOLE_COMMANDS
