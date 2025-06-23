@@ -5,12 +5,9 @@
 struct Node* MountPointTableHead = NULL;
 
 struct MountPoint {
+    uint32_t device_address;   // Address of the storage device
+    uint8_t letter;            // Letter representing the storage device
     
-    // Address of the storage device
-    uint32_t device_address;
-    
-    // Letter representing the storage device
-    uint8_t letter;
 };
 
 uint8_t fsMount(uint32_t device_address, uint8_t letter) {

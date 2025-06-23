@@ -8,7 +8,6 @@ DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
 
 void fsWorkingDirectorySetRoot(DirectoryHandle handle) {
     fs_working_directory[0] = handle;
-    // Start at one as zero is the root
     current_directory_index = 0;
     return;
 }

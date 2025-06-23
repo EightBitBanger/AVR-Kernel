@@ -8,22 +8,30 @@ struct Bus fs_bus;
 
 uint32_t current_device;
 
+void (*fsWriteSectorByte)(struct Bus*, uint32_t, uint8_t);
+void (*fsReadSectorByte)(struct Bus*, uint32_t, uint8_t*);
+
 
 void fs_write_byte(uint32_t address, uint8_t data) {
-    bus_write_memory(&fs_bus, address, data);
+    fsWriteSectorByte(&fs_bus, address, data);
 }
 
 void fs_read_byte(uint32_t address, uint8_t* data) {
-    bus_read_memory(&fs_bus, address, data);
+    fsReadSectorByte(&fs_bus, address, data);
 }
+
 
 void fsInit(void) {
     
     fs_bus.bus_type = 0;
-    fs_bus.read_waitstate = 2;
-    fs_bus.write_waitstate = 2;
+    fs_bus.read_waitstate = 1;
+    fs_bus.write_waitstate = 0;
     
     current_device = 0x00000000;
+    
+    fsWriteSectorByte = bus_write_memory;
+    fsReadSectorByte = bus_read_memory;
+    
     return;
 }
 
@@ -47,6 +55,22 @@ struct Partition fsDeviceOpen(uint32_t deviceAddress) {
         part.sector_count = 0;
         part.sector_size = 0;
         return part;
+    }
+    
+    // Check device type
+    uint8_t typeIdentifier;
+    fs_read_byte(part.block_address + DEVICE_OFFSET_TYPE, &typeIdentifier);
+    
+    switch (typeIdentifier) {
+    case FS_DEVICE_TYPE_EEPROM:
+        fsWriteSectorByte = bus_write_byte_eeprom;
+        fsReadSectorByte = bus_read_memory;
+        break;
+    default:
+    case FS_DEVICE_TYPE_MEMORY:
+        fsWriteSectorByte = bus_write_memory;
+        fsReadSectorByte = bus_read_memory;
+        break;
     }
     
     part.sector_count = part.block_size / part.sector_size;

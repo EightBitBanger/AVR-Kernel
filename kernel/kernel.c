@@ -31,26 +31,138 @@ void kInit(void) {
     
     fsWorkingDirectorySetRoot(rootDirectory);
     
-    uint8_t binDirectoryName[] = "bin";
-    DirectoryHandle binDirectoryHandle = fsDirectoryCreate(part, binDirectoryName);
-    fsDirectoryAddFile(part, rootDirectory, binDirectoryHandle);
+    uint8_t devDirectoryName[] = "dev";
+    DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
+    fsDirectoryAddFile(part, rootDirectory, devDirectoryHandle);
     
-    uint8_t sysDirectoryName[] = "sys";
-    DirectoryHandle sysDirectoryHandle = fsDirectoryCreate(part, sysDirectoryName);
-    fsDirectoryAddFile(part, rootDirectory, sysDirectoryHandle);
+    uint8_t mountDirectoryName[] = "mnt";
+    DirectoryHandle mountDirectoryHandle = fsDirectoryCreate(part, mountDirectoryName);
+    fsDirectoryAddFile(part, rootDirectory, mountDirectoryHandle);
     
-    uint8_t mediaDirectoryName[] = "media";
-    DirectoryHandle mediaDirectoryHandle = fsDirectoryCreate(part, mediaDirectoryName);
-    fsDirectoryAddFile(part, rootDirectory, mediaDirectoryHandle);
+    uint8_t procDirectoryName[] = "proc";
+    DirectoryHandle procDirectoryHandle = fsDirectoryCreate(part, procDirectoryName);
+    fsDirectoryAddFile(part, rootDirectory, procDirectoryHandle);
     
     
+    // List devices on the bus
     
-    {
-    uint8_t filename[] = "file";
-    FileHandle fileHandle = fsFileCreate(part, filename, 128);
-    fsDirectoryAddFile(part, rootDirectory, fileHandle);
+    for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
+        struct Device* devPtr = GetDeviceByIndex( index );
+        if (devPtr->device_id == 0) 
+            continue;
+        
+        uint8_t length = 0;
+        for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
+            if (devPtr->device_name[i] == ' ') {
+                length = i + 1;
+                break;
+            }
+        }
+        if (length == 0) 
+            continue;
+        
+        // Create device reference file
+        uint32_t fileHandle = fsFileCreate(part, devPtr->device_name, 40);
+        fsDirectoryAddFile(part, devDirectoryHandle, fileHandle);
+        
+        uint8_t attrib[] = {'s','r','w',' '};
+        fsFileSetAttributes(part, fileHandle, attrib);
+        
+        // Initiate file
+        uint32_t fileSize = fsFileGetSize(part, fileHandle);
+        uint8_t fileBuffer[fileSize];
+        for (unsigned int i=0; i < fileSize; i++) 
+            fileBuffer[i] = ' ';
+        
+        // Device file header
+        fileBuffer[0] = 'K';
+        fileBuffer[1] = 'D';
+        fileBuffer[2] = 'E';
+        fileBuffer[3] = 'V';
+        fileBuffer[4] = '\n';
+        
+        // Slot
+        fileBuffer[5] = 's';
+        fileBuffer[6] = 'l';
+        fileBuffer[7] = 'o';
+        fileBuffer[8] = 't';
+        fileBuffer[9] = '=';
+        fileBuffer[10] = devPtr->hardware_slot + '1';
+        fileBuffer[11] = '\n';
+        
+        // Address
+        fileBuffer[12] = '0';
+        fileBuffer[13] = 'x';
+        int_to_hex_string(devPtr->hardware_address, &fileBuffer[14]);
+        
+        File fileIndex = fsFileOpen(part, fileHandle);
+        fsFileWrite(part, fileIndex, fileBuffer, fileSize);
+        fsFileClose(fileIndex);
+        
+        continue;
     }
     
+    
+    // List storage devices mounted on the bus
+    
+    for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
+        struct Device* devPtr = GetDeviceByIndex( index );
+        if (devPtr->device_id == 0) 
+            continue;
+        
+        uint8_t length = 0;
+        for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
+            if (devPtr->device_name[i] == ' ') {
+                length = i + 1;
+                break;
+            }
+        }
+        if (length == 0) 
+            continue;
+        
+        // Get the root directory from the storage device
+        
+        
+        // Create device reference file
+        uint32_t fileHandle = fsFileCreate(part, devPtr->device_name, 40);
+        fsDirectoryAddFile(part, mountDirectoryHandle, fileHandle);
+        
+        uint8_t attrib[] = {' ','r','w','d'};
+        fsFileSetAttributes(part, fileHandle, attrib);
+        
+        // Initiate file
+        uint32_t fileSize = fsFileGetSize(part, fileHandle);
+        uint8_t fileBuffer[fileSize];
+        for (unsigned int i=0; i < fileSize; i++) 
+            fileBuffer[i] = ' ';
+        
+        // Device file header
+        fileBuffer[0] = 'K';
+        fileBuffer[1] = 'D';
+        fileBuffer[2] = 'E';
+        fileBuffer[3] = 'V';
+        fileBuffer[4] = '\n';
+        
+        // Slot
+        fileBuffer[5] = 's';
+        fileBuffer[6] = 'l';
+        fileBuffer[7] = 'o';
+        fileBuffer[8] = 't';
+        fileBuffer[9] = '=';
+        fileBuffer[10] = devPtr->hardware_slot + '1';
+        fileBuffer[11] = '\n';
+        
+        // Address
+        fileBuffer[12] = '0';
+        fileBuffer[13] = 'x';
+        int_to_hex_string(devPtr->hardware_address, &fileBuffer[14]);
+        
+        File fileIndex = fsFileOpen(part, fileHandle);
+        fsFileWrite(part, fileIndex, fileBuffer, fileSize);
+        fsFileClose(fileIndex);
+        
+        continue;
+    }
     
     
     

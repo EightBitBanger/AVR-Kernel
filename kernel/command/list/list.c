@@ -30,7 +30,7 @@ void functionList(uint8_t* param, uint8_t param_length) {
     uint8_t pageSize = 20 * 8;
     
     for (uint8_t i=0; i < pageSize; i++) 
-        fs_read_byte((page * pageSize) + i, &buffer[i]);
+        fs_read_byte(0x60000 + (page * pageSize) + i, &buffer[i]);
     
     page++;
     

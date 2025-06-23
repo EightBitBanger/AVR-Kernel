@@ -11,6 +11,8 @@
 
 void functionFORMAT(uint8_t* param, uint8_t param_length) {
     
+    /*
+    
     uint32_t deviceCapacity = 0;
     
     uint8_t quickly = 0;
@@ -139,7 +141,7 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
     ConsoleCursorEnable();
     
     printLn();
-    
+    */
     return;
 }
 

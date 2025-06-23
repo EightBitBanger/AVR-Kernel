@@ -29,6 +29,9 @@
 #define FS_FILE_INVALID     (-1)
 #define FS_FILE_SUCCESS     (0)
 
+#define FS_DEVICE_TYPE_MEMORY   0x00
+#define FS_DEVICE_TYPE_EEPROM   0x1C
+
 typedef uint32_t FileHandle;
 typedef uint32_t DirectoryHandle;
 typedef int32_t  File;
