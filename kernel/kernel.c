@@ -59,6 +59,10 @@ void kInit(void) {
     DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, devDirectoryHandle);
     
+    uint8_t testDirectoryName[] = "test";
+    DirectoryHandle testDirectoryHandle = fsDirectoryCreate(part, testDirectoryName);
+    fsDirectoryAddFile(part, devDirectoryHandle, testDirectoryHandle);
+    
     uint8_t mountDirectoryName[] = "mnt";
     DirectoryHandle mountDirectoryHandle = fsDirectoryCreate(part, mountDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, mountDirectoryHandle);

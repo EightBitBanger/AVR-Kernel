@@ -284,9 +284,13 @@ void ConsoleCursorDisable(void) {
 }
 
 void ConsoleSetPrompt(uint8_t* prompt, uint8_t length) {
-    
-    for (uint8_t i=0; i < length; i++) 
+    for (uint8_t i=0; i < length; i++) {
+        if (prompt[i] == '\0') {
+            console_prompt_length = i;
+            break;
+        }
         console_prompt[i] = prompt[i];
+    }
     
     console_prompt_length = length;
     return;

@@ -22,12 +22,26 @@ void functionCD(uint8_t* param, uint8_t param_length) {
         
         fsWorkingDirectorySetParent();
         
-        uint8_t dirname[] = "          ";
-        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
-        fsFileGetName(part, currentDirectory, dirname);
+        DirectoryHandle targetDirectory = fsWorkingDirectoryGetCurrent();
         
-        ConsoleSetPath(dirname);
         
+        uint8_t filename[20];
+        for (uint8_t i=0; i < 20; i++) 
+            filename[i] = ' ';
+        filename[0] = 'x';
+        filename[1] = '/';
+        fsFileGetName(part, targetDirectory, &filename[2]);
+        
+        uint8_t namelenth = 0;
+        for (uint8_t i=0; i < 20; i++) {
+            if (filename[i] != ' ') 
+                continue;
+            filename[i] = '>';
+            namelenth = i + 2; // For the end and the last char
+            break;
+        }
+        
+        ConsoleSetPrompt(filename, namelenth);
         return;
     }
     
@@ -42,14 +56,33 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     
     // Change the directory
     
-    if (fsFindDirectory(part, currentDirectory, param) == 0) {
+    uint32_t targetDirectory = fsFindDirectory(part, currentDirectory, param);
+    if (targetDirectory == 0) {
         uint8_t msgDirectoryNotFound[]  = "Directory not found";
         print(msgDirectoryNotFound, sizeof(msgDirectoryNotFound));
         printLn();
         return;
     }
     
-    ConsoleSetPath(param);
+    fsWorkingDirectoryChange(targetDirectory);
+    
+    uint8_t filename[20];
+    for (uint8_t i=0; i < 20; i++) 
+        filename[i] = ' ';
+    filename[0] = 'x';
+    filename[1] = '/';
+    fsFileGetName(part, targetDirectory, &filename[2]);
+    
+    uint8_t namelenth = 0;
+    for (uint8_t i=0; i < 20; i++) {
+        if (filename[i] != ' ') 
+            continue;
+        filename[i] = '>';
+        namelenth = i + 2; // For the end and the last char
+        break;
+    }
+    
+    ConsoleSetPrompt(filename, namelenth);
     return;
 }
 
