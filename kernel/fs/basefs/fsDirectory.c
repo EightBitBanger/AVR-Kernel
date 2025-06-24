@@ -25,7 +25,7 @@ uint8_t fsDirectoryDelete(struct Partition part, DirectoryHandle handle) {
 }
 
 DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPtr, uint32_t nextPtr) {
-    uint8_t filename[] = "EXTENT";
+    uint8_t filename[] = "extent";
     FileHandle handle = fsFileCreate(part, filename, 30);
     
     // Set number of entries in this directory extent
@@ -38,6 +38,23 @@ DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPt
     fsFileSetParentAddress(part, handle, parentPtr);
     
     return handle;
+}
+
+DirectoryHandle fsDirectoryMountCreate(struct Partition part, struct Partition targetPart, DirectoryHandle targetHandle) {
+    uint8_t filename[] = "mount";
+    FileHandle MountPointDirectory = fsFileCreate(part, filename, 20);
+    
+    // Set number of entries in this directory extent
+    fsDirectorySetReferenceCount(part, MountPointDirectory, 0);
+    // Mark as a mounted directory 'm' and 'd'
+    fsFileSetAttributes(part, MountPointDirectory, (uint8_t*)"mrwd");
+    
+    // The 'next' address points to the beginning sector of the target partition
+    fsFileSetNextAddress(part, MountPointDirectory, targetPart.block_address);
+    // The 'parent' address points to the target directory in the target partition
+    fsFileSetParentAddress(part, MountPointDirectory, targetHandle);
+    
+    return MountPointDirectory;
 }
 
 

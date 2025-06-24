@@ -3,7 +3,30 @@
 #include <kernel/kernel.h>
 
 #include <kernel/command/cd/cd.h>
-
+void SetPromptName(struct Partition part, uint8_t isRoot, DirectoryHandle targetDirectory) {
+    
+    uint8_t filename[20];
+    for (uint8_t i=0; i < 20; i++) 
+        filename[i] = ' ';
+    filename[0] = 'x';
+    
+    if (isRoot == 0) {
+        filename[1] = '/';
+        fsFileGetName(part, targetDirectory, &filename[2]);
+    }
+    
+    uint8_t namelenth = 0;
+    for (uint8_t i=0; i < 20; i++) {
+        if (filename[i] != ' ') 
+            continue;
+        filename[i] = '>';
+        namelenth = i + 2; // For the end and the last char
+        break;
+    }
+    
+    ConsoleSetPrompt(filename, namelenth);
+    return;
+}
 void functionCD(uint8_t* param, uint8_t param_length) {
     uint8_t deviceLetter = param[0];
     uppercase(&deviceLetter);
@@ -12,36 +35,15 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     struct Partition part = fsDeviceOpen( fsDeviceGetCurrent() );
     DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
     
-    //
     // Drop down the parent directory
-    //
-    
     if ((param[0] == '.') & (param[1] == '.') & (param[2] == ' ')) {
         if (fsWorkingDirectoryGetIndex() == 0) 
             return;
-        
-        fsWorkingDirectorySetParent();
-        
+        uint8_t isRoot = 0;
+        if (fsWorkingDirectorySetParent() == 0) 
+            isRoot = 1;
         DirectoryHandle targetDirectory = fsWorkingDirectoryGetCurrent();
-        
-        
-        uint8_t filename[20];
-        for (uint8_t i=0; i < 20; i++) 
-            filename[i] = ' ';
-        filename[0] = 'x';
-        filename[1] = '/';
-        fsFileGetName(part, targetDirectory, &filename[2]);
-        
-        uint8_t namelenth = 0;
-        for (uint8_t i=0; i < 20; i++) {
-            if (filename[i] != ' ') 
-                continue;
-            filename[i] = '>';
-            namelenth = i + 2; // For the end and the last char
-            break;
-        }
-        
-        ConsoleSetPrompt(filename, namelenth);
+        SetPromptName(part, isRoot, targetDirectory);
         return;
     }
     
@@ -55,7 +57,6 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     }
     
     // Change the directory
-    
     uint32_t targetDirectory = fsFindDirectory(part, currentDirectory, param);
     if (targetDirectory == 0) {
         uint8_t msgDirectoryNotFound[]  = "Directory not found";
@@ -66,23 +67,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     
     fsWorkingDirectoryChange(targetDirectory);
     
-    uint8_t filename[20];
-    for (uint8_t i=0; i < 20; i++) 
-        filename[i] = ' ';
-    filename[0] = 'x';
-    filename[1] = '/';
-    fsFileGetName(part, targetDirectory, &filename[2]);
-    
-    uint8_t namelenth = 0;
-    for (uint8_t i=0; i < 20; i++) {
-        if (filename[i] != ' ') 
-            continue;
-        filename[i] = '>';
-        namelenth = i + 2; // For the end and the last char
-        break;
-    }
-    
-    ConsoleSetPrompt(filename, namelenth);
+    SetPromptName(part, 0, targetDirectory);
     return;
 }
 

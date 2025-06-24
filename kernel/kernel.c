@@ -133,20 +133,22 @@ void kInit(void) {
     
     // List and mount storage devices on the bus
     
-    //for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
+    for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         
         // Get the root directory from the storage device
         struct Partition devicePart = fsDeviceOpen( 0x40000 + (0x10000 * 2) );
-        //if (devicePart.block_size == 0) 
-        //    continue;
+        if (devicePart.block_size == 0) 
+            continue;
         
         DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
         
-        // Create device reference file
-        //uint32_t directoryHandle = fsDirectoryCreate(part, devPtr->device_name);
-        fsDirectoryAddFile(part, mountDirectoryHandle, deviceRoot);
+        DirectoryHandle mountPointDirectory = fsDirectoryMountCreate(part, devicePart, deviceRoot);
         
-    //}
+        // Create device reference file
+        fsDirectoryAddFile(part, mountDirectoryHandle, mountPointDirectory);
+        
+        break;
+    }
     
     
     

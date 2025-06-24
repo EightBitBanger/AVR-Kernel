@@ -91,6 +91,7 @@ DirectoryHandle fsDirectoryCreate(struct Partition part, uint8_t* filename);
 uint8_t fsDirectoryDelete(struct Partition part, DirectoryHandle handle);
 
 DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPtr, uint32_t nextPtr);
+DirectoryHandle fsDirectoryMountCreate(struct Partition part, struct Partition targetPart, DirectoryHandle targetHandle);
 
 void fsDirectorySetReferenceCount(struct Partition part, DirectoryHandle handle, uint32_t count);
 uint32_t fsDirectoryGetReferenceCount(struct Partition part, DirectoryHandle handle);
@@ -138,7 +139,7 @@ DirectoryHandle fsWorkingDirectoryGetRoot(void);
 void fsWorkingDirectoryChange(DirectoryHandle handle);
 DirectoryHandle fsWorkingDirectoryGetCurrent(void);
 
-void fsWorkingDirectorySetParent(void);
+uint8_t fsWorkingDirectorySetParent(void);
 
 uint8_t fsWorkingDirectoryGetIndex(void);
 

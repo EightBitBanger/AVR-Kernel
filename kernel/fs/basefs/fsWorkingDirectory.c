@@ -5,6 +5,8 @@
 
 uint8_t current_directory_index;
 DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
+uint32_t fs_working_device[MAX_DIRECTORY_DEPTH];
+
 
 void fsWorkingDirectorySetRoot(DirectoryHandle handle) {
     fs_working_directory[0] = handle;
@@ -17,16 +19,21 @@ DirectoryHandle fsWorkingDirectoryGetRoot(void) {
 }
 
 void fsWorkingDirectoryChange(DirectoryHandle handle) {
+    
+    //fs_working_device...........
+    
     current_directory_index++;
+    
     fs_working_directory[current_directory_index] = handle;
+    
     return;
 }
 
-void fsWorkingDirectorySetParent(void) {
+uint8_t fsWorkingDirectorySetParent(void) {
     if (current_directory_index == 0) 
-        return;
+        return 0;
     current_directory_index--;
-    return;
+    return current_directory_index;
 }
 
 DirectoryHandle fsWorkingDirectoryGetCurrent(void) {
