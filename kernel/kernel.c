@@ -30,6 +30,9 @@ void kInit(void) {
     partInit.sector_count = partInit.block_size / partInit.sector_size;
     fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
     
+    fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"SSD0");
+    
+    
     DirectoryHandle rootDir = fsDeviceGetRootDirectory(partInit);
     
     uint8_t filename[] = "test_file";
@@ -40,7 +43,6 @@ void kInit(void) {
     
     /*
     fsDeviceFormatLow(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
-    fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
     */
     
     
@@ -48,7 +50,7 @@ void kInit(void) {
     
     // Initiate memory storage
     struct Partition part = fsDeviceOpen(0x00000000);
-    fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY);
+    fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"ramdrv");
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
     fsWorkingDirectorySetRoot(rootDirectory);
@@ -125,53 +127,22 @@ void kInit(void) {
     }
     
     
-    // List storage devices mounted on the bus
+    // List and mount storage devices on the bus
     
-    for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
-        struct Device* devPtr = GetDeviceByIndex( index );
-        if (devPtr->device_id == 0) 
-            continue;
-        
-        uint8_t length = 0;
-        for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
-            if (devPtr->device_name[i] == ' ') {
-                length = i + 1;
-                break;
-            }
-        }
-        if (length == 0) 
-            continue;
-        
-        // Only file system devices
-        if (devPtr->device_name[0] != 'f' || 
-            devPtr->device_name[1] != 's' || 
-            devPtr->device_name[2] != ' ') 
-            continue;
-        
+    //for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         
         // Get the root directory from the storage device
-        struct Partition devicePart = fsDeviceOpen( devPtr->hardware_address );
-        if (devicePart.block_size == 0) 
-            continue;
+        struct Partition devicePart = fsDeviceOpen( 0x40000 + (0x10000 * 2) );
+        //if (devicePart.block_size == 0) 
+        //    continue;
         
-        //DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
+        DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
         
         // Create device reference file
-        uint32_t directoryHandle = fsDirectoryCreate(part, devPtr->device_name);
-        fsDirectoryAddFile(part, mountDirectoryHandle, directoryHandle);
+        //uint32_t directoryHandle = fsDirectoryCreate(part, devPtr->device_name);
+        fsDirectoryAddFile(part, mountDirectoryHandle, deviceRoot);
         
-        // Initiate file
-        uint32_t fileSize = fsFileGetSize(part, directoryHandle);
-        uint8_t fileBuffer[fileSize];
-        for (unsigned int i=0; i < fileSize; i++) 
-            fileBuffer[i] = ' ';
-        
-        File fileIndex = fsFileOpen(part, directoryHandle);
-        fsFileWrite(part, fileIndex, fileBuffer, fileSize);
-        fsFileClose(fileIndex);
-        
-        continue;
-    }
+    //}
     
     
     

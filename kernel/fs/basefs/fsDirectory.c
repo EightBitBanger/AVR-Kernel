@@ -17,13 +17,11 @@ DirectoryHandle fsDirectoryCreate(struct Partition part, uint8_t* filename) {
     return handle;
 }
 
-DirectoryHandle fsDirectoryDelete(struct Partition part, DirectoryHandle handle) {
+uint8_t fsDirectoryDelete(struct Partition part, DirectoryHandle handle) {
     
     // TODO Purge any files / directories currently in this directory
     
-    fsFileDelete(part, handle);
-    
-    return handle;
+    return fsFileDelete(part, handle);
 }
 
 DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPtr, uint32_t nextPtr) {

@@ -25,11 +25,11 @@ FileHandle fsFileCreate(struct Partition part, uint8_t* filename, uint32_t size)
     return handle;
 }
 
-FileHandle fsFileDelete(struct Partition part, FileHandle handle) {
+uint8_t fsFileDelete(struct Partition part, FileHandle handle) {
     
     fsFree(part, handle);
     
-    return handle;
+    return 1;
 }
 
 FileHandle fsFileExtentCreate(struct Partition part, uint32_t size, uint32_t parentPtr, uint32_t nextPtr) {
@@ -62,7 +62,7 @@ File fsFileOpen(struct Partition part, FileHandle handle) {
     
     // Check file header byte
     uint8_t headerByte;
-    fs_read_byte(part.block_address + handle, &headerByte);
+    fs_read_byte(handle, &headerByte);
     
     if (headerByte == SECTOR_FREE) 
         return -1;
@@ -174,7 +174,7 @@ void fsFileSetName(struct Partition part, FileHandle handle, uint8_t* name) {
 uint32_t fsFileGetSize(struct Partition part, FileHandle handle) {
     uint8_t sizeBytes[4];
     for (uint8_t i=0; i < 4; i++) 
-        fs_read_byte(part.block_address + handle + i + FILE_OFFSET_SIZE, &sizeBytes[i]);
+        fs_read_byte(handle + i + FILE_OFFSET_SIZE, &sizeBytes[i]);
     return *((uint32_t*)&sizeBytes[0]);
 }
 

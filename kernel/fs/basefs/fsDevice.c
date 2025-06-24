@@ -97,7 +97,7 @@ DirectoryHandle fsDeviceGetRootDirectory(struct Partition part) {
     uint8_t ptrBytes[4];
     for (uint8_t i=0; i < 4; i++) 
         fs_read_byte(part.block_address + i + DEVICE_OFFSET_SECT_SZ, &ptrBytes[i]);
-    return *((uint32_t*)&ptrBytes[0]);
+    return part.block_address + (*((uint32_t*)&ptrBytes[0]));
 }
 
 uint32_t fsDeviceGetCurrent(void) {
@@ -109,7 +109,7 @@ void fsDeviceSetCurrent(uint32_t device_address) {
     return;
 }
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type) {
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type, uint8_t* device_name) {
     fsDeviceSetType(device_type);
     part->block_size = end - begin;
     part->sector_size = sector_size;
@@ -119,7 +119,7 @@ void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32
     for (uint32_t i=0; i < part->sector_count; i++) 
         fs_write_byte(part->block_address + (i * part->sector_size), SECTOR_FREE);
     
-    fsDeviceConstructAllocationTable(part, device_type);
+    fsDeviceConstructAllocationTable(part, device_type, device_name);
     return;
 }
 
@@ -135,7 +135,7 @@ void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uin
     return;
 }
 
-uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type) {
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type, uint8_t* device_name) {
     
     // Initiate device header and associated information
     for (uint32_t i=0; i < sizeof(DeviceHeaderString); i++) 
@@ -152,7 +152,7 @@ uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_
     fs_write_byte(part->block_address + DEVICE_OFFSET_TYPE, deviceType);
     
     // Set the root directory pointer
-    DirectoryHandle handle = fsDirectoryCreate(*part, (uint8_t*)"root");
+    DirectoryHandle handle = fsDirectoryCreate(*part, device_name);
     
     uint8_t ptrBytes[4];
     *((uint32_t*)&ptrBytes[0]) = handle;

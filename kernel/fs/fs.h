@@ -70,15 +70,15 @@ uint32_t fsDeviceGetSize(struct Partition part);
 uint32_t fsDeviceGetSectorSize(struct Partition part);
 DirectoryHandle fsDeviceGetRootDirectory(struct Partition part);
 
-void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type);
+void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type, uint8_t* device_name);
 void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type);
 
-uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type);
+uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type, uint8_t* device_name);
 
 // Files
 
 FileHandle fsFileCreate(struct Partition part, uint8_t* filename, uint32_t size);
-FileHandle fsFileDelete(struct Partition part, FileHandle handle);
+uint8_t fsFileDelete(struct Partition part, FileHandle handle);
 
 FileHandle fsFileExtentCreate(struct Partition part, uint32_t size, uint32_t parentPtr, uint32_t nextPtr);
 
@@ -88,7 +88,7 @@ void fsFree(struct Partition part, uint32_t address);
 // Directories
 
 DirectoryHandle fsDirectoryCreate(struct Partition part, uint8_t* filename);
-DirectoryHandle fsDirectoryDelete(struct Partition part, DirectoryHandle handle);
+uint8_t fsDirectoryDelete(struct Partition part, DirectoryHandle handle);
 
 DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPtr, uint32_t nextPtr);
 
