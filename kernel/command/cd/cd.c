@@ -52,11 +52,11 @@ void functionCD(uint8_t* param, uint8_t param_length) {
         uint8_t consolePrompt[] = "x>";
         ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
         
-        fsWorkingDirectorySetRoot( fsDeviceGetRootDirectory(part) );
+        fsWorkingDirectorySetRoot( part, fsDeviceGetRootDirectory(part) );
         return;
     }
     
-    // Change the directory
+    // Check if the directory exists
     uint32_t targetDirectory = fsFindDirectory(part, currentDirectory, param);
     if (targetDirectory == 0) {
         uint8_t msgDirectoryNotFound[]  = "Directory not found";
@@ -65,7 +65,8 @@ void functionCD(uint8_t* param, uint8_t param_length) {
         return;
     }
     
-    fsWorkingDirectoryChange(targetDirectory);
+    // Change the directory
+    fsWorkingDirectoryChange(part, targetDirectory);
     
     SetPromptName(part, 0, targetDirectory);
     return;

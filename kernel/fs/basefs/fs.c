@@ -7,13 +7,13 @@ void fs_read_byte(uint32_t address, uint8_t* data);
 void fsParsePath(struct Partition part, uint8_t* path) {
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
-    const char* delimiter = "\\";
+    const char* delimiter = "/";
     char* token = strtok((char*)path, delimiter);
     while (token != NULL) {
         
         uint32_t subDirHandle = fsFindDirectory(part, rootDirectory, (uint8_t*)token);
         
-        fsWorkingDirectoryChange(subDirHandle);
+        fsWorkingDirectoryChange(part, subDirHandle);
         
         token = strtok(NULL, delimiter);
     }

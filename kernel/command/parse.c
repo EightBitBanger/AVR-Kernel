@@ -26,7 +26,7 @@ uint8_t ConsoleSetPath(uint8_t* path) {
     
     if (subDirectoryAddress != 0) {
         fsFileGetName(part, subDirectoryAddress, directoryName);
-        fsWorkingDirectoryChange(subDirectoryAddress);
+        fsWorkingDirectoryChange(part, subDirectoryAddress);
         
         PromptDir[1] = '/';
         

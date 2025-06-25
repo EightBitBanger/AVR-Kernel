@@ -53,7 +53,7 @@ void kInit(void) {
     fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"ramdrv");
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
-    fsWorkingDirectorySetRoot(rootDirectory);
+    fsWorkingDirectorySetRoot(part, rootDirectory);
     
     uint8_t devDirectoryName[] = "dev";
     DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);

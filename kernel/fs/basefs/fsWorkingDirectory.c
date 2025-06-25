@@ -8,8 +8,9 @@ DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
 uint32_t fs_working_device[MAX_DIRECTORY_DEPTH];
 
 
-void fsWorkingDirectorySetRoot(DirectoryHandle handle) {
+void fsWorkingDirectorySetRoot(struct Partition part, DirectoryHandle handle) {
     fs_working_directory[0] = handle;
+    fs_working_device[0] = part.block_address;
     current_directory_index = 0;
     return;
 }
@@ -18,14 +19,32 @@ DirectoryHandle fsWorkingDirectoryGetRoot(void) {
     return fs_working_directory[0];
 }
 
-void fsWorkingDirectoryChange(DirectoryHandle handle) {
-    
-    //fs_working_device...........
-    
+void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle) {
     current_directory_index++;
     
-    fs_working_directory[current_directory_index] = handle;
+    // Check if the target directory is a mounted directory
+    fsDeviceSetCurrent(part.block_address);
+    uint8_t attributes[4];
+    fsFileGetAttributes(part, handle, attributes);
+    if (attributes[0] == 'm' && 
+        attributes[3] == 'd') {
+        
+        // Device address block
+        uint32_t block_address = fsFileGetNextAddress(part, handle);
+        fsDeviceSetCurrent(block_address);
+        
+        // Target directory
+        DirectoryHandle mountedHandle = fsFileGetParentAddress(part, handle);
+        
+        // Add the mounted directory to the directory list
+        fs_working_directory[current_directory_index] = mountedHandle;
+        fs_working_device[current_directory_index] = block_address;
+        return;
+    }
     
+    // Add the directory to the directory list
+    fs_working_directory[current_directory_index] = handle;
+    fs_working_device[current_directory_index] = part.block_address;
     return;
 }
 

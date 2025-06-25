@@ -133,10 +133,10 @@ uint32_t fsFileGetNextAddress(struct Partition part, FileHandle handle);
 
 // Working directory
 
-void fsWorkingDirectorySetRoot(DirectoryHandle handle);
+void fsWorkingDirectorySetRoot(struct Partition part, DirectoryHandle handle);
 DirectoryHandle fsWorkingDirectoryGetRoot(void);
 
-void fsWorkingDirectoryChange(DirectoryHandle handle);
+void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle);
 DirectoryHandle fsWorkingDirectoryGetCurrent(void);
 
 uint8_t fsWorkingDirectorySetParent(void);
