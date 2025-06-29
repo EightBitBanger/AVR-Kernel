@@ -62,7 +62,7 @@ File fsFileOpen(struct Partition part, FileHandle handle) {
     
     // Check file header byte
     uint8_t headerByte;
-    fs_read_byte(handle, &headerByte);
+    fs_read_byte(part.block_address + handle, &headerByte);
     
     if (headerByte == SECTOR_FREE) 
         return -1;
@@ -106,7 +106,7 @@ uint8_t fsFileWrite(struct Partition part, File index, uint8_t* buffer, uint32_t
         
         uint32_t positionOffset = part.sector_size + sector + 1;
         
-        fs_write_byte(fileList[index] + positionOffset, buffer[i]);
+        fs_write_byte(part.block_address + fileList[index] + positionOffset, buffer[i]);
         
         sectorCounter++;
         sector++;
@@ -136,7 +136,7 @@ uint8_t fsFileRead(struct Partition part, File index, uint8_t* buffer, uint32_t 
         
         uint32_t positionOffset = part.sector_size + sector + 1;
         
-        fs_read_byte(fileList[index] + positionOffset, &buffer[i]);
+        fs_read_byte(part.block_address + fileList[index] + positionOffset, &buffer[i]);
         
         sectorCounter++;
         sector++;
@@ -174,7 +174,7 @@ void fsFileSetName(struct Partition part, FileHandle handle, uint8_t* name) {
 uint32_t fsFileGetSize(struct Partition part, FileHandle handle) {
     uint8_t sizeBytes[4];
     for (uint8_t i=0; i < 4; i++) 
-        fs_read_byte(handle + i + FILE_OFFSET_SIZE, &sizeBytes[i]);
+        fs_read_byte(part.block_address + handle + i + FILE_OFFSET_SIZE, &sizeBytes[i]);
     return *((uint32_t*)&sizeBytes[0]);
 }
 

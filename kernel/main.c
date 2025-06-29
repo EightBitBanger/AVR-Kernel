@@ -143,24 +143,24 @@ int main(void) {
     
     // Prepare the scheduler and its 
     // associated hardware interrupts
-    SchedulerStart();
+    //SchedulerStart();
     
-    InterruptStartScheduler();
-    InterruptStartTimeCounter();
+    //InterruptStartScheduler();
+    //InterruptStartTimeCounter();
     
     EnableGlobalInterrupts();
 	
+	while(1) {}
+	
+	
+	
     while(1) {
-        
-#ifdef BOARD_RETROBOARD_REV2
         
         DisableGlobalInterrupts();
         
         cliRunShell();
         
         EnableGlobalInterrupts();
-        
-#endif
         
         continue;
     }

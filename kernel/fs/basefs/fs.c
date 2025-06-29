@@ -69,7 +69,7 @@ uint32_t fsAllocate(struct Partition part, uint32_t size) {
     for (uint8_t i=0; i < 4; i++) 
         fs_write_byte(part.block_address + address + i + FILE_OFFSET_SIZE, sizeBytes[i]);
     
-    return part.block_address + address;
+    return address;
 }
 
 void fsFree(struct Partition part, uint32_t address) {
@@ -79,6 +79,6 @@ void fsFree(struct Partition part, uint32_t address) {
     
     // Mark sectors as free
     for (uint32_t i=0; i < numberOfSectors; i++) 
-        fs_write_byte(address + (i * part.sector_size), SECTOR_FREE);
+        fs_write_byte(part.block_address + address + (i * part.sector_size), SECTOR_FREE);
     return;
 }

@@ -97,7 +97,7 @@ DirectoryHandle fsDeviceGetRootDirectory(struct Partition part) {
     uint8_t ptrBytes[4];
     for (uint8_t i=0; i < 4; i++) 
         fs_read_byte(part.block_address + i + DEVICE_OFFSET_SECT_SZ, &ptrBytes[i]);
-    return part.block_address + (*((uint32_t*)&ptrBytes[0]));
+    return (*((uint32_t*)&ptrBytes[0]));
 }
 
 uint32_t fsDeviceGetCurrent(void) {

@@ -22,7 +22,6 @@ void kInit(void) {
     
     ConsoleSetPrompt(prompt, sizeof(prompt));
     
-    /*
     struct Partition partInit;
     partInit.block_address = 0x60000;
     partInit.block_size = 1024 * 8;
@@ -30,20 +29,17 @@ void kInit(void) {
     partInit.sector_count = partInit.block_size / partInit.sector_size;
     fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
     
-    fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"SSD0");
+    //fsDeviceFormatLow(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
+    //fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"SSD0");
     
     
-    DirectoryHandle rootDir = fsDeviceGetRootDirectory(partInit);
+    //DirectoryHandle rootDir = fsDeviceGetRootDirectory(partInit);
+    //uint8_t filename[] = "test_file";
+    //FileHandle fileHandle = fsFileCreate(partInit, filename, 50);
+    //fsDirectoryAddFile(partInit, rootDir, fileHandle);
     
-    uint8_t filename[] = "test_file";
-    FileHandle fileHandle = fsFileCreate(partInit, filename, 50);
+    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
     
-    fsDirectoryAddFile(partInit, rootDir, fileHandle);
-    */
-    
-    /*
-    fsDeviceFormatLow(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
-    */
     
     
     //fsMount(0x60000, 'C');
@@ -58,10 +54,6 @@ void kInit(void) {
     uint8_t devDirectoryName[] = "dev";
     DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, devDirectoryHandle);
-    
-    uint8_t testDirectoryName[] = "test";
-    DirectoryHandle testDirectoryHandle = fsDirectoryCreate(part, testDirectoryName);
-    fsDirectoryAddFile(part, devDirectoryHandle, testDirectoryHandle);
     
     uint8_t mountDirectoryName[] = "mnt";
     DirectoryHandle mountDirectoryHandle = fsDirectoryCreate(part, mountDirectoryName);
@@ -136,9 +128,12 @@ void kInit(void) {
     for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         
         // Get the root directory from the storage device
-        struct Partition devicePart = fsDeviceOpen( 0x40000 + (0x10000 * 2) );
+        struct Partition devicePart = fsDeviceOpen( 0x60000 );
         if (devicePart.block_size == 0) 
             continue;
+        
+        //fsDeviceSetCurrent( devicePart.block_address );
+        //fsWorkingDirectorySetRoot( devicePart, fsDeviceGetRootDirectory(devicePart) );
         
         DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
         
@@ -441,7 +436,15 @@ void SetInterruptVector(uint8_t index, void(*servicePtr)()) {
     return;
 }
 
+uint8_t lock=0;
+
 void _ISR_hardware_service_routine(void) {
+    if (lock == 1) 
+        return;
+    lock = 1;
+    uint8_t msgTest[] = "test";
+    print(msgTest, sizeof(msgTest));
+    printLn();
     
     uint8_t vect = 0;
     
@@ -456,6 +459,7 @@ void _ISR_hardware_service_routine(void) {
     if (((vect >> 1) & 1) != 0) {hardware_interrupt_table[6]();}
     if (((vect >> 0) & 1) != 0) {hardware_interrupt_table[7]();}
     
+    lock = 0;
     return;
 }
 

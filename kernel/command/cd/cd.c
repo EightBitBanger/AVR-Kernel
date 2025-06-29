@@ -4,7 +4,6 @@
 
 #include <kernel/command/cd/cd.h>
 void SetPromptName(struct Partition part, uint8_t isRoot, DirectoryHandle targetDirectory) {
-    
     uint8_t filename[20];
     for (uint8_t i=0; i < 20; i++) 
         filename[i] = ' ';
@@ -27,6 +26,7 @@ void SetPromptName(struct Partition part, uint8_t isRoot, DirectoryHandle target
     ConsoleSetPrompt(filename, namelenth);
     return;
 }
+
 void functionCD(uint8_t* param, uint8_t param_length) {
     uint8_t deviceLetter = param[0];
     uppercase(&deviceLetter);
@@ -37,8 +37,6 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     
     // Drop down the parent directory
     if ((param[0] == '.') & (param[1] == '.') & (param[2] == ' ')) {
-        if (fsWorkingDirectoryGetIndex() == 0) 
-            return;
         uint8_t isRoot = 0;
         if (fsWorkingDirectorySetParent() == 0) 
             isRoot = 1;
