@@ -202,7 +202,7 @@ volatile uint8_t flagProcActive = 0;
 
 volatile struct ProcessDescription* proc_info;
 
-struct mutex mux = {0};
+struct Mutex mux = {0};
 
 
 void _ISR_SCHEDULER_MAIN__(void) {

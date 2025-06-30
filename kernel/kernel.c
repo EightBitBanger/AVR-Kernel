@@ -128,7 +128,7 @@ void kInit(void) {
     for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         
         // Get the root directory from the storage device
-        struct Partition devicePart = fsDeviceOpen( 0x60000 );
+        struct Partition devicePart = fsDeviceOpen( PERIPHERAL_ADDRESS_BEGIN + (index * PERIPHERAL_STRIDE) );
         if (devicePart.block_size == 0) 
             continue;
         
@@ -436,18 +436,20 @@ void SetInterruptVector(uint8_t index, void(*servicePtr)()) {
     return;
 }
 
-uint8_t lock=0;
+struct Mutex isr_mux;
 
 void _ISR_hardware_service_routine(void) {
-    if (lock == 1) 
-        return;
-    lock = 1;
-    uint8_t msgTest[] = "test";
+    MutexLock(&isr_mux);
+    
+    uint8_t msgTest[] = "A";
     print(msgTest, sizeof(msgTest));
-    printLn();
+    printSpace(1);
+    //printLn();
+    
+    MutexUnlock(&isr_mux);
+    return;
     
     uint8_t vect = 0;
-    
     bus_read_byte(&isr_bus, 0x00000, &vect);
     
     if (((vect >> 7) & 1) != 0) {hardware_interrupt_table[0]();}
@@ -459,9 +461,9 @@ void _ISR_hardware_service_routine(void) {
     if (((vect >> 1) & 1) != 0) {hardware_interrupt_table[6]();}
     if (((vect >> 0) & 1) != 0) {hardware_interrupt_table[7]();}
     
-    lock = 0;
+    MutexUnlock(&isr_mux);
     return;
 }
 
 
-void nullfunction(void) {return;}
+void nullfunction(void) {}

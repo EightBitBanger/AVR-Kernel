@@ -6,5 +6,6 @@
 void beep(uint16_t duration, uint16_t frequency);
 
 void sysbeep(void);
+void sysbeepFatalError(void);
 
 #endif

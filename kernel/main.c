@@ -24,21 +24,13 @@ int main(void) {
     
     // Check RAM error
     if (kAllocGetTotal() < 1024) {
+        //sysbeepFatalError();
         
-        for (uint8_t a=0; a < 6; a++) 
-            sysbeep();
-        
-        _delay_ms(500);
-        sysbeep();
-        
-        _delay_ms(500);
-        sysbeep();
-        
-        kThrow(HALT_OUT_OF_MEMORY, 0x00000);
+        //kThrow(HALT_OUT_OF_MEMORY, 0x00000);
     }
     
     // Normal beep, all clear to continue
-    sysbeep();
+    //sysbeep();
     
 #endif
     
@@ -56,7 +48,7 @@ int main(void) {
     //registerCommandMK();
     
     //registerCommandType();
-    registerCommandList();
+    //registerCommandList();
     //registerCommandRM();
     //registerCommandTASK();
     
@@ -135,11 +127,11 @@ int main(void) {
     printPrompt();
     
     // Set the interrupt callback
-    SetHardwareInterruptService( _ISR_hardware_service_routine );
+    //SetHardwareInterruptService( _ISR_hardware_service_routine );
     
     // Enable hardware interrupt handling
     //  Trigger on the HIGH to LOW transition of PIN2
-    InterruptStartHardware();
+    //InterruptStartHardware();
     
     // Prepare the scheduler and its 
     // associated hardware interrupts
@@ -149,10 +141,6 @@ int main(void) {
     //InterruptStartTimeCounter();
     
     EnableGlobalInterrupts();
-	
-	while(1) {}
-	
-	
 	
     while(1) {
         
@@ -165,11 +153,11 @@ int main(void) {
         continue;
     }
     
-    InterruptStopTimerCounter();
-    InterruptStopScheduler();
-    InterruptStopHardware();
+    //InterruptStopTimerCounter();
+    //InterruptStopScheduler();
+    //InterruptStopHardware();
     
-    SchedulerStop();
+    //SchedulerStop();
     
     return 0;
 }

@@ -11,19 +11,17 @@ void InterruptStopTimerCounter(void);
 void InterruptStopScheduler(void);
 void InterruptStopHardware(void);
 
-
-// Interrupts
+// Global interrupts
 
 void EnableGlobalInterrupts(void);
 void DisableGlobalInterrupts(void);
 
-
 // Interrupt service routines
 
-uint8_t SetInterruptService(uint8_t index, void (*service_ptr)());
+uint8_t SetInterruptService(uint8_t index, void(*service_ptr)());
 
 // Hardware interrupt service routines
 
-uint8_t SetHardwareInterruptService(void (*service_ptr)());
+uint8_t SetHardwareInterruptService(void(*service_ptr)());
 
 #endif
