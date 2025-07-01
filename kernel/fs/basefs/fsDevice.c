@@ -54,9 +54,8 @@ struct Partition fsDeviceOpen(uint32_t device_address) {
     
     // Get device ID bytes
     uint8_t headerID[10];
-    for (uint8_t i=0; i < sizeof(headerID); i++) {
+    for (uint8_t i=0; i < sizeof(headerID); i++) 
         fs_read_byte(part.block_address + i, &headerID[i]);
-    }
     
     part.block_size = fsDeviceGetSize(part);
     part.sector_size  = fsDeviceGetSectorSize(part);
@@ -96,7 +95,7 @@ uint32_t fsDeviceGetSectorSize(struct Partition part) {
 DirectoryHandle fsDeviceGetRootDirectory(struct Partition part) {
     uint8_t ptrBytes[4];
     for (uint8_t i=0; i < 4; i++) 
-        fs_read_byte(part.block_address + i + DEVICE_OFFSET_SECT_SZ, &ptrBytes[i]);
+        fs_read_byte(part.block_address + i + DEVICE_OFFSET_ROOT, &ptrBytes[i]);
     return (*((uint32_t*)&ptrBytes[0]));
 }
 
@@ -148,8 +147,7 @@ uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_
         fs_write_byte(part->block_address + i + DEVICE_OFFSET_CAPACITY, sizeBytes[i]);
     
     // Set the device type
-    uint8_t deviceType = FS_DEVICE_TYPE_MEMORY;
-    fs_write_byte(part->block_address + DEVICE_OFFSET_TYPE, deviceType);
+    fs_write_byte(part->block_address + DEVICE_OFFSET_TYPE, device_type);
     
     // Set the root directory pointer
     DirectoryHandle handle = fsDirectoryCreate(*part, device_name);

@@ -14,13 +14,121 @@ uint32_t dirProcAddress;
 struct VirtualFileSystemInterface vfs;
 
 void kInit(void) {
-    
     kPrintVersion();
     
     // Initiate console prompt
     uint8_t prompt[] = "x>";
     
     ConsoleSetPrompt(prompt, sizeof(prompt));
+    
+    
+    
+    struct Partition slave;
+    DirectoryHandle slaveRootHandle;
+    
+    
+    
+    //
+    // Format the device on slot 3
+    
+    /*
+    {
+    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
+    
+    slave = fsDeviceOpen(0x60000);
+    fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"master");
+    
+    slaveRootHandle = fsDeviceGetRootDirectory(slave);
+    
+    FileHandle fileHandle = fsFileCreate(slave, (uint8_t*)"wtf", 20);
+    fsDirectoryAddFile(slave, slaveRootHandle, fileHandle);
+    
+    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
+    fsDeviceSetCurrent(0x00000);
+    
+    uint8_t msgStr[] = "Complete";
+    print(msgStr, sizeof(msgStr));
+    printLn();
+    
+    while(1) {}
+    }
+    */
+    
+    
+    
+    {
+    
+    slave = fsDeviceOpen(0x00200);
+    fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"assss");
+    
+    slaveRootHandle = fsDeviceGetRootDirectory(slave);
+    
+    FileHandle fileHandle = fsFileCreate(slave, (uint8_t*)"wtf", 20);
+    fsDirectoryAddFile(slave, slaveRootHandle, fileHandle);
+    
+    }
+    
+    
+    {
+    struct Partition master = fsDeviceOpen(0x00000);
+    fsDeviceFormat(&master, 0, 32 * 20, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"ssd0");
+    fsDeviceSetCurrent(master.block_address);
+    
+    DirectoryHandle rootHandle = fsDeviceGetRootDirectory(master);
+    fsWorkingDirectorySetRoot(master, rootHandle);
+    
+    FileHandle fileHandle = fsFileCreate(master, (uint8_t*)"file", 10);
+    fsDirectoryAddFile(master, rootHandle, fileHandle);
+    
+    uint32_t mountedSubDirectory = fsDirectoryMountCreate(master, slave, slaveRootHandle, (uint8_t*)"mount");
+    fsDirectoryAddFile(master, rootHandle, mountedSubDirectory);
+    
+    }
+    
+    
+    return;
+    /*
+    
+    struct Partition partB = fsDeviceOpen(0x00000400);
+    fsDeviceFormat(&partB, 0, 32 * 20, 32, 0x00, (uint8_t*)"ssd1");
+    
+    DirectoryHandle rootHandleA = fsDeviceGetRootDirectory(partA);
+    DirectoryHandle rootHandleB = fsDeviceGetRootDirectory(partB);
+    
+    fsWorkingDirectorySetRoot(partA, rootHandleA);
+    
+    {
+    FileHandle fileHandleA = fsFileCreate(partA, (uint8_t*)"file", 10);
+    fsDirectoryAddFile(partA, rootHandleA, fileHandleA);
+    FileHandle fileHandleB = fsFileCreate(partB, (uint8_t*)"file", 20);
+    fsDirectoryAddFile(partB, rootHandleB, fileHandleB);
+    //FileHandle dirHandleB = fsDirectoryCreate(partB, (uint8_t*)"subdir");
+    //fsDirectoryAddFile(partB, rootHandleB, dirHandleB);
+    
+    uint32_t mountedSubDirectory = fsDirectoryMountCreate(partA, partB, rootHandleB);
+    fsDirectoryAddFile(partA, rootHandleA, mountedSubDirectory);
+    
+    fsWorkingDirectoryChange(partA, mountedSubDirectory);
+    
+    }
+    
+    */
+    
+    
+    
+    //DrawConsoleOutput(partA);
+    
+    //uint32_t deviceAddress = fsDeviceGetCurrent();
+    //struct Partition partDir = fsDeviceOpen(deviceAddress);
+    //DirectoryHandle rootDir = fsWorkingDirectoryGetCurrent();
+    
+    //vfsList(partDir, rootDir);
+    
+    
+    
+    return;
+    
+    
     
     struct Partition partInit;
     partInit.block_address = 0x60000;
@@ -135,15 +243,16 @@ void kInit(void) {
         //fsDeviceSetCurrent( devicePart.block_address );
         //fsWorkingDirectorySetRoot( devicePart, fsDeviceGetRootDirectory(devicePart) );
         
+        fsDeviceSetCurrent( devicePart.block_address );
         DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
         
-        DirectoryHandle mountPointDirectory = fsDirectoryMountCreate(part, devicePart, deviceRoot);
+        DirectoryHandle mountPointDirectory = fsDirectoryMountCreate(part, devicePart, deviceRoot, (uint8_t*)"ssd");
         
         // Create device reference file
         fsDirectoryAddFile(part, mountDirectoryHandle, mountPointDirectory);
         
-        break;
     }
+    fsDeviceSetCurrent( 0x00000 );
     
     
     

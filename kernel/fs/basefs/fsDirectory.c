@@ -40,8 +40,7 @@ DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPt
     return handle;
 }
 
-DirectoryHandle fsDirectoryMountCreate(struct Partition part, struct Partition targetPart, DirectoryHandle targetHandle) {
-    uint8_t filename[] = "mount";
+DirectoryHandle fsDirectoryMountCreate(struct Partition part, struct Partition targetPart, DirectoryHandle targetHandle, uint8_t* filename) {
     FileHandle MountPointDirectory = fsFileCreate(part, filename, 20);
     
     // Set number of entries in this directory extent

@@ -30,10 +30,11 @@ void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle) {
         
         // Device address block
         uint32_t block_address = fsFileGetNextAddress(part, handle);
+        struct Partition partTarget = fsDeviceOpen(block_address);
         
         // Target directory
-        DirectoryHandle mountedHandle = fsFileGetParentAddress(part, handle);
         fsDeviceSetCurrent(block_address);
+        DirectoryHandle mountedHandle = fsDeviceGetRootDirectory(partTarget);
         
         // Add the mounted directory to the directory list
         fs_working_directory[current_directory_index] = mountedHandle;

@@ -48,7 +48,7 @@ int main(void) {
     //registerCommandMK();
     
     //registerCommandType();
-    //registerCommandList();
+    registerCommandList();
     //registerCommandRM();
     //registerCommandTASK();
     
