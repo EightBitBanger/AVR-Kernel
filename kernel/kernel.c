@@ -23,11 +23,6 @@ void kInit(void) {
     
     
     
-    struct Partition slave;
-    DirectoryHandle slaveRootHandle;
-    
-    
-    
     //
     // Format the device on slot 3
     
@@ -55,106 +50,9 @@ void kInit(void) {
     */
     
     
-    
-    {
-    
-    slave = fsDeviceOpen(0x00200);
-    fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"assss");
-    
-    slaveRootHandle = fsDeviceGetRootDirectory(slave);
-    
-    FileHandle fileHandle = fsFileCreate(slave, (uint8_t*)"wtf", 20);
-    fsDirectoryAddFile(slave, slaveRootHandle, fileHandle);
-    
-    }
-    
-    
-    {
-    struct Partition master = fsDeviceOpen(0x00000);
-    fsDeviceFormat(&master, 0, 32 * 20, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"ssd0");
-    fsDeviceSetCurrent(master.block_address);
-    
-    DirectoryHandle rootHandle = fsDeviceGetRootDirectory(master);
-    fsWorkingDirectorySetRoot(master, rootHandle);
-    
-    FileHandle fileHandle = fsFileCreate(master, (uint8_t*)"file", 10);
-    fsDirectoryAddFile(master, rootHandle, fileHandle);
-    
-    uint32_t mountedSubDirectory = fsDirectoryMountCreate(master, slave, slaveRootHandle, (uint8_t*)"mount");
-    fsDirectoryAddFile(master, rootHandle, mountedSubDirectory);
-    
-    }
-    
-    
-    return;
-    /*
-    
-    struct Partition partB = fsDeviceOpen(0x00000400);
-    fsDeviceFormat(&partB, 0, 32 * 20, 32, 0x00, (uint8_t*)"ssd1");
-    
-    DirectoryHandle rootHandleA = fsDeviceGetRootDirectory(partA);
-    DirectoryHandle rootHandleB = fsDeviceGetRootDirectory(partB);
-    
-    fsWorkingDirectorySetRoot(partA, rootHandleA);
-    
-    {
-    FileHandle fileHandleA = fsFileCreate(partA, (uint8_t*)"file", 10);
-    fsDirectoryAddFile(partA, rootHandleA, fileHandleA);
-    FileHandle fileHandleB = fsFileCreate(partB, (uint8_t*)"file", 20);
-    fsDirectoryAddFile(partB, rootHandleB, fileHandleB);
-    //FileHandle dirHandleB = fsDirectoryCreate(partB, (uint8_t*)"subdir");
-    //fsDirectoryAddFile(partB, rootHandleB, dirHandleB);
-    
-    uint32_t mountedSubDirectory = fsDirectoryMountCreate(partA, partB, rootHandleB);
-    fsDirectoryAddFile(partA, rootHandleA, mountedSubDirectory);
-    
-    fsWorkingDirectoryChange(partA, mountedSubDirectory);
-    
-    }
-    
-    */
-    
-    
-    
-    //DrawConsoleOutput(partA);
-    
-    //uint32_t deviceAddress = fsDeviceGetCurrent();
-    //struct Partition partDir = fsDeviceOpen(deviceAddress);
-    //DirectoryHandle rootDir = fsWorkingDirectoryGetCurrent();
-    
-    //vfsList(partDir, rootDir);
-    
-    
-    
-    return;
-    
-    
-    
-    struct Partition partInit;
-    partInit.block_address = 0x60000;
-    partInit.block_size = 1024 * 8;
-    partInit.sector_size = 32;
-    partInit.sector_count = partInit.block_size / partInit.sector_size;
-    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
-    
-    //fsDeviceFormatLow(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM);
-    //fsDeviceFormat(&partInit, 0, partInit.block_size, partInit.sector_size, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"SSD0");
-    
-    
-    //DirectoryHandle rootDir = fsDeviceGetRootDirectory(partInit);
-    //uint8_t filename[] = "test_file";
-    //FileHandle fileHandle = fsFileCreate(partInit, filename, 50);
-    //fsDirectoryAddFile(partInit, rootDir, fileHandle);
-    
-    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
-    
-    
-    
-    //fsMount(0x60000, 'C');
-    
     // Initiate memory storage
     struct Partition part = fsDeviceOpen(0x00000000);
-    fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"ramdrv");
+    fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"master");
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
     fsWorkingDirectorySetRoot(part, rootDirectory);

@@ -1,5 +1,4 @@
 #include <kernel/fs/fs.h>
-#include <stdio.h>
 #include <string.h>
 
 void fs_write_byte(uint32_t address, uint8_t data);
@@ -41,7 +40,7 @@ DirectoryHandle fsDirectoryExtentCreate(struct Partition part, uint32_t parentPt
 }
 
 DirectoryHandle fsDirectoryMountCreate(struct Partition part, struct Partition targetPart, DirectoryHandle targetHandle, uint8_t* filename) {
-    FileHandle MountPointDirectory = fsFileCreate(part, filename, 20);
+    FileHandle MountPointDirectory = fsFileCreate(part, filename, 30);
     
     // Set number of entries in this directory extent
     fsDirectorySetReferenceCount(part, MountPointDirectory, 0);
@@ -123,11 +122,12 @@ uint8_t fsDirectoryAddFile(struct Partition part, DirectoryHandle handle, uint32
     fsDirectorySetReferenceCount(part, handle, refCount+1);
     
     File index = fsFileOpen(part, handle);
-    
     // Read directory references
     uint32_t fileSize = fsFileGetSize(part, handle);
     uint8_t buffer[fileSize + part.sector_size];
-    fsFileRead(part, index, buffer, fileSize);
+    // Dont ask questions... 
+    uint32_t refNumberOfBytes = ((refCount + 2) * 4) - 3;
+    fsFileRead(part, index, buffer, refNumberOfBytes);
     
     // Add new reference address
     uint8_t refBytes[4];
@@ -136,9 +136,8 @@ uint8_t fsDirectoryAddFile(struct Partition part, DirectoryHandle handle, uint32
         buffer[(refCount * 4) + i] = refBytes[i];
     
     // Write back references
-    fsFileWrite(part, index, buffer, fileSize);
+    fsFileWrite(part, index, buffer, refNumberOfBytes);
     fsFileClose(index);
-    
     return 1;
 }
 
