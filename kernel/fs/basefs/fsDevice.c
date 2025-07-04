@@ -6,18 +6,19 @@ const uint8_t DeviceHeaderString[] = {0x13, 'f','s',' ',' ',' ',' ',' ',' ',' ',
 
 struct Bus fs_bus;
 
-uint32_t current_device;
+uint32_t current_partition;
+uint32_t base_address;
 
 void (*fsWriteSectorByte)(struct Bus*, uint32_t, uint8_t);
 void (*fsReadSectorByte)(struct Bus*, uint32_t, uint8_t*);
 
 
 void fs_write_byte(uint32_t address, uint8_t data) {
-    fsWriteSectorByte(&fs_bus, address, data);
+    fsWriteSectorByte(&fs_bus, base_address + address, data);
 }
 
 void fs_read_byte(uint32_t address, uint8_t* data) {
-    fsReadSectorByte(&fs_bus, address, data);
+    fsReadSectorByte(&fs_bus, base_address + address, data);
 }
 
 void fsDeviceSetType(uint8_t device_type) {
@@ -40,7 +41,8 @@ void fsInit(void) {
     fs_bus.read_waitstate = 1;
     fs_bus.write_waitstate = 0;
     
-    current_device = 0x00000000;
+    current_partition = 0x00000000;
+    base_address      = 0x00000000;
     
     fsWriteSectorByte = bus_write_memory;
     fsReadSectorByte = bus_read_memory;
@@ -100,11 +102,20 @@ DirectoryHandle fsDeviceGetRootDirectory(struct Partition part) {
 }
 
 uint32_t fsDeviceGetCurrent(void) {
-    return current_device;
+    return current_partition;
 }
 
-void fsDeviceSetCurrent(uint32_t device_address) {
-    current_device = device_address;
+void fsDeviceSetCurrent(uint32_t address) {
+    current_partition = address;
+    return;
+}
+
+uint32_t fsDeviceGetBase(void) {
+    return base_address;
+}
+
+void fsDeviceSetBase(uint32_t address) {
+    base_address = address;
     return;
 }
 

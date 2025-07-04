@@ -46,11 +46,31 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     }
     
     // Drop to the root directory
-    if ((param[0] == '/') & (param[1] == ' ')) {
+    if ((param[0] == '/' && param[1] == ' ')) {
         uint8_t consolePrompt[] = "x>";
         ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
         
         fsWorkingDirectorySetRoot( part, fsDeviceGetRootDirectory(part) );
+        return;
+    }
+    
+    // Check device change
+    if ((param[1] == ':' && param[2] == ' ')) {
+        lowercase(&param[0]);
+        if (!is_letter(&param[0])) 
+            return;
+        uint8_t consolePrompt[] = "x>";
+        
+        // Check root memory device
+        if (param[0] == 'x') {
+            fsDeviceSetBase(0);
+            ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
+            return;
+        }
+        // Set to device offset
+        fsDeviceSetBase(PERIPHERAL_ADDRESS_BEGIN + (PERIPHERAL_STRIDE * (param[0] - 'a')));
+        consolePrompt[0] = param[0];
+        ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
         return;
     }
     

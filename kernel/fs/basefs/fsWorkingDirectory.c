@@ -33,12 +33,14 @@ void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle) {
         struct Partition partTarget = fsDeviceOpen(block_address);
         
         // Target directory
-        fsDeviceSetCurrent(block_address);
-        DirectoryHandle mountedHandle = fsDeviceGetRootDirectory(partTarget);
+        fsDeviceSetBase(partTarget.block_address);
+        
+        struct Partition ssdPart = fsDeviceOpen(0x00000);
+        fsWorkingDirectorySetRoot( ssdPart, fsDeviceGetRootDirectory(ssdPart));
         
         // Add the mounted directory to the directory list
-        fs_working_directory[current_directory_index] = mountedHandle;
-        fs_working_device[current_directory_index] = block_address;
+        fs_working_directory[current_directory_index] = fsDeviceGetRootDirectory(partTarget);
+        fs_working_device[current_directory_index] = partTarget.block_address;
         return;
     }
     

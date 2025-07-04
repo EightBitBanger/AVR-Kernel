@@ -25,15 +25,14 @@ void kInit(void) {
     
     //
     // Format the device on slot 3
-    
     /*
     {
     fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
     
-    slave = fsDeviceOpen(0x60000);
+    struct Partition slave = fsDeviceOpen(0x60000);
     fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"master");
     
-    slaveRootHandle = fsDeviceGetRootDirectory(slave);
+    DirectoryHandle slaveRootHandle = fsDeviceGetRootDirectory(slave);
     
     FileHandle fileHandle = fsFileCreate(slave, (uint8_t*)"wtf", 20);
     fsDirectoryAddFile(slave, slaveRootHandle, fileHandle);
@@ -49,9 +48,10 @@ void kInit(void) {
     }
     */
     
-    
     // Initiate memory storage
-    struct Partition part = fsDeviceOpen(0x00000000);
+    fsDeviceSetBase(0x00000);
+    
+    struct Partition part = fsDeviceOpen(0x00000);
     fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"master");
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
@@ -61,14 +61,9 @@ void kInit(void) {
     DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, devDirectoryHandle);
     
-    uint8_t mountDirectoryName[] = "mnt";
-    DirectoryHandle mountDirectoryHandle = fsDirectoryCreate(part, mountDirectoryName);
-    fsDirectoryAddFile(part, rootDirectory, mountDirectoryHandle);
-    
     uint8_t procDirectoryName[] = "proc";
     DirectoryHandle procDirectoryHandle = fsDirectoryCreate(part, procDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, procDirectoryHandle);
-    
     
     // List devices on the bus
     
@@ -129,182 +124,26 @@ void kInit(void) {
     }
     
     
-    // List and mount storage devices on the bus
+    // Find an active storage device on the bus
+    fsDeviceSetCurrent( 0x00000 );
     
     for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
-        
         // Get the root directory from the storage device
-        struct Partition devicePart = fsDeviceOpen( PERIPHERAL_ADDRESS_BEGIN + (index * PERIPHERAL_STRIDE) );
+        fsDeviceSetBase( PERIPHERAL_ADDRESS_BEGIN + (index * PERIPHERAL_STRIDE) );
+        
+        struct Partition devicePart = fsDeviceOpen( 0x00000 );
         if (devicePart.block_size == 0) 
             continue;
         
-        //fsDeviceSetCurrent( devicePart.block_address );
-        //fsWorkingDirectorySetRoot( devicePart, fsDeviceGetRootDirectory(devicePart) );
+        // Set the device
+        struct Partition ssdPart = fsDeviceOpen(0x00000);
+        fsWorkingDirectorySetRoot( ssdPart, fsDeviceGetRootDirectory(ssdPart));
         
-        fsDeviceSetCurrent( devicePart.block_address );
-        DirectoryHandle deviceRoot = fsDeviceGetRootDirectory(devicePart);
-        
-        DirectoryHandle mountPointDirectory = fsDirectoryMountCreate(part, devicePart, deviceRoot, (uint8_t*)"ssd");
-        
-        // Create device reference file
-        fsDirectoryAddFile(part, mountDirectoryHandle, mountPointDirectory);
-        
-    }
-    fsDeviceSetCurrent( 0x00000 );
-    
-    
-    
-    
-    /*
-    
-    VirtualAccessSetMode(VIRTUAL_ACCESS_MODE_KERNEL);
-    
-    // Initiate console prompt
-    uint8_t prompt[] = {fsDeviceGetRootLetter(), '>'};
-    
-    ConsoleSetPrompt(prompt, sizeof(prompt));
-    
-    // Initiate virtual file system
-    vfs.open = vfsOpen;
-    vfs.read = vfsRead;
-    vfs.write = vfsWrite;
-    vfs.close = vfsClose;
-    vfs.mkdir = vfsMkdir;
-    vfs.rmdir = vfsRmdir;
-    
-    // Initiate memory storage
-    fsDeviceSetRootLetter('x');
-    fsFormat(0, FORMAT_CAPACITY_32K);
-    
-    fsWorkingDirectoryClear();
-    
-    
-    // Create system directories
-    
-    uint8_t dirNameDev[] = "dev";
-    fsDirectoryCreate(dirNameDev, sizeof(dirNameDev));
-    uint8_t dirNameProc[] = "proc";
-    dirProcAddress = fsDirectoryCreate(dirNameProc, sizeof(dirNameProc));
-    
-    // Register devices on the bus
-    
-    fsWorkingDirectoryChange(dirNameDev, sizeof(dirNameDev));
-    
-    for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
-        struct Device* devPtr = GetDeviceByIndex( index );
-        
-        if (devPtr->device_id == 0) 
-            continue;
-        
-        uint8_t length = 0;
-        for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
-            
-            if (devPtr->device_name[i] == ' ') {
-                length = i + 1;
-                break;
-            }
-            
-        }
-        
-        if (length == 0) 
-            continue;
-        
-        // Create device reference file
-        uint32_t fileAddress = fsFileCreate(devPtr->device_name, length, 40);
-        
-        struct FSAttribute attrib = {'s','r','w',' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        // Initiate file
-        uint32_t fileSize = fsFileGetSize(fileAddress);
-        uint8_t fileBuffer[fileSize];
-        for (unsigned int i=0; i < fileSize; i++) 
-            fileBuffer[i] = ' ';
-        
-        // Device file header
-        fileBuffer[0] = 'K';
-        fileBuffer[1] = 'D';
-        fileBuffer[2] = 'E';
-        fileBuffer[3] = 'V';
-        fileBuffer[4] = '\n';
-        
-        // Slot
-        fileBuffer[5] = 's';
-        fileBuffer[6] = 'l';
-        fileBuffer[7] = 'o';
-        fileBuffer[8] = 't';
-        fileBuffer[9] = '=';
-        fileBuffer[10] = devPtr->hardware_slot + '1';
-        fileBuffer[11] = '\n';
-        
-        // Address
-        fileBuffer[12] = '0';
-        fileBuffer[13] = 'x';
-        int_to_hex_string(devPtr->hardware_address, &fileBuffer[14]);
-        
-        int32_t fileIndex = fsFileOpen(fileAddress);
-        fsFileWrite(fileIndex, fileBuffer, fileSize);
-        fsFileClose(fileIndex);
-        
-        continue;
-    }
-    
-    fsWorkingDirectoryClear();
-    
-    
-    // Find an active storage device
-    uint8_t promptDevLetter[] = " >";
-    uint8_t selectedDevice = 255;
-    
-    for (uint8_t i=0; i < NUMBER_OF_PERIPHERALS; i++) {
-        
-        uint8_t currentDevice = i + 'a';
-        
-        fsDeviceSetRootLetter(currentDevice);
-        
-        if (fsDeviceCheckReady() == 0) 
-            continue;
-        
-        selectedDevice = currentDevice;
-        
-        // Setup environment
-        
-        // Primary root device
-        EnvironmentSetHomeChar( selectedDevice );
-        
-        // Executable search path
-        uint8_t binPath[] = "bin";
-        EnvironmentSetPathBin(binPath, sizeof(binPath));
-        
+        uint8_t consolePrompt[] = "x>";
+        consolePrompt[0] = index + 'a';
+        ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
         break;
     }
-    
-    fsDeviceSetRootLetter('x');
-    fsWorkingDirectoryClear();
-    
-    // Set prompt to an active storage device
-    
-    if (selectedDevice == 255) {
-        
-        fsDeviceSetRootLetter('x');
-        
-        promptDevLetter[0] = 'X';
-        
-        ConsoleSetPrompt(promptDevLetter, sizeof(promptDevLetter));
-        
-    } else {
-        
-        fsDeviceSetRootLetter(selectedDevice);
-        uppercase(&selectedDevice);
-        
-        promptDevLetter[0] = selectedDevice;
-        
-        ConsoleSetPrompt(promptDevLetter, sizeof(promptDevLetter));
-        
-    }
-    
-    fsWorkingDirectoryClear();
-    
     
     
     
@@ -312,20 +151,42 @@ void kInit(void) {
     // Load drivers
     
 #ifndef _BOOT_SAFEMODE__
+    struct Partition devicePart = fsDeviceOpen(0x00000);
+    DirectoryHandle rootDeviceDir = fsDeviceGetRootDirectory(devicePart);
     
-    uint8_t driversDirName[] = "sys";
+    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
     
-    //
+    uint8_t sysDirectoryName[] = "sys";
+    DirectoryHandle sysDirectoryHandle = fsDirectoryCreate(devicePart, sysDirectoryName);
+    fsDirectoryAddFile(devicePart, rootDeviceDir, sysDirectoryHandle);
+    
+    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
+    
     // Locate drivers directory
-    //
+    uint8_t driversDirName[] = "sys";
+    uint32_t directoryAddress = fsDirectoryFindByName(devicePart, rootDirectory, driversDirName);
     
-    uint32_t directoryAddress = fsDirectoryExists(driversDirName, sizeof(driversDirName)-1);
+    // Directory does not exist
+    if (directoryAddress == 0) {
+        uint8_t msgDirectoryNotFound[] = "Dir not found";
+        print(msgDirectoryNotFound, sizeof(msgDirectoryNotFound));
+        printLn();
+        return;
+    }
+    
+    //fsWorkingDirectoryChange(devicePart, driversDirName, sizeof(driversDirName));
+    
+    /*
+    // Locate drivers directory
+    uint8_t driversDirName[] = "sys";
+    uint32_t directoryAddress = fsDirectoryFindByName(devicePart, driversDirName);
+    fsDeviceGetRootDirectory(devicePart);
     
     // Directory does not exist
     if (directoryAddress == 0) 
         return;
-    
-    fsWorkingDirectoryChange(driversDirName, sizeof(driversDirName));
+    struct Partition devicePart = fsDeviceOpen(0x00000);
+    fsWorkingDirectoryChange(devicePart, driversDirName, sizeof(driversDirName));
     
     uint32_t numberOfFiles = fsWorkingDirectoryGetFileCount();
     
@@ -419,15 +280,14 @@ void kInit(void) {
         continue;
     }
     
-#endif
     
     fsWorkingDirectoryClear();
     */
+#endif
     return;
 }
 
 void KernelVectorTableInit(void) {
-    
     isr_bus.read_waitstate  = 1;
     
     for (uint8_t i=0; i < HARDWARE_INTERRUPT_TABLE_SIZE; i++) 

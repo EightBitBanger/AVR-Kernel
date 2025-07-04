@@ -62,8 +62,12 @@ uint32_t fsMountGetNumberOfPoints(uint8_t letter);
 struct MountPoint* fsMountGetMountPointByIndex(uint16_t index);
 
 // Partition
-void fsDeviceSetCurrent(uint32_t device_address);
+
+uint32_t fsDeviceGetBase(void);
+void fsDeviceSetBase(uint32_t address);
+
 uint32_t fsDeviceGetCurrent(void);
+void fsDeviceSetCurrent(uint32_t address);
 
 struct Partition fsDeviceOpen(uint32_t device_address);
 uint32_t fsDeviceGetSize(struct Partition part);

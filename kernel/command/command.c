@@ -40,7 +40,6 @@ extern struct ConsoleCommand CommandRegistry[CONSOLE_FUNCTION_TABLE_SIZE];
 uint8_t msgDeviceNotReady[] = "Device not ready";
 uint8_t msgBadCommand[] = "Bad cmd or filename";
 
-uint8_t commandSpecialChar(void);
 uint8_t commandFunctionLookup(uint8_t params_begin);
 uint8_t ExecuteBinDirectory(void);
 
@@ -92,21 +91,19 @@ uint8_t ExecuteFile(uint32_t fileAddress) {
 
 
 void KeyFunctionReturn(void) {
-    
     printLn();
     ConsoleSetCursorPosition(0);
     
     // Save last entered command string
     for (uint8_t a=0; a <= console_string_length; a++) 
         console_string_old[a] = console_string[a];
-    
     console_string_length_old = console_string_length;
     
     // Get the filename and parameters
     uint8_t filename_length = 0;
     parameters_begin = 0;
     
-    for (uint8_t i=0; i <= console_string_length_old; i++) {
+    for (uint8_t i=0; i <= console_string_length; i++) {
         
         if (console_string[i] != ' ') 
             continue;
@@ -120,13 +117,49 @@ void KeyFunctionReturn(void) {
         break;
     }
     
-    // Check special character functionality
-    uint8_t passed = commandSpecialChar();
+    uint8_t passed = 0;
+    
+    // Change device with a colon character
+    if (console_string[1] == ':') {
+        lowercase(&console_string[0]);
+        
+        // Device letter
+        if (console_string[0] >= 'a' && console_string[0] <= 'z') {
+            
+            // Update the prompt if the device letter was changed
+            uint8_t consolePrompt[] = {console_string[0], '>', '\0'};
+            ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
+            
+            // Check memory storage
+            if (console_string[0] == 'x') {
+                fsDeviceSetBase(0x00000);
+                struct Partition part = fsDeviceOpen(0x00000);
+                fsWorkingDirectorySetRoot(part, fsDeviceGetRootDirectory(part));
+            } else {
+                // Set the new device base address
+                fsDeviceSetBase(PERIPHERAL_ADDRESS_BEGIN + (PERIPHERAL_STRIDE * (console_string[0] - 'a')));
+                struct Partition part = fsDeviceOpen(0x00000);
+                fsWorkingDirectorySetRoot(part, fsDeviceGetRootDirectory(part));
+            }
+            ConsoleSetCursorPosition(2);
+            console_string_length = 0;
+            passed = 1;
+        }
+    }
+    
+    // Check device is ready
+    struct Partition part = fsDeviceOpen(0x00000);
+    if (passed == 0 && part.block_size == 0) {
+        ConsoleSetCursorPosition(0);
+        print(msgDeviceNotReady, sizeof(msgDeviceNotReady));
+        printLn();
+        passed = 1;
+    }
     
     // Look up function name
-    if (passed == 0) {
+    if (passed == 0) 
         passed = commandFunctionLookup(parameters_begin);
-    }
+    
     
     //
     // Check file executable
@@ -171,61 +204,22 @@ void KeyFunctionReturn(void) {
         
     }
     */
+    
     // Bad command or filename
-    if ((passed == 0) & (console_string_length_old > 0)) {
-        
+    if (passed == 0 && console_string_length_old > 0) {
         print( msgBadCommand, sizeof(msgBadCommand) );
-        
         printLn();
-        
     }
     
     printPrompt();
-    
     ConsoleClearKeyboardString();
     
     console_string_length = 0;
-    
     return;
 }
 
 
-uint8_t commandSpecialChar(void) {
-    /*
-    //
-    // Change device with a colon character
-    
-    if (console_string[1] == ':') {
-        
-        uppercase(&console_string[0]);
-        
-        // Device letter
-        if ((console_string[0] < 'A') & 
-            (console_string[0] > 'Z')) 
-            return 0;
-        
-        // Update the prompt if the device letter was changed
-        
-        fsDeviceSetRootLetter( console_string[0] );
-        
-        uint8_t consolePrompt[] = {console_string[0], '>'};
-        
-        ConsoleSetPrompt(consolePrompt, 3);
-        
-        ConsoleSetCursorPosition(2);
-        
-        fsWorkingDirectoryClear();
-        
-        console_string_length = 0;
-        
-        return 1;
-    }
-    */
-    return 0;
-}
-
 uint8_t commandFunctionLookup(uint8_t params_begin) {
-    
     uint8_t passed = 0;
     uint8_t parameters_begin_chk = 0;
     

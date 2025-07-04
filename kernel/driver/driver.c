@@ -4,17 +4,16 @@
 struct Node* DriverTableHead = NULL;
 
 int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength) {
-    /*
     uint32_t fileAddress = fsFileExists(filename, filenameLength);
     
     if (fileAddress == 0) 
         return -1;
-    
-    int32_t index = fsFileOpen(fileAddress);
-    uint32_t fileSize = fsFileGetSize(fileAddress);
+    struct Partition part = fsDeviceOpen(0x00000);
+    int32_t index = fsFileOpen(part, fileAddress);
+    uint32_t fileSize = fsFileGetSize(part, fileAddress);
     
     uint8_t fileBuffer[fileSize];
-    fsFileRead(index, fileBuffer, fileSize);
+    fsFileRead(part, index, fileBuffer, fileSize);
     fsFileClose(index);
     
     // Check driver corruption
@@ -115,7 +114,7 @@ int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength) {
         
         return 4;
     }
-    */
+    
     return 0;
 }
 
