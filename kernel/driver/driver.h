@@ -23,14 +23,12 @@ struct Driver {
 };
 
 
-int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength);
+int8_t LoadLibrary(uint8_t* filename);
 
 struct Driver* GetDriverByName(uint8_t* name, uint8_t nameLength);
-
 struct Driver* GetDriverByIndex(uint8_t index);
 
 uint32_t RegisterDriver(void* deviceDriverPtr);
-
 uint32_t GetNumberOfDrivers(void);
 
 #endif

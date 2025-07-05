@@ -6,6 +6,8 @@ uint8_t current_directory_index;
 DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
 uint32_t fs_working_device[MAX_DIRECTORY_DEPTH];
 
+uint32_t device_home_address;
+
 
 void fsWorkingDirectorySetRoot(struct Partition part, DirectoryHandle handle) {
     fs_working_directory[0] = handle;
@@ -65,5 +67,14 @@ DirectoryHandle fsWorkingDirectoryGetCurrent(void) {
 
 uint8_t fsWorkingDirectoryGetIndex(void) {
     return current_directory_index;
+}
+
+
+void fsEnvironmentSetHomeDevice(uint32_t deviceAddress) {
+    device_home_address = deviceAddress;
+}
+
+uint32_t fsEnvironmentGetHomeDevice(void) {
+    return device_home_address;
 }
 

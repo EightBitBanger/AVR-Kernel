@@ -9,6 +9,8 @@ struct Bus fs_bus;
 uint32_t current_partition;
 uint32_t base_address;
 
+extern uint32_t device_home_address;
+
 void (*fsWriteSectorByte)(struct Bus*, uint32_t, uint8_t);
 void (*fsReadSectorByte)(struct Bus*, uint32_t, uint8_t*);
 
@@ -46,6 +48,8 @@ void fsInit(void) {
     
     fsWriteSectorByte = bus_write_memory;
     fsReadSectorByte = bus_read_memory;
+    
+    device_home_address = 0;
     
     return;
 }

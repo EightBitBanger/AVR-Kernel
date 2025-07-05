@@ -40,54 +40,13 @@ extern struct ConsoleCommand CommandRegistry[CONSOLE_FUNCTION_TABLE_SIZE];
 uint8_t msgDeviceNotReady[] = "Device not ready";
 uint8_t msgBadCommand[] = "Bad cmd or filename";
 
-uint8_t commandFunctionLookup(uint8_t params_begin);
+uint8_t CommandFunctionLookup(uint8_t params_begin);
+uint8_t ExecuteFile(struct Partition part, FileHandle fileAddress);
 uint8_t ExecuteBinDirectory(void);
 
 uint8_t currentDeviceLetter;
 uint32_t currentWorkingDirectoryAddress;
 uint32_t currentWorkingDirectoryStack;
-
-
-uint8_t ExecuteFile(uint32_t fileAddress) {
-    /*
-    if (fileAddress == 0) 
-        return 0;
-    
-    // Check file is executable
-    struct FSAttribute attribute;
-    fsFileGetAttributes(fileAddress, &attribute);
-    
-    // Check executable
-    if (attribute.executable != 'x') 
-        return 0;
-    
-    int32_t index = fsFileOpen(fileAddress);
-    
-    union Pointer fileSizePtr;
-    for (uint8_t i=0; i < 4; i++) 
-        fs_read_byte(fileAddress + FILE_OFFSET_SIZE + i, &fileSizePtr.byte_t[i]);
-    
-    uint32_t programSize = fileSizePtr.address;
-    uint8_t programBuffer[programSize];
-    
-    // Load the file
-    fsFileRead(index, programBuffer, programSize);
-    fsFileClose(index);
-    
-    // Return to the working directory
-    fsDeviceSetRootLetter(currentDeviceLetter);
-    fsWorkingDirectorySetAddress(currentWorkingDirectoryAddress);
-    fsWorkingDirectorySetName(currentWorkingDirectoryAddress);
-    fsWorkingDirectorySetStack(currentWorkingDirectoryStack);
-    
-    // Launch the emulator
-    EmulatorSetProgram( programBuffer, programSize );
-    EmulateX4( EVENT_NOMESSAGE );
-    
-    printPrompt();
-    */
-    return 1;
-}
 
 
 void KeyFunctionReturn(void) {
@@ -97,24 +56,28 @@ void KeyFunctionReturn(void) {
     // Save last entered command string
     for (uint8_t a=0; a <= console_string_length; a++) 
         console_string_old[a] = console_string[a];
+    
     console_string_length_old = console_string_length;
     
-    // Get the filename and parameters
-    uint8_t filename_length = 0;
+    // Get the beginning of the function parameters
     parameters_begin = 0;
-    
-    for (uint8_t i=0; i <= console_string_length; i++) {
-        
+    uint8_t parameters_length = 0;
+    for (uint8_t i=0; i < console_string_length; i++) {
         if (console_string[i] != ' ') 
             continue;
-        
-        filename_length  = i + 1;
         parameters_begin = i + 1;
-        
-        if (filename_length > FILE_NAME_LENGTH) 
-            filename_length = FILE_NAME_LENGTH;
-        
+        parameters_length = console_string_length - i;
         break;
+    }
+    
+    // Separate the function name
+    uint8_t functionName[FILE_NAME_LENGTH];
+    for (uint8_t i=0; i <= console_string_length; i++) {
+        if (console_string[i] == ' ') {
+            functionName[i] = '\0';
+            break;
+        }
+        functionName[i] = console_string[i];
     }
     
     uint8_t passed = 0;
@@ -158,52 +121,57 @@ void KeyFunctionReturn(void) {
     
     // Look up function name
     if (passed == 0) 
-        passed = commandFunctionLookup(parameters_begin);
+        passed = CommandFunctionLookup(parameters_begin);
     
-    
-    //
     // Check file executable
-    /*
-    if ((passed == 0) & (console_string_length_old > 0)) {
-        
-        // Change to home device
-        currentDeviceLetter = fsDeviceGetRootLetter();
-        lowercase(&currentDeviceLetter);
-        
-        // Get current directory
-        currentWorkingDirectoryAddress = fsWorkingDirectoryGetAddress();
-        currentWorkingDirectoryStack = fsWorkingDirectoryGetStack();
-        
-        if (fsDeviceCheckReady() == 1) {
-            // Check working directory
-            uint32_t fileAddress = fsFileExists(console_string, filename_length);
-            
-            // Execute the file
-            EmulatorSetParameters(&console_string[parameters_begin], (console_string_length - parameters_begin) + 1);
-            if (fileAddress != 0) {
-                if (ExecuteFile( fileAddress ) == 1) {
-                    ConsoleClearKeyboardString();
-                    console_string_length = 0;
-                    return;
-                }
-            }
-            
-        } else {
-            print( msgDeviceNotReady, sizeof(msgDeviceNotReady) );
-            printLn();
-            passed = 1;
+    if (passed == 0 && console_string_length_old > 0) {
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
+        FileHandle fileHandle = fsDirectoryFindByName(part, currentDirectory, functionName);
+        if (fileHandle != 0) {
+            if (ExecuteFile(part, fileHandle) != 0) 
+                passed = 1;
         }
-        
-        // Check bin directory
-        EmulatorSetParameters(&console_string[parameters_begin], (console_string_length - parameters_begin) + 1);
-        if (ExecuteBinDirectory() == 1) {
-            ConsoleClearKeyboardString();
-            console_string_length = 0;
-            return;
-        }
-        
     }
-    */
+    
+    // Check bin directory
+    if (passed == 0 && console_string_length_old > 0) {
+        uint32_t baseAddress = fsDeviceGetBase();
+        
+        uint32_t homeDevice = fsEnvironmentGetHomeDevice();
+        if (homeDevice != 0) 
+        fsDeviceSetBase(homeDevice);
+        
+        struct Partition homePart = fsDeviceOpen(0x00000);
+        DirectoryHandle homeRootDirectory = fsDeviceGetRootDirectory(homePart);
+        
+        uint32_t programSize=0;
+        
+        // Find the bin directory
+        DirectoryHandle binDirectory = fsDirectoryFindByName(homePart, homeRootDirectory, (uint8_t*)"bin");
+        if (binDirectory != 0) {
+            // Find the file
+            FileHandle fileHandle = fsDirectoryFindByName(homePart, binDirectory, functionName);
+            if (fileHandle != 0) {
+                File index = fsFileOpen(homePart, fileHandle);
+                programSize = fsFileGetSize(homePart, fileHandle);
+                uint8_t programBuffer[programSize];
+                
+                fsFileRead(homePart, index, programBuffer, programSize);
+                fsFileClose(index);
+                
+                // Run the program
+                fsDeviceSetBase(baseAddress);
+                EmulatorSetParameters(&console_string[parameters_begin], parameters_length);
+                EmulatorSetProgram(programBuffer, programSize);
+                
+                EmulateX4( EVENT_NOMESSAGE );
+                passed = 1;
+            }
+        }
+        
+        // Return to the original device and directory
+        fsDeviceSetBase(baseAddress);
+    }
     
     // Bad command or filename
     if (passed == 0 && console_string_length_old > 0) {
@@ -219,14 +187,13 @@ void KeyFunctionReturn(void) {
 }
 
 
-uint8_t commandFunctionLookup(uint8_t params_begin) {
+uint8_t CommandFunctionLookup(uint8_t params_begin) {
     uint8_t passed = 0;
     uint8_t parameters_begin_chk = 0;
     
     for (uint8_t i=0; i < CONSOLE_FUNCTION_TABLE_SIZE; i++) {
         
         for (uint8_t n=0; n < CONSOLE_FUNCTION_NAME_LENGTH; n++) {
-            
             uint8_t consoleChar = console_string[n];
             lowercase(&consoleChar);
             
@@ -234,29 +201,22 @@ uint8_t commandFunctionLookup(uint8_t params_begin) {
                 passed = 0;
                 break;
             }
-            
             if ((is_symbol(&console_string[n+1]) == 1) | 
                 (CommandRegistry[i].name[n] == ' ')) {
                 
                 if (parameters_begin_chk == 0) 
                     parameters_begin_chk = n + 1;
-                
                 break;
             }
             
             passed = 1;
         }
-        
         if (passed == 0) 
             continue;
-        
         if (parameters_begin_chk != 0) 
             params_begin = parameters_begin_chk;
         
-        // Switch to user mode
-        
         // Run the function
-        
         if (CommandRegistry[i].function != nullptr) 
             CommandRegistry[i].function( &console_string[params_begin], (console_string_length + 1) - params_begin );
         
@@ -267,75 +227,25 @@ uint8_t commandFunctionLookup(uint8_t params_begin) {
 }
 
 
-
-uint8_t ExecuteBinDirectory(void) {
-    /*
-    // Get bin directory
-    uint32_t pathBinLength = EnvironmentGetPathBinLength();
-    
-    if (pathBinLength == 0) 
+uint8_t ExecuteFile(struct Partition part, FileHandle fileAddress) {
+    uint8_t attributes[4];
+    fsFileGetAttributes(part, fileAddress, attributes);
+    if (attributes[3] == 'd' || attributes[0] != 'x' || attributes[1] != 'r') 
         return 0;
     
-    uint8_t binDirectoryPath[pathBinLength];
-    EnvironmentGetPathBin(binDirectoryPath, pathBinLength);
-    
-    if (binDirectoryPath[0] < 0x20) 
+    uint32_t programSize = fsFileGetSize(part, fileAddress);
+    if (programSize == 0) 
         return 0;
     
-    // Switch to the root directory
-    fsDeviceSetRootLetter( EnvironmentGetHomeChar() );
-    fsWorkingDirectoryClear();
+    File index = fsFileOpen(part, fileAddress);
+    uint8_t programBuffer[programSize];
+    fsFileRead(part, index, programBuffer, programSize);
     
-    // Get directory address and number of files
-    uint32_t directoryAddress = fsDirectoryExists(binDirectoryPath, EnvironmentGetPathBinLength()-1);
-    uint32_t numberOfFiles = fsDirectoryGetNumberOfFiles( directoryAddress );
+    // Launch the emulator
+    EmulatorSetProgram( programBuffer, programSize );
+    EmulateX4( EVENT_NOMESSAGE );
     
-    if ((numberOfFiles == 0) | (directoryAddress == 0)) {
-        
-        fsDeviceSetRootLetter(currentDeviceLetter);
-        fsWorkingDirectorySetAddress(currentWorkingDirectoryAddress);
-        fsWorkingDirectorySetName(currentWorkingDirectoryAddress);
-        fsWorkingDirectorySetStack(currentWorkingDirectoryStack);
-        return 0;
-    }
-    
-    // Search for the file in question
-    for (uint32_t i=0; i < numberOfFiles; i++) {
-        
-        uint32_t fileAddress = fsDirectoryGetFile(directoryAddress, i);
-        
-        // Check execute attribute
-        struct FSAttribute attribute;
-        fsFileGetAttributes(fileAddress, &attribute);
-        
-        if (attribute.executable != 'x') 
-            continue;
-        
-        uint8_t filename[FILE_NAME_LENGTH];
-        fsFileGetName(fileAddress, filename);
-        
-        uint32_t paramBegin = StringFindChar(console_string, FILE_NAME_LENGTH, ' ') + 1;
-        
-        // Run the executable
-        if (StringCompare(filename, paramBegin, console_string, paramBegin) == 1) {
-            
-            ExecuteFile(fileAddress);
-            
-            fsDeviceSetRootLetter(currentDeviceLetter);
-            fsWorkingDirectorySetAddress(currentWorkingDirectoryAddress);
-            fsWorkingDirectorySetName(currentWorkingDirectoryAddress);
-            fsWorkingDirectorySetStack(currentWorkingDirectoryStack);
-            return 1;
-        }
-        
-    }
-    
-    // Reset previous device and directory
-    fsDeviceSetRootLetter(currentDeviceLetter);
-    fsWorkingDirectorySetAddress(currentWorkingDirectoryAddress);
-    fsWorkingDirectorySetName(currentWorkingDirectoryAddress);
-    fsWorkingDirectorySetStack(currentWorkingDirectoryStack);
-    */
-    return 0;
+    fsFileClose(index);
+    return 1;
 }
 

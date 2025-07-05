@@ -144,9 +144,12 @@ void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle);
 DirectoryHandle fsWorkingDirectoryGetCurrent(void);
 
 uint8_t fsWorkingDirectorySetParent(void);
-
 uint8_t fsWorkingDirectoryGetIndex(void);
 
+// Environment
+
+void fsEnvironmentSetHomeDevice(uint32_t deviceAddress);
+uint32_t fsEnvironmentGetHomeDevice(void);
 
 void fsParsePath(struct Partition part, uint8_t* path);
 

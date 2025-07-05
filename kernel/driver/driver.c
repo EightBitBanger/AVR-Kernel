@@ -3,12 +3,14 @@
 
 struct Node* DriverTableHead = NULL;
 
-int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength) {
-    uint32_t fileAddress = fsFileExists(filename, filenameLength);
+int8_t LoadLibrary(uint8_t* filename) {
+    struct Partition part = fsDeviceOpen(0x00000);
+    DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
     
+    uint32_t fileAddress = fsDirectoryFindByName(part, currentDirectory, filename);
     if (fileAddress == 0) 
         return -1;
-    struct Partition part = fsDeviceOpen(0x00000);
+    
     int32_t index = fsFileOpen(part, fileAddress);
     uint32_t fileSize = fsFileGetSize(part, fileAddress);
     
@@ -23,12 +25,11 @@ int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength) {
         return -2;
     }
     
-    // Check if a driver is already servicing the hardware device
-    // that this driver is targeting
+    // Check if a driver is already servicing the 
+    // hardware device this driver is targeting
     
     uint32_t numberOfDrivers = ListGetSize(DriverTableHead);
     for (uint8_t i=0; i < numberOfDrivers; i++) {
-        
         struct Driver* driverPtr = GetDriverByIndex(i);
         
         // Check driver name
@@ -114,7 +115,6 @@ int8_t LoadLibrary(uint8_t* filename, uint8_t filenameLength) {
         
         return 4;
     }
-    
     return 0;
 }
 

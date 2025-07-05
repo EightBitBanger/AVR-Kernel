@@ -48,6 +48,7 @@ void EmulatorSetProgram(uint8_t* buffer, uint32_t size) {
 
 
 void EmulatorSetParameters(uint8_t* parameters, uint32_t length) {
+    memset(param_string, ' ', 32);
     memcpy(param_string, parameters, length);
     param_length = length;
     return;
@@ -73,7 +74,7 @@ void EmulateX4(uint8_t messages) {
     __heap_begin__ = __virtual_address_begin__;
     __heap_end__   = __virtual_address_end__;
     
-    while(pc < MAX_PROGRAM_SIZE) {
+    while(pc < programSize) {
         
         uint8_t opCode = programBuffer[pc];
         uint8_t argA   = programBuffer[pc + 1];

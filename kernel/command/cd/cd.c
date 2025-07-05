@@ -3,29 +3,7 @@
 #include <kernel/kernel.h>
 
 #include <kernel/command/cd/cd.h>
-void SetPromptName(struct Partition part, uint8_t isRoot, DirectoryHandle targetDirectory) {
-    uint8_t filename[20];
-    for (uint8_t i=0; i < 20; i++) 
-        filename[i] = ' ';
-    filename[0] = 'x';
-    
-    if (isRoot == 0) {
-        filename[1] = '/';
-        fsFileGetName(part, targetDirectory, &filename[2]);
-    }
-    
-    uint8_t namelenth = 0;
-    for (uint8_t i=0; i < 20; i++) {
-        if (filename[i] != ' ') 
-            continue;
-        filename[i] = '>';
-        namelenth = i + 2; // For the end and the last char
-        break;
-    }
-    
-    ConsoleSetPrompt(filename, namelenth);
-    return;
-}
+void SetPromptPath(struct Partition part, uint8_t isRoot, DirectoryHandle targetDirectory);
 
 void functionCD(uint8_t* param, uint8_t param_length) {
     uint8_t deviceLetter = param[0];
@@ -35,26 +13,25 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     struct Partition part = fsDeviceOpen( fsDeviceGetCurrent() );
     DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
     
-    // Drop down the parent directory
+    // Drop down to the parent directory
     if ((param[0] == '.') & (param[1] == '.') & (param[2] == ' ')) {
         uint8_t isRoot = 0;
         if (fsWorkingDirectorySetParent() == 0) 
             isRoot = 1;
         DirectoryHandle targetDirectory = fsWorkingDirectoryGetCurrent();
-        SetPromptName(part, isRoot, targetDirectory);
+        SetPromptPath(part, isRoot, targetDirectory);
         return;
     }
     
     // Drop to the root directory
     if ((param[0] == '/' && param[1] == ' ')) {
-        uint8_t consolePrompt[] = "x>";
-        ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
-        
-        fsWorkingDirectorySetRoot( part, fsDeviceGetRootDirectory(part) );
+        DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
+        fsWorkingDirectorySetRoot( part, rootDirectory );
+        SetPromptPath(part, 1, rootDirectory);
         return;
     }
     
-    // Check device change
+    // Change the device
     if ((param[1] == ':' && param[2] == ' ')) {
         lowercase(&param[0]);
         if (!is_letter(&param[0])) 
@@ -67,6 +44,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
             ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
             return;
         }
+        SetPromptPath(part, 1, nullptr);
         // Set to device offset
         fsDeviceSetBase(PERIPHERAL_ADDRESS_BEGIN + (PERIPHERAL_STRIDE * (param[0] - 'a')));
         consolePrompt[0] = param[0];
@@ -86,7 +64,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     // Change the directory
     fsWorkingDirectoryChange(part, targetDirectory);
     
-    SetPromptName(part, 0, targetDirectory);
+    SetPromptPath(part, 0, targetDirectory);
     return;
 }
 
@@ -96,5 +74,32 @@ void registerCommandCD(void) {
     
     ConsoleRegisterCommand(cdCommandName, sizeof(cdCommandName), functionCD);
     
+    return;
+}
+
+
+void SetPromptPath(struct Partition part, uint8_t isRoot, DirectoryHandle targetDirectory) {
+    uint8_t filename[20];
+    for (uint8_t i=0; i < 20; i++) 
+        filename[i] = ' ';
+    uint32_t baseAddress = fsDeviceGetBase();
+    if (baseAddress < PERIPHERAL_ADDRESS_BEGIN) {
+        filename[0] = 'x';
+    } else {
+        filename[0] = ((baseAddress - PERIPHERAL_ADDRESS_BEGIN) / 0x10000) + 'a';
+    }
+    if (isRoot == 0) {
+        filename[1] = '/';
+        fsFileGetName(part, targetDirectory, &filename[2]);
+    }
+    uint8_t namelenth = 0;
+    for (uint8_t i=0; i < 20; i++) {
+        if (filename[i] != ' ') 
+            continue;
+        filename[i] = '>';
+        namelenth = i + 2; // For the end and the last char
+        break;
+    }
+    ConsoleSetPrompt(filename, namelenth);
     return;
 }

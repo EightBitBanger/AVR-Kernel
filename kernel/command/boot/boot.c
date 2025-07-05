@@ -19,18 +19,18 @@ void functionBoot(uint8_t* param, uint8_t param_length) {
         print(msgFormatting, sizeof(msgFormatting));
         printLn();
         
-        uint32_t deviceCapacity = fsDeviceGetCapacity();
+        fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
         
-        if (deviceCapacity < FORMAT_CAPACITY_8K) 
-            deviceCapacity = FORMAT_CAPACITY_8K;
+        struct Partition slave = fsDeviceOpen(0x00000);
+        fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"ssd");
         
-        if (deviceCapacity > FORMAT_CAPACITY_32K) 
-            deviceCapacity = FORMAT_CAPACITY_32K;
+        //DirectoryHandle slaveRootHandle = fsDeviceGetRootDirectory(slave);
         
-        fsFormat(0, deviceCapacity);
+        fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
+        fsDeviceSetCurrent(0x00000);
         
-        fsWorkingDirectoryClear();
     }
+    
     
     if ((param[0] == '-') & 
         (param[1] == 'b') & 
@@ -38,23 +38,26 @@ void functionBoot(uint8_t* param, uint8_t param_length) {
         (param[3] == 'n')) {
         
         // Create 'bin' directory on the root
-        uint8_t msgCreatingBins[] = "Creating binaries";
+        uint8_t msgCreatingBins[] = "Creating executables";
         print(msgCreatingBins, sizeof(msgCreatingBins));
         printLn();
         
+        struct Partition part = fsDeviceOpen(0x00000);
+        DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
+        
         uint8_t dirNameBin[] = "bin";
-        uint32_t dirBinAddress = fsDirectoryExists(dirNameBin, sizeof(dirNameBin)-1);
-        if (dirBinAddress == 0) {
-            dirBinAddress = fsDirectoryCreate(dirNameBin, sizeof(dirNameBin));
-            if (dirBinAddress == 0) 
-                return;
+        DirectoryHandle dirBinHandle = fsDirectoryFindByName(part, rootDirectory, dirNameBin);
+        if (dirBinHandle == 0) {
+            dirBinHandle = fsDirectoryCreate(part, dirNameBin);
+            fsDirectoryAddFile(part, rootDirectory, dirBinHandle);
         }
         
         // Drop the binary files
-        fsWorkingDirectoryChange(dirNameBin, sizeof(dirNameBin));
+        fsWorkingDirectoryChange(part, dirBinHandle);
         DropFileSystemFunc();
-        fsWorkingDirectoryClear();
         
+        fsWorkingDirectorySetParent();
+        return;
     }
     
     if ((param[0] == '-') & 
@@ -63,20 +66,26 @@ void functionBoot(uint8_t* param, uint8_t param_length) {
         (param[3] == 's')) {
         
         // Create 'sys' directory on the root
-        uint8_t msgCreatingDrivers[] = "Creating drivers";
-        print(msgCreatingDrivers, sizeof(msgCreatingDrivers));
+        uint8_t msgCreatingBins[] = "Creating drivers";
+        print(msgCreatingBins, sizeof(msgCreatingBins));
         printLn();
         
-        uint8_t dirNameSys[] = "sys";
-        uint32_t dirSysAddress = fsDirectoryExists(dirNameSys, sizeof(dirNameSys)-1);
-        if (dirSysAddress == 0) 
-            dirSysAddress = fsDirectoryCreate(dirNameSys, sizeof(dirNameSys));
+        struct Partition part = fsDeviceOpen(0x00000);
+        DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
         
-        fsWorkingDirectoryChange(dirNameSys, sizeof(dirNameSys));
+        uint8_t dirNameBin[] = "sys";
+        DirectoryHandle dirBinHandle = fsDirectoryFindByName(part, rootDirectory, dirNameBin);
+        if (dirBinHandle == 0) {
+            dirBinHandle = fsDirectoryCreate(part, dirNameBin);
+            fsDirectoryAddFile(part, rootDirectory, dirBinHandle);
+        }
+        
+        // Drop the binary files
+        fsWorkingDirectoryChange(part, dirBinHandle);
         DropDeviceDrivers();
         
-        fsWorkingDirectoryClear();
-        
+        fsWorkingDirectorySetParent();
+        return;
     }
     
     return;
@@ -93,36 +102,47 @@ void registerCommandBoot(void) {
 
 
 
-
-
-void DropFileSystemFunc(void) {
+void dropFile(uint8_t* filename, uint8_t* destName, uint8_t* data, uint32_t size) {
+    struct Partition part = fsDeviceOpen(0x00000);
+    DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
+    DirectoryHandle dirBinHandle = fsDirectoryFindByName(part, rootDirectory, destName);
     
-    {
-    uint8_t filename[]  = "net";
-    uint8_t program[] = {
-    0x89, 0x00, 0x00, 0x89, 0x01, 0x0A, 0xCD, 0x14, 0x38, 0x02, 0x01, 0x74, 0x2B, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 0x74, 0x38, 0x00, 0x00, 0x00, 
-    0x83, 0x06, 0x45, 0x00, 0x00, 0x00, 0x89, 0x04, 0x0C, 0x89, 0x00, 0x01, 0x89, 0x01, 0x0C, 0xCD, 0x14, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 
-    0x51, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 0x62, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x74, 0x65, 0x73, 
-    0x74, 0x20, 0x70, 0x61, 0x63, 0x6B, 0x65, 0x74, 0x00, 0x49, 0x6E, 0x69, 0x74, 0x69, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x65, 0x72, 0x72, 0x6F, 
-    0x72, 0x00, 0x4E, 0x65, 0x74, 0x77, 0x6F, 0x72, 0x6B, 0x20, 0x64, 0x72, 0x69, 0x65, 0x72, 0x20, 0x65, 0x72, 0x72, 0x6F, 0x72, 0x00, 
-    };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
+    uint32_t fileAddress = fsDirectoryFindByName(part, dirBinHandle, filename);
     if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
+        fileAddress = fsFileCreate(part, filename, size);
+        fsDirectoryAddFile(part, dirBinHandle, fileAddress);
         
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
+        uint8_t attributes[] = {' ', 'r', 'w', ' '};
+        fsFileSetAttributes(part, fileAddress, attributes);
         
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
+        int32_t index = fsFileOpen(part, fileAddress);
+        fsFileWrite(part, index, data, size);
         fsFileClose(index);
     }
-    }
-    
+}
+
+void DropFileSystemFunc(void) {
+    uint8_t dirNameBin[] = "bin";
     
     {
-    uint8_t filename[]  = "ld";
+    uint8_t program[] = {
+        0x89, 0x01, 0x09, 0x83, 0x06, 0x0D, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x20, 0x30, 0x2E, 0x31, 0x2E, 0x30, 0x00 
+    };
+    dropFile((uint8_t*)"ver", (uint8_t*)dirNameBin, program, sizeof(program));
+    }
+    
+    {
+    uint8_t program[] = {
+        0x89, 0x00, 0x00, 0x89, 0x01, 0x0A, 0xCD, 0x14, 0x38, 0x02, 0x01, 0x74, 0x2B, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 0x74, 0x38, 0x00, 0x00, 0x00, 
+        0x83, 0x06, 0x45, 0x00, 0x00, 0x00, 0x89, 0x04, 0x0C, 0x89, 0x00, 0x01, 0x89, 0x01, 0x0C, 0xCD, 0x14, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 
+        0x51, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 0x62, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x74, 0x65, 0x73, 
+        0x74, 0x20, 0x70, 0x61, 0x63, 0x6B, 0x65, 0x74, 0x00, 0x49, 0x6E, 0x69, 0x74, 0x69, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x65, 0x72, 0x72, 0x6F, 
+        0x72, 0x00, 0x4E, 0x65, 0x74, 0x77, 0x6F, 0x72, 0x6B, 0x20, 0x64, 0x72, 0x69, 0x65, 0x72, 0x20, 0x65, 0x72, 0x72, 0x6F, 0x72, 0x00, 
+    };
+    dropFile((uint8_t*)"net", (uint8_t*)dirNameBin, program, sizeof(program));
+    }
+    
+    {
     uint8_t program[] = {
         0x89, 0x01, 0x0A, 0xCD, 0x47, 0x38, 0x02, 0x01, 0x74, 0x37, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 0x74, 0x44, 0x00, 0x00, 0x00, 0x38, 0x02, 0x03, 
         0x74, 0x2A, 0x00, 0x00, 0x00, 0x89, 0x01, 0x09, 0x83, 0x06, 0x51, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 0x58, 
@@ -131,112 +151,24 @@ void DropFileSystemFunc(void) {
         0x6C, 0x6F, 0x61, 0x64, 0x65, 0x64, 0x00, 0x46, 0x69, 0x6C, 0x65, 0x20, 0x64, 0x6F, 0x65, 0x73, 0x20, 0x6E, 0x6F, 0x74, 0x20, 0x65, 0x78, 0x69, 
         0x73, 0x74, 0x00, 0x46, 0x69, 0x6C, 0x65, 0x20, 0x63, 0x6F, 0x72, 0x72, 0x75, 0x70, 0x74, 0x00, 0xCD, 0x20
     };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
+    dropFile((uint8_t*)"ld", (uint8_t*)dirNameBin, program, sizeof(program));
     }
-    }
-    
-    
     
     {
-    uint8_t filename[]  = "type";
     uint8_t program[] = {
         0x89, 0x01, 0x4C, 0xCD, 0x13, 0xCD, 0x20, 
     };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
+    dropFile((uint8_t*)"type", (uint8_t*)dirNameBin, program, sizeof(program));
     }
-    }
-    
-    
     
     {
-    uint8_t filename[]  = "ver";
-    uint8_t program[] = {
-        0x89, 0x01, 0x09, 0x83, 0x06, 0x0D, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x20, 0x30, 0x2E, 0x31, 0x2E, 0x30, 0x00 
-    };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
-    }
-    }
-    
-    
-    
-    {
-    uint8_t filename[]  = "cls";
     uint8_t program[] = {
         0x89, 0x01, 0x03, 0xCD, 0x10, 0xCD, 0x20, 
     };
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
+    dropFile((uint8_t*)"cls", (uint8_t*)dirNameBin, program, sizeof(program));
     }
-    }
-    
-    
     
     {
-    uint8_t filename[]  = "ld";
-    uint8_t program[] = {
-        0x89, 0x01, 0x0A, 0xCD, 0x47, 0x38, 0x02, 0x01, 0x74, 0x2F, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 0x74, 0x3C, 0x00, 0x00, 0x00, 0x38, 0x02, 0x03, 
-        0x74, 0x22, 0x00, 0x00, 0x00, 0xFE, 0x79, 0x00, 0x00, 0x00, 0x89, 0x01, 0x09, 0x83, 0x06, 0x49, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x89, 
-        0x01, 0x09, 0x83, 0x06, 0x58, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 0x6C, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 
-        0x20, 0x41, 0x6C, 0x72, 0x65, 0x61, 0x64, 0x79, 0x20, 0x6C, 0x6F, 0x61, 0x64, 0x65, 0x64, 0x00, 0x46, 0x69, 0x6C, 0x65, 0x20, 0x64, 0x6F, 0x65, 
-        0x73, 0x20, 0x6E, 0x6F, 0x74, 0x20, 0x65, 0x78, 0x69, 0x73, 0x74, 0x00, 0x46, 0x69, 0x6C, 0x65, 0x20, 0x63, 0x6F, 0x72, 0x72, 0x75, 0x70, 0x74, 
-        0x00, 0xCD, 0x20, 
-    };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
-    }
-    }
-    
-    
-    
-    {
-    uint8_t filename[]  = "mk";
     uint8_t program[] = {
         0x89, 0x01, 0x3C, 0x89, 0x04, 0x00, 0x89, 0x05, 0x14, 0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x2B, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x47, 
         0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 0x74, 0x3A, 0x00, 0x00, 0x00, 0x38, 0x02, 0x03, 0x74, 0x2D, 0x00, 0x00, 0x00, 0xCD, 0x20, 0x89, 0x01, 0x09, 
@@ -245,24 +177,10 @@ void DropFileSystemFunc(void) {
         0x6E, 0x67, 0x20, 0x66, 0x69, 0x6C, 0x65, 0x00, 0x46, 0x69, 0x6C, 0x65, 0x20, 0x61, 0x6C, 0x72, 0x65, 0x61, 0x64, 0x79, 0x20, 0x65, 0x78, 0x69, 
         0x73, 0x74, 0x73, 0x00, 0x42, 0x61, 0x64, 0x20, 0x66, 0x69, 0x6C, 0x65, 0x6E, 0x61, 0x6D, 0x65, 0x00, 
     };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
+    dropFile((uint8_t*)"mk", (uint8_t*)dirNameBin, program, sizeof(program));
     }
-    }
-    
-    
     
     {
-    uint8_t filename[]  = "mkdir";
     uint8_t program[] = {
         0x89, 0x01, 0x39, 0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x25, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x41, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 
         0x74, 0x34, 0x00, 0x00, 0x00, 0x38, 0x02, 0x03, 0x74, 0x27, 0x00, 0x00, 0x00, 0xCD, 0x20, 0x89, 0x01, 0x09, 0x83, 0x06, 0x4E, 0x00, 0x00, 0x00, 
@@ -271,24 +189,10 @@ void DropFileSystemFunc(void) {
         0x00, 0x44, 0x69, 0x72, 0x20, 0x61, 0x6C, 0x72, 0x65, 0x61, 0x64, 0x79, 0x20, 0x65, 0x78, 0x69, 0x73, 0x74, 0x73, 0x00, 0x42, 0x61, 0x64, 0x20, 
         0x64, 0x69, 0x72, 0x20, 0x6E, 0x61, 0x6D, 0x65, 0x00, 
     };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
+    dropFile((uint8_t*)"mkdir", (uint8_t*)dirNameBin, program, sizeof(program));
     }
-    }
-    
-    
     
     {
-    uint8_t filename[]  = "rm";
     uint8_t program[] = {
         0x89, 0x01, 0x41, 0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x2F, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x3E, 0x00, 0x00, 0x00, 0x89, 0x01, 0x3A, 
         0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x2F, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x3E, 0x00, 0x00, 0x00, 0xFE, 0x31, 0x00, 0x00, 0x00, 0xCD, 
@@ -297,18 +201,7 @@ void DropFileSystemFunc(void) {
         0x72, 0x20, 0x61, 0x6C, 0x72, 0x65, 0x61, 0x64, 0x79, 0x20, 0x65, 0x78, 0x69, 0x73, 0x74, 0x73, 0x00, 0x42, 0x61, 0x64, 0x20, 0x64, 0x69, 0x72, 
         0x20, 0x6E, 0x61, 0x6D, 0x65, 0x00, 
     };
-    
-    uint32_t fileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (fileAddress == 0) {
-        fileAddress = fsFileCreate(filename, sizeof(filename), sizeof(program));
-        
-        struct FSAttribute attrib = {'x', 'r', 'w', ' '};
-        fsFileSetAttributes(fileAddress, &attrib);
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileWrite(index, program, sizeof(program));
-        fsFileClose(index);
-    }
+    dropFile((uint8_t*)"rm", (uint8_t*)dirNameBin, program, sizeof(program));
     }
     
     return;
@@ -317,42 +210,33 @@ void DropFileSystemFunc(void) {
 
 
 void DropDeviceDrivers(void) {
+    uint8_t dirNameSys[] = "sys";
     
     // NIC - Network interface controller driver
     {
-    uint8_t filename[]  = "nic";
-    uint32_t nicFileAddress = fsFileExists(filename, sizeof(filename)-1);
-    if (nicFileAddress == 0) {
-        nicFileAddress = fsFileCreate(filename, sizeof(filename), 30);
-        
-        int32_t index = fsFileOpen(nicFileAddress);
-        uint8_t bufferDrvNic[128] = "  network   $irwtxxxx";
-        
-        bufferDrvNic[0] = 'K';      // Marker bytes KD (kernel driver)
-        bufferDrvNic[1] = 'D';
-        
-        // Next 10 bytes reserved for driver name
-        
-        bufferDrvNic[12] = '$';   // Marker byte '$'
-        bufferDrvNic[13] = 0x14;  // Device ID
-        bufferDrvNic[14] = 10;    // Bus read wait-state
-        bufferDrvNic[15] = 10;    // Bus write wait-state
-        bufferDrvNic[16] = 2;     // Bus interface type
-        
-        bufferDrvNic[17] = 0x00;  // Zero the hardware address
-        bufferDrvNic[18] = 0x00;  
-        bufferDrvNic[19] = 0x00;  
-        bufferDrvNic[20] = 0x00;  
-        
-        // Functions
-        
-        
-        // Finish the function
-        fsFileWrite(index, bufferDrvNic, 64);
-        fsFileClose(index);
-    }
-    }
     
+    uint8_t program[128];
+    
+    program[0]  = 'K'; // Marker bytes KD (kernel driver)
+    program[1]  = 'D';
+    
+    uint8_t driverName[10] = "network";
+    for (uint8_t i=0; i < 10; i++) 
+        program[i + 2] = driverName[i];
+    
+    program[12] = '$';   // Marker byte '$'
+    program[13] = 0x14;  // Device ID
+    program[14] = 10;    // Bus read wait-state
+    program[15] = 10;    // Bus write wait-state
+    program[16] = 2;     // Bus interface type
+    
+    program[17] = 0x00;  // Zero the hardware address to indicate that 
+    program[18] = 0x00;  // the kernel should identify the address
+    program[19] = 0x00;  
+    program[20] = 0x00;  
+    
+    dropFile((uint8_t*)"nic", (uint8_t*)dirNameSys, program, sizeof(program));
+    }
     
     return;
 }

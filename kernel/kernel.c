@@ -13,6 +13,7 @@ uint32_t dirProcAddress;
 
 struct VirtualFileSystemInterface vfs;
 
+
 void kInit(void) {
     kPrintVersion();
     
@@ -20,33 +21,6 @@ void kInit(void) {
     uint8_t prompt[] = "x>";
     
     ConsoleSetPrompt(prompt, sizeof(prompt));
-    
-    
-    
-    //
-    // Format the device on slot 3
-    /*
-    {
-    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
-    
-    struct Partition slave = fsDeviceOpen(0x60000);
-    fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"master");
-    
-    DirectoryHandle slaveRootHandle = fsDeviceGetRootDirectory(slave);
-    
-    FileHandle fileHandle = fsFileCreate(slave, (uint8_t*)"wtf", 20);
-    fsDirectoryAddFile(slave, slaveRootHandle, fileHandle);
-    
-    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
-    fsDeviceSetCurrent(0x00000);
-    
-    uint8_t msgStr[] = "Complete";
-    print(msgStr, sizeof(msgStr));
-    printLn();
-    
-    while(1) {}
-    }
-    */
     
     // Initiate memory storage
     fsDeviceSetBase(0x00000);
@@ -126,163 +100,50 @@ void kInit(void) {
     
     // Find an active storage device on the bus
     fsDeviceSetCurrent( 0x00000 );
+    struct Partition devicePart;
+    devicePart.block_address=0;
     
     for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         // Get the root directory from the storage device
-        fsDeviceSetBase( PERIPHERAL_ADDRESS_BEGIN + (index * PERIPHERAL_STRIDE) );
+        uint32_t deviceAddress = PERIPHERAL_ADDRESS_BEGIN + (index * PERIPHERAL_STRIDE);
+        fsDeviceSetBase( deviceAddress );
         
-        struct Partition devicePart = fsDeviceOpen( 0x00000 );
+        devicePart = fsDeviceOpen( 0x00000 );
         if (devicePart.block_size == 0) 
             continue;
         
-        // Set the device
-        struct Partition ssdPart = fsDeviceOpen(0x00000);
-        fsWorkingDirectorySetRoot( ssdPart, fsDeviceGetRootDirectory(ssdPart));
+        // Set the root
+        fsWorkingDirectorySetRoot( devicePart, fsDeviceGetRootDirectory(devicePart));
         
         uint8_t consolePrompt[] = "x>";
         consolePrompt[0] = index + 'a';
         ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
+        fsEnvironmentSetHomeDevice(deviceAddress);
         break;
     }
     
-    
+    // If no devices where found use the memory device
+    if (devicePart.block_size == 0) {
+        fsDeviceSetBase(0x00000);
+        
+        uint8_t consolePrompt[] = "x>";
+        ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
+    }
     
     //
     // Load drivers
     
 #ifndef _BOOT_SAFEMODE__
-    struct Partition devicePart = fsDeviceOpen(0x00000);
-    DirectoryHandle rootDeviceDir = fsDeviceGetRootDirectory(devicePart);
-    
-    fsDeviceSetType(FS_DEVICE_TYPE_EEPROM);
-    
-    uint8_t sysDirectoryName[] = "sys";
-    DirectoryHandle sysDirectoryHandle = fsDirectoryCreate(devicePart, sysDirectoryName);
-    fsDirectoryAddFile(devicePart, rootDeviceDir, sysDirectoryHandle);
-    
-    fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
+    devicePart = fsDeviceOpen(0x00000);
+    //DirectoryHandle rootDeviceDir = fsDeviceGetRootDirectory(devicePart);
     
     // Locate drivers directory
     uint8_t driversDirName[] = "sys";
     uint32_t directoryAddress = fsDirectoryFindByName(devicePart, rootDirectory, driversDirName);
     
-    // Directory does not exist
-    if (directoryAddress == 0) {
-        uint8_t msgDirectoryNotFound[] = "Dir not found";
-        print(msgDirectoryNotFound, sizeof(msgDirectoryNotFound));
-        printLn();
-        return;
-    }
-    
-    //fsWorkingDirectoryChange(devicePart, driversDirName, sizeof(driversDirName));
-    
-    /*
-    // Locate drivers directory
-    uint8_t driversDirName[] = "sys";
-    uint32_t directoryAddress = fsDirectoryFindByName(devicePart, driversDirName);
-    fsDeviceGetRootDirectory(devicePart);
-    
-    // Directory does not exist
     if (directoryAddress == 0) 
         return;
-    struct Partition devicePart = fsDeviceOpen(0x00000);
-    fsWorkingDirectoryChange(devicePart, driversDirName, sizeof(driversDirName));
     
-    uint32_t numberOfFiles = fsWorkingDirectoryGetFileCount();
-    
-    for (uint32_t f=0; f < numberOfFiles; f++) {
-        
-        uint32_t fileAddress = fsWorkingDirectoryFind(f);
-        
-        if (fileAddress == 0) 
-            continue;
-        
-        uint32_t fileSize = fsFileGetSize(fileAddress);
-        uint8_t driverBuffer[fileSize];
-        
-        int32_t index = fsFileOpen(fileAddress);
-        fsFileRead(index, driverBuffer, fileSize);
-        fsFileClose(index);
-        
-        uint8_t driverFilename[FILE_NAME_LENGTH];
-        uint8_t driverFilenameLength=0;
-        
-        for (uint32_t n=0; n < FILE_NAME_LENGTH; n++) {
-            fs_read_byte(fileAddress + FILE_OFFSET_NAME + n, &driverFilename[n]);
-            if (driverFilename[n] == ' ') {
-                driverFilenameLength = n;
-                break;
-            }
-            
-        }
-        
-        uint32_t checkFileAddress = fsFileExists(driverFilename, driverFilenameLength);
-        
-        // Check if the device does not exist on the bus
-        // The driver can be skipped
-        
-        int32_t driverFileIndex = fsFileOpen(fileAddress);
-        uint32_t driverFileSz = fsFileGetSize(fileAddress);
-        
-        uint8_t fileBuffer[driverFileSz];
-        fsFileRead(driverFileIndex, fileBuffer, driverFileSz);
-        fsFileClose(driverFileIndex);
-        
-        uint8_t numberOfDevices = GetNumberOfDevices();
-        
-        // Check if the device exists
-        uint8_t found = 0;
-        for (uint8_t d=0; d < numberOfDevices; d++) {
-            struct Device* devicePtr = GetDeviceByIndex(d);
-            
-            if (StringCompare(devicePtr->device_name, DEVICE_NAME_LEN, &fileBuffer[2], DEVICE_NAME_LEN) == 1) {
-                found = 1;
-                break;
-            }
-            continue;
-        }
-        if (found == 0) 
-            continue;
-        
-        //
-        // Load the driver
-        
-        int8_t libState = -32;
-        if (checkFileAddress != 0) 
-            libState = LoadLibrary(driverFilename, driverFilenameLength);
-        
-#ifdef _BOOT_DETAILS__
-        
-        // Driver is linked to a device on the bus
-        if (libState == 4) {
-            // Print the characters of the driver name
-            for (uint32_t n=0; n < FILE_NAME_LENGTH; n++) {
-                printChar( driverBuffer[n + 2] );
-                if (driverBuffer[n + 2] == ' ') 
-                    break;
-            }
-            
-            printLn();
-            continue;
-        }
-        
-        // Driver was not loaded correctly or is corrupted
-        if ((libState < 0) & (libState != -32)) {
-            // Driver failed to load
-            uint8_t msgFailedToLoad[] = "... failed";
-            print(msgFailedToLoad, sizeof(msgFailedToLoad));
-            
-            printLn();
-        }
-        
-#endif
-        
-        continue;
-    }
-    
-    
-    fsWorkingDirectoryClear();
-    */
 #endif
     return;
 }

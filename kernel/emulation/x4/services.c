@@ -34,7 +34,7 @@ void ISC_OperatingSystem(void) {
     // Dynamically load a driver onto the driver table
     if (reg[rAH] == 0x0A) {
         
-        int8_t status = LoadLibrary(param_string, param_length);
+        int8_t status = LoadLibrary(param_string);
         
         if (status == -1) {reg[rBL] = 1; return;}   // File does not exist
         if (status == -2) {reg[rBL] = 2; return;}   // Corrupt driver
