@@ -2,7 +2,6 @@
 #define __STRING_ALLOCATOR_
 
 class string {
-    
 public:
     
     string();

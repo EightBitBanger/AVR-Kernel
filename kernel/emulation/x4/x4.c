@@ -43,7 +43,6 @@ void ISC_OperatingSystem(void);
 void EmulatorSetProgram(uint8_t* buffer, uint32_t size) {
     memcpy(programBuffer, buffer, size);
     programSize = size;
-    return;
 }
 
 
@@ -51,7 +50,6 @@ void EmulatorSetParameters(uint8_t* parameters, uint32_t length) {
     memset(param_string, ' ', 32);
     memcpy(param_string, parameters, length);
     param_length = length;
-    return;
 }
 
 
@@ -382,8 +380,6 @@ void EmulateX4(uint8_t messages) {
     
     if (flag_consoleDirty == 1) 
         printLn();
-    
-    return;
 }
 
 

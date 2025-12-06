@@ -4,7 +4,7 @@
 #include <kernel/mutex.h>
 
 uint8_t MutexLock(struct Mutex* mux) {
-    if (mux->lock == 0) {// Lock it
+    if (mux->lock == 0) {
         mux->lock = 1;
         return 0;
     }
@@ -13,5 +13,4 @@ uint8_t MutexLock(struct Mutex* mux) {
 
 void MutexUnlock(struct Mutex* mux) {
     mux->lock = 0;
-    return;
 }

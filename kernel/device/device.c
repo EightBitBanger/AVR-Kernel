@@ -17,10 +17,7 @@ struct BusDescriptor {
 
 struct Bus deviceBus;
 
-
-
 void InitiateDeviceTable(void) {
-    
     deviceBus.read_waitstate  = 20;
     deviceBus.write_waitstate = 20;
     
@@ -57,7 +54,6 @@ void InitiateDeviceTable(void) {
         // Blank the name once a space character is found
         uint8_t checkFinished = 0;
         for (uint8_t i=0; i < DEVICE_NAME_LEN; i++) {
-            
             if (newDevicePtr->device_name[i] == ' ') 
                 checkFinished = 1;
             
@@ -95,7 +91,7 @@ void InitiateDeviceTable(void) {
             if (device->device_id != devicePtr->device_id || 
                 device->bus.bus_type != devicePtr->bus.bus_type) 
                 continue;
-            if (StringCompare(device->device_name, DEVICE_NAME_LEN, devicePtr->device_name, DEVICE_NAME_LEN) == 0) 
+            if (StringCompare(device->device_name, DEVICE_NAME_LEN, devicePtr->device_name, DEVICE_NAME_LEN) > 0) 
                 continue;
             
             // Link the hardware addresses
@@ -109,9 +105,32 @@ void InitiateDeviceTable(void) {
         }
         
     }
-    
-    return;
 }
+
+
+uint32_t GetHardwareDeviceByName(uint8_t* name, uint8_t nameLength) {
+    struct Bus bus;
+    bus.read_waitstate  = 20;
+    bus.write_waitstate = 20;
+    
+    for (uint16_t d=0; d < NUMBER_OF_PERIPHERALS; d++) {
+        // Allow time between device initiation
+        _delay_us(100);
+        
+        // Calculate device address offset
+        uint32_t hardware_address = PERIPHERAL_ADDRESS_BEGIN + (PERIPHERAL_STRIDE * d);
+        
+        // Get device name
+        uint8_t deviceName[DEVICE_NAME_LEN];
+        for (uint8_t i=0; i < DEVICE_NAME_LEN; i++) 
+            bus_read_byte(&bus, hardware_address + i + 1, &deviceName[i]);
+        
+        if (StringCompare(deviceName, nameLength, name, nameLength) == 0) 
+            return hardware_address;
+        
+    }
+    return 0;
+};
 
 
 struct Device* GetDeviceByIndex(uint8_t index) {
@@ -121,9 +140,22 @@ struct Device* GetDeviceByIndex(uint8_t index) {
     return (struct Device*)node->data;
 }
 
+struct Device* GetDeviceByName(uint8_t* name, uint8_t nameLength) {
+    unsigned int listSize = ListGetSize(DeviceTableHead);
+    for (unsigned int i=0; i < listSize; i++) {
+        struct Node* node = ListGetNode(DeviceTableHead, i);
+        if (!node) 
+            return NULL;
+        struct Device* devicePtr = (struct Device*)node->data;
+        if (StringCompare(devicePtr->device_name, nameLength, name, nameLength) == 0) {
+            return devicePtr;
+        }
+        
+    }
+    return NULL;
+};
 
 uint8_t GetNumberOfDevices(void) {
-    
     return ListGetSize(DeviceTableHead);
 }
 
@@ -133,6 +165,5 @@ void DeviceBusyWait(struct Device* devicePtr, uint8_t deviceID) {
     while (checkByte != deviceID) {
         bus_read_byte(&deviceBus, devicePtr->hardware_address, &checkByte);
     }
-    return;
 }
 

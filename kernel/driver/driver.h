@@ -5,11 +5,11 @@
 
 #include <kernel/bus/bus.h>
 
+#include <kernel/fs/fs.h>
 #include <kernel/list.h>
 #include <kernel/device/device.h>
 
 struct Driver {
-    
     /// Device associated with this driver
     struct Device device;
     
@@ -19,11 +19,9 @@ struct Driver {
     /// Low level IO interface
     void (*read)(uint32_t address, uint8_t* buffer);
     void (*write)(uint32_t address, uint8_t buffer);
-    
 };
 
-
-int8_t LoadLibrary(uint8_t* filename);
+int8_t LoadLibrary(struct Partition part, DirectoryHandle directoryHandle, uint8_t* filename);
 
 struct Driver* GetDriverByName(uint8_t* name, uint8_t nameLength);
 struct Driver* GetDriverByIndex(uint8_t index);

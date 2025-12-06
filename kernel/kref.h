@@ -20,5 +20,4 @@ uint8_t kRefDec(kRef* rc);
 // Check if the reference counter is zero
 uint8_t kRefCheck(kRef* rc);
 
-
 #endif

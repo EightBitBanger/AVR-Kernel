@@ -12,7 +12,6 @@ uint8_t serverAddress[2] = {240, 80};
 
 
 void InitiateServer(void) {
-    
     ConsoleSetBlinkRate(0);
     ConsoleSetCursor(0, 0);
     
@@ -69,9 +68,6 @@ void InitiateServer(void) {
     packetRouterConnectionRequest.data[1] = 0x00;
     
     packetRouterConnectionRequest.stop    = NETWORK_PACKET_STOP_BYTE;
-    
-    
-    
     
     
     struct NetworkPacket receive;
@@ -556,18 +552,6 @@ void InitiateServer(void) {
         
     }
     
-    
-    
-    
-    
-    
     */
     return;
 }
-
-
-
-
-
-
-

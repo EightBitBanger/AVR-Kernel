@@ -1,9 +1,6 @@
 #include <avr/io.h>
-
 #include <kernel/delay.h>
-
 #include <kernel/command/cli.h>
-
 #include <drivers/keyboard/ps2/main.h>
 
 extern uint32_t fs_working_directory_address;
@@ -47,7 +44,6 @@ struct ConsoleCommand CommandRegistry[CONSOLE_FUNCTION_TABLE_SIZE];
 
 
 uint8_t ConsoleRegisterCommand(uint8_t* name, uint8_t nameLength, void(*functionPtr)(uint8_t* string, uint8_t length)) {
-    
     uint8_t index = 0;
     for (uint8_t i=0; i < CONSOLE_FUNCTION_TABLE_SIZE; i++) {
         
@@ -73,7 +69,6 @@ uint8_t ConsoleRegisterCommand(uint8_t* name, uint8_t nameLength, void(*function
 }
 
 void cliInit(void) {
-    
     uint8_t nameKeyboard[] = "PS2";
 	keyboadDevice = (struct Driver*)GetDriverByName( nameKeyboard, sizeof(nameKeyboard) );
 	
@@ -110,12 +105,9 @@ void cliInit(void) {
     displayDevice->write(4, '_'); // Cursor character
     
     ConsoleSetPrompt( promptDeviceString, sizeof(promptDeviceString) );
-	
-	return;
 }
 
 uint8_t ConsoleGetRawChar(void) {
-    
     uint8_t scanCodeLow  = 0;
     uint8_t scanCodeHigh = 0;
     
@@ -165,15 +157,11 @@ uint8_t ConsoleGetLastChar(void) {
 }
 
 void ConsoleClearKeyboardString(void) {
-    
     for (uint8_t i=0; i < CONSOLE_STRING_LENGTH; i++) 
         console_string[i] = ' ';
-    
-    return;
 }
 
 void ConsolePrintKeyboardString(void) {
-    
     ConsoleSetCursorPosition(console_prompt_length-1);
     
     for (uint8_t i=0; i < console_string_length; i++) 
@@ -190,8 +178,7 @@ void ConsolePrintKeyboardString(void) {
         ConsoleSetCursorPosition(console_position);
         
     }
-    
-    return;
+
 }
 
 uint8_t ConsoleWait(void) {
@@ -245,8 +232,6 @@ void ConsoleSetBlinkRate(uint8_t rate) {
     
     __glBusyWait();
     displayDevice->write( 3, rate);
-    
-    return;
 }
 
 void ConsoleSetCursor(uint8_t line, uint8_t position) {
@@ -258,8 +243,6 @@ void ConsoleSetCursor(uint8_t line, uint8_t position) {
     __glBusyWait();
     displayDevice->write( 1, console_line );
     displayDevice->write( 2, console_position );
-    
-    return;
 }
 
 void ConsoleSetCursorPosition(uint8_t position) {
@@ -268,19 +251,16 @@ void ConsoleSetCursorPosition(uint8_t position) {
     
     __glBusyWait();
     displayDevice->write( 2, console_position );
-    return;
 }
 
 void ConsoleCursorEnable(void) {
     __glBusyWait();
     displayDevice->write( 3, cursor_blink_rate);
-    return;
 }
 
 void ConsoleCursorDisable(void) {
     __glBusyWait();
     displayDevice->write( 3, 0);
-    return;
 }
 
 void ConsoleSetPrompt(uint8_t* prompt, uint8_t length) {
@@ -293,7 +273,6 @@ void ConsoleSetPrompt(uint8_t* prompt, uint8_t length) {
     }
     
     console_prompt_length = length;
-    return;
 }
 
 void ConsoleClearScreen(uint8_t clearToCharacter) {
@@ -309,8 +288,8 @@ void ConsoleClearScreen(uint8_t clearToCharacter) {
     }
     
     swapBuffers();
-    return;
 }
+
 
 uint8_t ConsoleGetCursorPosition(void) {
     return console_position;
@@ -322,12 +301,10 @@ uint8_t ConsoleGetCursorLine(void) {
 
 void ConsoleSetDisplayWidth(uint16_t width) {
     console_width = width;
-    return;
 }
 
 void ConsoleSetDisplayHeight(uint16_t height) {
     console_height = height;
-    return;
 }
 
 
@@ -338,4 +315,3 @@ uint16_t ConsoleGetDisplayWidth(void) {
 uint16_t ConsoleGetDisplayHeight(void) {
     return console_height;
 }
-

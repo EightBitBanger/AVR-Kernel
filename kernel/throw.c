@@ -16,7 +16,6 @@ void kHalt(void) {while(1) {__asm__("nop");}}
 
 
 void kThrow(long int errorCode, uint32_t hardwareAddress) {
-    
     ConsoleClearScreen(' ');
     
     ConsoleSetCursor(0, 0);
@@ -41,17 +40,10 @@ void kThrow(long int errorCode, uint32_t hardwareAddress) {
     addressPtr.address = errorCode + hardwareAddress;
     
     uint8_t hexstr[2];
-    
     for (uint8_t i=0; i < 4; i++) {
-        
-        ConsoleSetCursor(7, 2 + (2 * i));
-        
         int_to_hex_string(addressPtr.byte_t[3 - i], hexstr);
         print(hexstr, 3);
     }
-    
     ConsoleCursorDisable();
     kHalt();
-    
-    return;
 }

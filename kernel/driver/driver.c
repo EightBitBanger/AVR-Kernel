@@ -3,11 +3,8 @@
 
 struct Node* DriverTableHead = NULL;
 
-int8_t LoadLibrary(uint8_t* filename) {
-    struct Partition part = fsDeviceOpen(0x00000);
-    DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
-    
-    uint32_t fileAddress = fsDirectoryFindByName(part, currentDirectory, filename);
+int8_t LoadLibrary(struct Partition part, DirectoryHandle directoryHandle, uint8_t* filename) {
+    uint32_t fileAddress = fsDirectoryFindByName(part, directoryHandle, filename);
     if (fileAddress == 0) 
         return -1;
     
@@ -27,7 +24,6 @@ int8_t LoadLibrary(uint8_t* filename) {
     
     // Check if a driver is already servicing the 
     // hardware device this driver is targeting
-    
     uint32_t numberOfDrivers = ListGetSize(DriverTableHead);
     for (uint8_t i=0; i < numberOfDrivers; i++) {
         struct Driver* driverPtr = GetDriverByIndex(i);
@@ -48,7 +44,6 @@ int8_t LoadLibrary(uint8_t* filename) {
     }
      
     // Construct the driver and register it
-    
     struct Driver* newDeviceDriver = (struct Driver*)malloc(sizeof(struct Driver));
     RegisterDriver( (void*)newDeviceDriver );
     
@@ -67,7 +62,6 @@ int8_t LoadLibrary(uint8_t* filename) {
     newDeviceDriver->device.bus.bus_type         = fileBuffer[2 + DEVICE_NAME_LEN + 4];
     
     switch (newDeviceDriver->device.bus.bus_type) {
-        
         default:
             
         case 0:
@@ -96,16 +90,19 @@ int8_t LoadLibrary(uint8_t* filename) {
     
     newDeviceDriver->device.hardware_address = addrPtr.address;
     
-    
     // Link the driver to any associated hardware
     // devices if its found the bus
     uint8_t numberOfDevices = GetNumberOfDevices();
-    
     for (uint8_t d=0; d < numberOfDevices; d++) {
-        
         struct Device* devicePtr = GetDeviceByIndex(d);
+        uint8_t nameLength=0;
+        for (unsigned int i=0; i < DEVICE_NAME_LEN; i++) {
+            if (devicePtr->device_name[i] == ' ') 
+                break;
+            nameLength = i;
+        }
         
-        if (!StringCompare(devicePtr->device_name, DEVICE_NAME_LEN, &fileBuffer[2], DEVICE_NAME_LEN)) 
+        if (StringCompare(devicePtr->device_name, nameLength, &fileBuffer[2], nameLength) > 0) 
             continue;
         
         newDeviceDriver->is_linked = 1;
@@ -120,17 +117,12 @@ int8_t LoadLibrary(uint8_t* filename) {
 
 struct Driver* GetDriverByName(uint8_t* name, uint8_t nameLength) {
 	uint32_t numberOfDrivers = ListGetSize(DriverTableHead);
-	
 	for (uint8_t index=0; index < numberOfDrivers; index++) {
-        
         struct Driver* driverPtr = GetDriverByIndex(index);
-        
-        if (StringCompare(driverPtr->device.device_name, nameLength, name, nameLength) == 1) 
+        if (StringCompare(driverPtr->device.device_name, nameLength, name, nameLength) == 0) 
             return driverPtr;
-        
         continue;
 	}
-	
 	return nullptr;
 }
 
@@ -147,5 +139,3 @@ uint32_t RegisterDriver(void* deviceDriverPtr) {
 uint32_t GetNumberOfDrivers(void) {
     return ListGetSize(DriverTableHead);
 }
-
-

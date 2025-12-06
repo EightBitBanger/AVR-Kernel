@@ -33,12 +33,10 @@ void fsDeviceSetType(uint8_t device_type) {
     // Default
     fsWriteSectorByte = bus_write_memory;
     fsReadSectorByte = bus_read_memory;
-    return;
 }
 
 
 void fsInit(void) {
-    
     fs_bus.bus_type = 0;
     fs_bus.read_waitstate = 1;
     fs_bus.write_waitstate = 0;
@@ -50,8 +48,6 @@ void fsInit(void) {
     fsReadSectorByte = bus_read_memory;
     
     device_home_address = 0;
-    
-    return;
 }
 
 struct Partition fsDeviceOpen(uint32_t device_address) {
@@ -111,7 +107,6 @@ uint32_t fsDeviceGetCurrent(void) {
 
 void fsDeviceSetCurrent(uint32_t address) {
     current_partition = address;
-    return;
 }
 
 uint32_t fsDeviceGetBase(void) {
@@ -120,7 +115,6 @@ uint32_t fsDeviceGetBase(void) {
 
 void fsDeviceSetBase(uint32_t address) {
     base_address = address;
-    return;
 }
 
 void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type, uint8_t* device_name) {
@@ -134,7 +128,6 @@ void fsDeviceFormat(struct Partition* part, uint32_t begin, uint32_t end, uint32
         fs_write_byte(part->block_address + (i * part->sector_size), SECTOR_FREE);
     
     fsDeviceConstructAllocationTable(part, device_type, device_name);
-    return;
 }
 
 void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uint32_t sector_size, uint8_t device_type) {
@@ -145,12 +138,9 @@ void fsDeviceFormatLow(struct Partition* part, uint32_t begin, uint32_t end, uin
     
     for (uint32_t i=0; i < part->block_size; i++) 
         fs_write_byte(part->block_address + i, ' ');
-    
-    return;
 }
 
 uint8_t fsDeviceConstructAllocationTable(struct Partition* part, uint8_t device_type, uint8_t* device_name) {
-    
     // Initiate device header and associated information
     for (uint32_t i=0; i < sizeof(DeviceHeaderString); i++) 
         fs_write_byte(part->block_address + i, DeviceHeaderString[i]);

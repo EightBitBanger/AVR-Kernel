@@ -2,8 +2,8 @@
 #define _DRIVER_INITIATION__
 
 //
-// Defined baked drivers to be compiled into
-// the kernel and available at runtime.
+// Define baked drivers to be compiled into
+// the kernel statically and available at runtime.
 
 #include <avr/io.h>
 

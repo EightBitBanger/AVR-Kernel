@@ -26,9 +26,7 @@ FileHandle fsFileCreate(struct Partition part, uint8_t* filename, uint32_t size)
 }
 
 uint8_t fsFileDelete(struct Partition part, FileHandle handle) {
-    
     fsFree(part, handle);
-    
     return 1;
 }
 
@@ -148,12 +146,9 @@ uint8_t fsFileRead(struct Partition part, File index, uint8_t* buffer, uint32_t 
 void fsFileGetName(struct Partition part, FileHandle handle, uint8_t* name) {
     for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
         fs_read_byte(part.block_address + handle + i + FILE_OFFSET_NAME, &name[i]);
-        if (name[i] == '\0') {
-            name[i] = ' ';
+        if (name[i] == ' ') 
             break;
-        }
     }
-    return;
 }
 
 void fsFileSetName(struct Partition part, FileHandle handle, uint8_t* name) {
@@ -162,13 +157,12 @@ void fsFileSetName(struct Partition part, FileHandle handle, uint8_t* name) {
     for (uint32_t i=0; i < FILE_NAME_LENGTH; i++) 
         filename[i] = ' ';
     for (uint32_t i=0; i < FILE_NAME_LENGTH; i++) {
-        if (name[i] == '\0') 
+        if (name[i] == ' ' || name[i] == '\0') 
             break;
         filename[i] = name[i];
     }
     for (uint32_t i=0; i < FILE_NAME_LENGTH; i++) 
         fs_write_byte(part.block_address + handle + i + FILE_OFFSET_NAME, filename[i]);
-    return;
 }
 
 uint32_t fsFileGetSize(struct Partition part, FileHandle handle) {
@@ -181,13 +175,11 @@ uint32_t fsFileGetSize(struct Partition part, FileHandle handle) {
 void fsFileSetAttributes(struct Partition part, FileHandle handle, uint8_t* attributes) {
     for (uint32_t i=0; i < 4; i++) 
         fs_write_byte(part.block_address + handle + i + FILE_OFFSET_ATTRIBUTES, attributes[i]);
-    return;
 }
 
 void fsFileGetAttributes(struct Partition part, FileHandle handle, uint8_t* attributes) {
     for (uint32_t i=0; i < 4; i++) 
          fs_read_byte(part.block_address + handle + i + FILE_OFFSET_ATTRIBUTES, &attributes[i]);
-    return;
 }
 
 
@@ -200,7 +192,6 @@ void fsFileSetFlag(struct Partition part, FileHandle handle, uint8_t index, uint
         flag &= ~(1 << index);
     }
     fs_write_byte(part.block_address + handle + FILE_OFFSET_FLAG, flag);
-    return;
 }
 
 uint8_t fsFileGetFlag(struct Partition part, FileHandle handle, uint8_t index) {
@@ -214,7 +205,6 @@ void fsFileSetParentAddress(struct Partition part, FileHandle handle, uint32_t p
     *((uint32_t*)&ptrBytes[0]) = parent;
     for (uint8_t i=0; i < 4; i++) 
         fs_write_byte(part.block_address + handle + i + FILE_OFFSET_PARENT, ptrBytes[i]);
-    return;
 }
 
 uint32_t fsFileGetParentAddress(struct Partition part, FileHandle handle) {
@@ -230,7 +220,6 @@ void fsFileSetNextAddress(struct Partition part, FileHandle handle, uint32_t nex
     *((uint32_t*)&ptrBytes[0]) = next;
     for (uint8_t i=0; i < 4; i++) 
         fs_write_byte(part.block_address + handle + i + FILE_OFFSET_NEXT, ptrBytes[i]);
-    return;
 }
 
 uint32_t fsFileGetNextAddress(struct Partition part, FileHandle handle) {

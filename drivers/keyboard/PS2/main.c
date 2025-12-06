@@ -6,8 +6,6 @@ struct PS2DeviceDriver keyboardDeviceDriver;
 
 struct PS2DeviceDriver* keyboardDriver = &keyboardDeviceDriver;
 
-
-
 // Driver function declarations
 
 void __read_ps2_device(uint32_t address, uint8_t* buffer);

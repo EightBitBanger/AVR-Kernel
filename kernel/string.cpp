@@ -154,7 +154,6 @@ void string::replace(const string& target, const string& replacement) {
     tempDst[replacement.size()] = '\0';
     
     replace(tempSrc, tempDst);
-    return;
 }
 
 void string::insert(uint32_t index, uint8_t item) {
@@ -170,14 +169,12 @@ void string::insert(uint32_t index, uint8_t item) {
         set(i, get(i - 1));
     }
     set(index, item);
-    return;
 }
 
 void string::insert(uint32_t index, const string str) {
     uint32_t strSz = str.size();
     for (uint32_t i = 0; i < strSz; i++) 
         insert(index + i, str[i]);
-    return;
 }
 
 void string::insert(uint32_t index, const char* str) {
@@ -197,7 +194,6 @@ void string::insert(uint32_t index, const char* str) {
         set(index + i, str[i]);
     
     mSize += strLen;
-    return;
 }
 
 void string::remove(uint32_t index) {
@@ -230,4 +226,3 @@ void string::remove(const string& substr) {
     for (uint32_t i=0; i < strSz; i++) 
         remove(begin + i);
 }
-

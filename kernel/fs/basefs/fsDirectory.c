@@ -1,5 +1,5 @@
 #include <kernel/fs/fs.h>
-#include <string.h>
+#include <kernel/cstring.h>
 
 void fs_write_byte(uint32_t address, uint8_t data);
 void fs_read_byte(uint32_t address, uint8_t* data);
@@ -61,7 +61,6 @@ void fsDirectorySetReferenceCount(struct Partition part, DirectoryHandle handle,
     *((uint32_t*)&sizeBytes[0]) = count;
     for (uint8_t i=0; i < 4; i++) 
         fs_write_byte(part.block_address + handle + i + FILE_OFFSET_REF_COUNT, sizeBytes[i]);
-    return;
 }
 
 uint32_t fsDirectoryGetReferenceCount(struct Partition part, DirectoryHandle handle) {
@@ -198,7 +197,7 @@ uint32_t fsDirectoryFindByName(struct Partition part, DirectoryHandle handle, ui
     // Cleanse the source file name
     uint8_t sourceFilename[] = "          ";
     for (uint8_t i=0; i < 10; i++) {
-        if (filename[i] == '\0') 
+        if (filename[i] == '\0' || filename[i] == ' ') 
             break;
         sourceFilename[i] = filename[i];
     }
@@ -222,7 +221,7 @@ uint32_t fsDirectoryFindByName(struct Partition part, DirectoryHandle handle, ui
             uint8_t name[] = "          ";
             fsFileGetName(part, fileHandle, name);
             
-            if (strcmp((char*)name, (char*)sourceFilename) != 0) 
+            if (StringCompare(name, 10, sourceFilename, 10) > 0) 
                 continue;
             
             fsFileClose(index);

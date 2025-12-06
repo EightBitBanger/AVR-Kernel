@@ -22,6 +22,6 @@ uint8_t SetInterruptService(uint8_t index, void(*service_ptr)());
 
 // Hardware interrupt service routines
 
-uint8_t SetHardwareInterruptService(void(*service_ptr)());
+uint8_t SetHardwareInterruptService(uint8_t index, void(*service_ptr)());
 
 #endif

@@ -25,5 +25,4 @@ uint8_t ntCheckDevice(void);
 
 uint8_t ntCheckInitiated(void);
 
-
 #endif

@@ -7,8 +7,6 @@
 #define HALT_ACCESS_VIOLATION     0x80000064
 #define HALT_APP_HANG             0x10000002
 
-
 void kThrow(long int errorCode, uint32_t hardwareAddress);
-
 
 #endif

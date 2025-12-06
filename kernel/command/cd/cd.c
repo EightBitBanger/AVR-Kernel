@@ -10,7 +10,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     uppercase(&deviceLetter);
     
     // Get current device
-    struct Partition part = fsDeviceOpen( fsDeviceGetCurrent() );
+    struct Partition part = fsDeviceOpen(0x00000);
     DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
     
     // Drop down to the parent directory
@@ -55,7 +55,7 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     // Check if the directory exists
     uint32_t targetDirectory = fsFindDirectory(part, currentDirectory, param);
     if (targetDirectory == 0) {
-        uint8_t msgDirectoryNotFound[]  = "Directory not found";
+        uint8_t msgDirectoryNotFound[] = "Directory not found";
         print(msgDirectoryNotFound, sizeof(msgDirectoryNotFound));
         printLn();
         return;
@@ -65,16 +65,11 @@ void functionCD(uint8_t* param, uint8_t param_length) {
     fsWorkingDirectoryChange(part, targetDirectory);
     
     SetPromptPath(part, 0, targetDirectory);
-    return;
 }
 
 void registerCommandCD(void) {
-    
     uint8_t cdCommandName[] = "cd";
-    
     ConsoleRegisterCommand(cdCommandName, sizeof(cdCommandName), functionCD);
-    
-    return;
 }
 
 
@@ -101,5 +96,4 @@ void SetPromptPath(struct Partition part, uint8_t isRoot, DirectoryHandle target
         break;
     }
     ConsoleSetPrompt(filename, namelenth);
-    return;
 }

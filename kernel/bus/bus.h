@@ -2,7 +2,6 @@
 #define __BUS_INTERFACE_
 
 struct Bus {
-    
     /// Number of wait cycles to perform during the read operation
     uint16_t read_waitstate;
     /// Number of wait cycles to perform during the write operation
@@ -10,9 +9,7 @@ struct Bus {
     
     /// Physical interface type
     uint8_t bus_type;
-    
 };
-
 
 /// Initiate the bus for interfacing.
 void bus_initiate(void);

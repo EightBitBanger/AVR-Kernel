@@ -10,14 +10,11 @@ struct RoutingTable routingTable;
 
 
 void InitiateRouter(void) {
-    
     uint16_t reconnRequestMax = 2700;
     uint16_t reconnRequestMin = 1000;
     
     uint16_t reconnRequestTimeOut = 0;
     uint16_t reconnRequestRate = reconnRequestMin;
-    
-    
     
     //
     // Assemble default packets
@@ -83,10 +80,7 @@ void InitiateRouter(void) {
     
     packetRouterHandshakeReturn.stop = NETWORK_PACKET_STOP_BYTE;
     
-    
     uint16_t reconnRequestCounter[5] = {0, 0, 0, 0, 0};
-    
-    
     
     //
     // Initiate the routing table
@@ -383,27 +377,9 @@ void InitiateRouter(void) {
                     ntPacketSend(&receive);
                     
                 }
-                
             }
-            
             continue;
         }
-        
         continue;
     }
-    
-    
-    
-    
-    
-    
-    
-    return;
 }
-
-
-
-
-
-
-

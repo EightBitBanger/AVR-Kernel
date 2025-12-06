@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <kernel/emulation/x4/x4.h>
 
-
 uint32_t AssembleJoin(uint8_t* buffer, uint32_t begin_address, uint8_t* source, uint32_t length) {
     
     for (uint32_t i=0; i < length; i++) 
@@ -9,4 +8,3 @@ uint32_t AssembleJoin(uint8_t* buffer, uint32_t begin_address, uint8_t* source, 
     
     return begin_address + length;
 }
-

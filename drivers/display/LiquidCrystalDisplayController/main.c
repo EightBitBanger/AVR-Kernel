@@ -3,15 +3,11 @@
 #include <kernel/kernel.h>
 
 struct DisplayDeviceDriver displayDeviceDriver;
-
 struct DisplayDeviceDriver* displayDriver = &displayDeviceDriver;
 
-
 // Driver function declarations
-
 void __read_display_device(uint32_t address, uint8_t* buffer);
 void __write_display_device(uint32_t address, uint8_t buffer);
-
 
 void initiateDisplayDriver(void) {
     
@@ -26,6 +22,11 @@ void initiateDisplayDriver(void) {
 	// Set hardware device details
 	displayDriver->device.hardware_address = PERIPHERAL_ADDRESS_BEGIN;
 	
+	// Attempt to find the hardware manually
+	uint32_t hardware_address = GetHardwareDeviceByName(deviceName, sizeof(deviceName));
+	if (hardware_address != 0) 
+        displayDriver->device.hardware_address = hardware_address;
+    
 	displayDriver->device.device_id = 0x10;
 	
 	displayDriver->device.bus.read_waitstate  = 8;
@@ -35,17 +36,13 @@ void initiateDisplayDriver(void) {
     displayDriver->write = __write_display_device;
     
     displayDriver->is_linked = 0;
-    
-    return;
 }
 
 
 void __read_display_device(uint32_t address, uint8_t* buffer) {
     bus_read_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
-    return;
 }
 
 void __write_display_device(uint32_t address, uint8_t buffer) {
     bus_write_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
-    return;
 }

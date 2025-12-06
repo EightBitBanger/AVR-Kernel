@@ -32,7 +32,6 @@ void printc(char* string) {
         continue;
     }
     ConsoleSetCursorPosition(console_position);
-    return;
 }
 
 void print(uint8_t* string, uint8_t length) {
@@ -40,18 +39,13 @@ void print(uint8_t* string, uint8_t length) {
     displayDevice->write( 0x00001, console_line );
     
     for (uint8_t i=0; i < length - 1; i++) {
-        
-        displayDevice->write( 0x00010 + i, string[i] );
-        
+        displayDevice->write( console_position + 0x00010, string[i] );
         console_position++;
     }
-    return;
 }
 
 void printInt(uint32_t integer) {
-    
     uint8_t string[10];
-    
     uint8_t place = int_to_string(integer, string);
     
     // Zero special case
@@ -74,50 +68,35 @@ void printInt(uint32_t integer) {
     
     console_position += (place / 2) + 1;
     ConsoleSetCursorPosition(console_position);
-    return;
 }
 
 void printChar(uint8_t character) {
     __glBusyWait();
-    
     displayDevice->write( 0x00001, console_line );
     displayDevice->write( 0x00002, console_position );
     
     displayDevice->write( 0x00010, character );
-    
     console_position++;
-    return;
 }
 
 void printLn(void) {
     __glBusyWait();
-    
     if (console_line < (displayRows - 1)) {
         console_line++;
         displayDevice->write( 0x00001, console_line);
-        
     } else {
         displayDevice->write( 0x00005, 1);
     }
-    
     console_position = 0;
-    
     ConsoleSetCursor(console_line, console_position);
-    return;
 }
 
 void printSpace(uint8_t numberOfSpaces) {
     __glBusyWait();
-    displayDevice->write( 0x00001, console_line );
-    
     for (uint8_t i=0; i < numberOfSpaces; i++) {
-        displayDevice->write( 0x00002, console_position );
-        displayDevice->write( 0x00010 + i, ' ' );
+        displayDevice->write( 0x00010 + console_position, ' ' );
         console_position++;
     }
-    
-    ConsoleSetCursorPosition(console_position);
-    return;
 }
 
 void printPrompt(void) {
@@ -131,11 +110,9 @@ void printPrompt(void) {
     console_position = console_prompt_length - 1;
     
     ConsoleSetCursorPosition(console_position);
-    return;
 }
 
 uint8_t printPause(void) {
-    
     uint8_t msgPressAnyKey[]   = "Press any key...";
     print(msgPressAnyKey, sizeof(msgPressAnyKey));
     

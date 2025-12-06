@@ -5,9 +5,7 @@
 #include <stdlib.h>
 
 struct Node {
-    
     struct Node* next;
-    
     void* data;
 };
 

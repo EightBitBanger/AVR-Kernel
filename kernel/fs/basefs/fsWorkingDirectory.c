@@ -14,7 +14,6 @@ void fsWorkingDirectorySetRoot(struct Partition part, DirectoryHandle handle) {
     fs_working_device[0] = part.block_address;
     current_directory_index = 0;
     fsDeviceSetCurrent(part.block_address);
-    return;
 }
 
 DirectoryHandle fsWorkingDirectoryGetRoot(void) {
@@ -50,7 +49,6 @@ void fsWorkingDirectoryChange(struct Partition part, DirectoryHandle handle) {
     fsDeviceSetCurrent(part.block_address);
     fs_working_directory[current_directory_index] = handle;
     fs_working_device[current_directory_index] = part.block_address;
-    return;
 }
 
 uint8_t fsWorkingDirectorySetParent(void) {
@@ -77,4 +75,3 @@ void fsEnvironmentSetHomeDevice(uint32_t deviceAddress) {
 uint32_t fsEnvironmentGetHomeDevice(void) {
     return device_home_address;
 }
-

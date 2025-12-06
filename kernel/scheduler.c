@@ -9,7 +9,6 @@
 
 struct Node* ProcessNodeTable = NULL;
 
-
 volatile uint64_t system_timer_ms = 0;
 
 uint8_t schedulerIsActive = 0;
@@ -120,7 +119,7 @@ int32_t TaskFind(uint8_t* name, uint8_t name_length) {
         struct ProcessDescription* proc = nodePtr->data;
         
         // Check task name
-        if (StringCompare(name, name_length, proc->name, FILE_NAME_LENGTH) == 0) 
+        if (StringCompare(name, name_length, proc->name, FILE_NAME_LENGTH) > 0) 
             continue;
         
         index = i;
@@ -167,28 +166,20 @@ uint32_t FindNextAvailableMemoryRange(void) {
 //
 
 void SchedulerStart(void) {
-	
 	if (schedulerIsActive == 1) 
         return;
-    
     schedulerIsActive = 1;
 	
 	// Set the ISRs
 	SetInterruptService(0, _ISR_SCHEDULER_TIMER__);
     SetInterruptService(1, _ISR_SCHEDULER_MAIN__);
-    
-	return;
 }
 
 
 void SchedulerStop(void) {
-	
 	if (schedulerIsActive == 0) 
         return;
-    
 	schedulerIsActive = 0;
-	
-	return;
 }
 
 
@@ -206,7 +197,6 @@ struct Mutex mux = {0};
 
 
 void _ISR_SCHEDULER_MAIN__(void) {
-    
     // Check no tasks running
     uint32_t numberOfTasks = ListGetSize(ProcessNodeTable);
     if (numberOfTasks == 0) 
@@ -293,15 +283,12 @@ void _ISR_SCHEDULER_MAIN__(void) {
     
     // Release the mutex
     MutexUnlock(&mux);
-    
-    return;
 }
 
 
 // System base timer and task watchdog
 
 void _ISR_SCHEDULER_TIMER__(void) {
-    
     system_timer_ms++;
     
     // Do not run if a task is not running
@@ -337,7 +324,5 @@ void _ISR_SCHEDULER_TIMER__(void) {
         
         return;
     }
-    
-    return;
 }
 

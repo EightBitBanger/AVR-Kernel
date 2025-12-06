@@ -16,31 +16,25 @@ uint32_t __heap_end__    = 0xffffffff;
 
 
 int8_t VirtualAccessGetMode(void) {
-    
     if (__virtual_address_begin__ == __KERNEL_VIRTUAL_ACCESS_BEGIN__) 
         return VIRTUAL_ACCESS_MODE_KERNEL;
     if (__virtual_address_begin__ == __USER_VIRTUAL_ACCESS_BEGIN__) 
         return VIRTUAL_ACCESS_MODE_USER;
-    
     return -1;
 }
 
 void VirtualAccessSetMode(uint8_t mode) {
-    
     switch (mode) {
         default:
         case VIRTUAL_ACCESS_MODE_KERNEL: 
             __virtual_address_begin__ = __KERNEL_VIRTUAL_ACCESS_BEGIN__;
             __virtual_address_end__   = __KERNEL_VIRTUAL_ACCESS_END__;
             break;
-        
         case VIRTUAL_ACCESS_MODE_USER: 
             __virtual_address_begin__ = __USER_VIRTUAL_ACCESS_BEGIN__;
             __virtual_address_end__   = __USER_VIRTUAL_ACCESS_END__;
             break;
     }
-    
-    return;
 }
 
 
@@ -85,7 +79,6 @@ void VirtualWrite(uint32_t address, uint8_t* byte, uint32_t size) {
     
     VirtualEnd();
     */
-    return;
 }
 
 
@@ -130,33 +123,28 @@ void VirtualRead(uint32_t address, uint8_t* byte, uint32_t size) {
     
     VirtualEnd();
     */
-    return;
 }
 
 
 uint8_t currentDevice = ' ';
+uint32_t currentBase = 0;
 
 void VirtualBegin(void) {
-    /*
     if (currentDevice != ' ') {
         kThrow(HALT_SEGMENTATION_FAULT, 0);
         return;
     }
-    currentDevice = fsDeviceGetRootLetter();
-    fsDeviceSetRootLetter('x');
-    */
-    return;
+    currentDevice = 'x';
+    currentBase = fsDeviceGetBase();
 }
 
 void VirtualEnd(void) {
-    /*
     if (currentDevice == ' ') {
         kThrow(HALT_SEGMENTATION_FAULT, 0);
         return;
     }
-    fsDeviceSetRootLetter(currentDevice);
+    fsDeviceSetBase(currentBase);
+    currentBase = 0;
     currentDevice = ' ';
-    */
-    return;
 }
 

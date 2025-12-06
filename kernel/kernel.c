@@ -2,8 +2,8 @@
 
 #include <kernel/delay.h>
 
-
-#define HARDWARE_INTERRUPT_TABLE_SIZE  8
+#define HARDWARE_INTERRUPT_VECTOR       0x00000
+#define HARDWARE_INTERRUPT_TABLE_SIZE   8
 
 void (*hardware_interrupt_table[HARDWARE_INTERRUPT_TABLE_SIZE])();
 
@@ -45,6 +45,13 @@ void kInit(void) {
         struct Device* devPtr = GetDeviceByIndex( index );
         if (devPtr->device_id == 0) 
             continue;
+        
+#ifdef _BOOT_LIST_HARDWARE_DEVICES__
+        uint8_t byteHeader[]={'0','x','0','0'+index,' '};
+        print(byteHeader, sizeof(byteHeader)+1);
+        print(devPtr->device_name, DEVICE_NAME_LEN);
+        printLn();
+#endif
         
         uint8_t length = 0;
         for (uint8_t i=0; i < FILE_NAME_LENGTH; i++) {
@@ -113,7 +120,8 @@ void kInit(void) {
             continue;
         
         // Set the root
-        fsWorkingDirectorySetRoot( devicePart, fsDeviceGetRootDirectory(devicePart));
+        rootDirectory = fsDeviceGetRootDirectory(devicePart);
+        fsWorkingDirectorySetRoot( devicePart, rootDirectory);
         
         uint8_t consolePrompt[] = "x>";
         consolePrompt[0] = index + 'a';
@@ -122,20 +130,18 @@ void kInit(void) {
         break;
     }
     
-    // If no devices where found use the memory device
+    // If no devices where found use temporary memory storage
     if (devicePart.block_size == 0) {
         fsDeviceSetBase(0x00000);
+        devicePart = fsDeviceOpen(0x00000);
         
         uint8_t consolePrompt[] = "x>";
         ConsoleSetPrompt(consolePrompt, sizeof(consolePrompt));
     }
     
-    //
     // Load drivers
     
 #ifndef _BOOT_SAFEMODE__
-    devicePart = fsDeviceOpen(0x00000);
-    //DirectoryHandle rootDeviceDir = fsDeviceGetRootDirectory(devicePart);
     
     // Locate drivers directory
     uint8_t driversDirName[] = "sys";
@@ -144,8 +150,66 @@ void kInit(void) {
     if (directoryAddress == 0) 
         return;
     
+    uint32_t numberOfFiles = fsDirectoryGetTotalSize(devicePart, directoryAddress);
+    for (uint32_t f=0; f < numberOfFiles; f++) {
+        FileHandle handle = fsDirectoryFindByIndex(devicePart, directoryAddress, f);
+        
+        // Get file size
+        uint32_t fileSize = fsFileGetSize(devicePart, handle);
+        uint8_t driverBuffer[fileSize];
+        
+        // Load the file
+        int32_t index = fsFileOpen(devicePart, handle);
+        fsFileRead(devicePart, index, driverBuffer, fileSize);
+        fsFileClose(index);
+        
+        // Check if the hardware exists on the bus
+        uint8_t numberOfDevices = GetNumberOfDevices();
+        for (uint8_t d=0; d < numberOfDevices; d++) {
+            struct Device* devicePtr = GetDeviceByIndex(d);
+            if (devicePtr->device_id == 0) 
+                continue;
+            uint8_t nameLength=0;
+            for (unsigned int i=0; i < DEVICE_NAME_LEN; i++) {
+                nameLength = i;
+                if (devicePtr->device_name[i] == ' ') 
+                    break;
+            }
+            
+            // Check device name match
+            if (StringCompare(devicePtr->device_name, nameLength, &driverBuffer[2], nameLength) == 0) {
+                print(&driverBuffer[2], nameLength);
+                printLn();
+                
+                // Load the driver into the kernel
+                int8_t libState = LoadLibrary(devicePart, directoryAddress, devicePtr->device_name);
+                
+                // Driver was not loaded correctly or is corrupted
+                if (libState >= 0) {
+                    
+                }
+                
+            }
+            
+        }
+        
+        
+#ifdef _BOOT_DETAILS__
+        /*
+        // Load the driver into the kernel
+        int8_t libState = LoadLibrary(devicePart, directoryAddress, &driverBuffer[2]);
+        
+        // Driver was not loaded correctly or is corrupted
+        if (libState >= 0 || libState == -32) {
+            // Driver loaded successfully
+            print(&driverBuffer[2], DEVICE_NAME_LEN);
+            printLn();
+        }
+        */
 #endif
-    return;
+        
+    }
+#endif
 }
 
 void KernelVectorTableInit(void) {
@@ -153,44 +217,33 @@ void KernelVectorTableInit(void) {
     
     for (uint8_t i=0; i < HARDWARE_INTERRUPT_TABLE_SIZE; i++) 
         hardware_interrupt_table[i] = nullfunction;
-    
-    return;
 }
 
-void SetInterruptVector(uint8_t index, void(*servicePtr)()) {
-    
-    hardware_interrupt_table[ index ] = servicePtr;
-    
-    return;
+void SetInterruptVectorCallback(uint8_t index, void(*callbackService)()) {
+    hardware_interrupt_table[index] = callbackService;
 }
 
 struct Mutex isr_mux;
 
 void _ISR_hardware_service_routine(void) {
+    uint8_t mask = 0;
     MutexLock(&isr_mux);
     
-    uint8_t msgTest[] = "A";
-    print(msgTest, sizeof(msgTest));
-    printSpace(1);
-    //printLn();
+    // Get the interrupt vector to determine what triggered it
+    bus_read_byte(&isr_bus, HARDWARE_INTERRUPT_VECTOR, &mask);
+    
+    while (mask != 0) {
+        // Get the least-significant set bit index
+        uint8_t bit = __builtin_ctz(mask);
+        uint8_t index = 7 - bit;
+        
+        hardware_interrupt_table[index]();
+        
+        // Clear the bit
+        mask &= (uint8_t)(mask - 1);
+    }
     
     MutexUnlock(&isr_mux);
-    return;
-    
-    uint8_t vect = 0;
-    bus_read_byte(&isr_bus, 0x00000, &vect);
-    
-    if (((vect >> 7) & 1) != 0) {hardware_interrupt_table[0]();}
-    if (((vect >> 6) & 1) != 0) {hardware_interrupt_table[1]();}
-    if (((vect >> 5) & 1) != 0) {hardware_interrupt_table[2]();}
-    if (((vect >> 4) & 1) != 0) {hardware_interrupt_table[3]();}
-    if (((vect >> 3) & 1) != 0) {hardware_interrupt_table[4]();}
-    if (((vect >> 2) & 1) != 0) {hardware_interrupt_table[5]();}
-    if (((vect >> 1) & 1) != 0) {hardware_interrupt_table[6]();}
-    if (((vect >> 0) & 1) != 0) {hardware_interrupt_table[7]();}
-    
-    MutexUnlock(&isr_mux);
-    return;
 }
 
 

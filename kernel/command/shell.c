@@ -1,7 +1,5 @@
 #include <avr/io.h>
-
 #include <kernel/delay.h>
-
 #include <kernel/command/cli.h>
 
 extern uint32_t fs_working_directory_address;
@@ -127,11 +125,7 @@ void KeyFunctionPrintChar(uint8_t scanCode) {
         console_position = 0;
         ConsoleSetCursorPosition(console_position);
     }
-    
-    return;
 }
-
-
 
 void KeyFunctionBackspace(void) {
     if (console_string_length == 0) 
@@ -158,7 +152,4 @@ void KeyFunctionBackspace(void) {
     displayDevice->write( 0x00002, console_position);
     
     swapBuffers();
-    return;
 }
-
-

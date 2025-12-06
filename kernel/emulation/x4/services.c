@@ -7,7 +7,6 @@
 
 #include <kernel/emulation/x4/x4.h>
 
-
 // Program memory segment
 extern uint8_t programBuffer[MAX_PROGRAM_SIZE];
 extern uint32_t programSize;
@@ -28,13 +27,14 @@ extern uint8_t flag_compare;
 extern uint8_t flag_greater;
 extern uint8_t flag_consoleDirty;
 
-
 void ISC_OperatingSystem(void) {
     
     // Dynamically load a driver onto the driver table
     if (reg[rAH] == 0x0A) {
+        struct Partition part = fsDeviceOpen(0x00000);
+        DirectoryHandle directoryHandle = fsWorkingDirectoryGetCurrent();
         
-        int8_t status = LoadLibrary(param_string);
+        int8_t status = LoadLibrary(part, directoryHandle, param_string);
         
         if (status == -1) {reg[rBL] = 1; return;}   // File does not exist
         if (status == -2) {reg[rBL] = 2; return;}   // Corrupt driver
@@ -44,13 +44,10 @@ void ISC_OperatingSystem(void) {
             reg[rBL] = 0;
         return;
     }
-    
-    return;
 }
 
 
 void ISC_DisplayRoutine(void) {
-    
     // AH = 0x09 Print string
     if (reg[rAH] == 0x09) {
         union Pointer dataOffset;
@@ -83,12 +80,10 @@ void ISC_DisplayRoutine(void) {
         return;
     }
     reg[rBL] = 1;
-    return;
 }
 
 
 void ISC_FileSystemRoutine(void) {
-    /*
     if (param_string[0] == ' ' || 
         param_length == 0) {
         reg[rBL] = 1;
@@ -97,7 +92,6 @@ void ISC_FileSystemRoutine(void) {
     
     // AH = 0x3C Create a file
     if (reg[rAH] == 0x3C) {
-        
         // Get file size from the CX register
         union Pointer dataOffset;
         dataOffset.byte_t[3] = 0;
@@ -105,19 +99,15 @@ void ISC_FileSystemRoutine(void) {
         dataOffset.byte_t[1] = reg[rCH];
         dataOffset.byte_t[0] = reg[rCL];
         
-        // Check file exists
-        uint32_t fileAddress = fsFileExists(param_string, param_length);
-        if (fileAddress != 0) {
-            reg[rBL] = 2;
-            return;
-        }
+        struct Partition part = fsDeviceOpen(fsDeviceGetCurrent());
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
         
-        // Create the file
-        fileAddress = fsFileCreate(param_string, param_length, dataOffset.address);
-        if (fileAddress == 0) {
+        FileHandle handle = fsFileCreate(part, param_string, dataOffset.address);
+        if (handle == 0) {
             reg[rBL] = 3;
             return;
         }
+        fsDirectoryAddFile(part, currentDirectory, handle);
         
         reg[rBL] = 0;
         flag_consoleDirty = 0;
@@ -126,20 +116,15 @@ void ISC_FileSystemRoutine(void) {
     
     // AH = 0x39 Create a directory
     if (reg[rAH] == 0x39) {
+        struct Partition part = fsDeviceOpen(fsDeviceGetCurrent());
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
         
-        // Check directory exists
-        uint32_t directoryAddress = fsDirectoryExists(param_string, param_length);
-        if (directoryAddress != 0) {
-            reg[rBL] = 2;
-            return;
-        }
-        
-        // Create the directory
-        directoryAddress = fsDirectoryCreate(param_string, param_length);
+        DirectoryHandle directoryAddress = fsDirectoryCreate(part, param_string);
         if (directoryAddress == 0) {
             reg[rBL] = 3;
             return;
         }
+        fsDirectoryAddFile(part, currentDirectory, directoryAddress);
         
         reg[rBL] = 0;
         flag_consoleDirty = 0;
@@ -148,12 +133,17 @@ void ISC_FileSystemRoutine(void) {
     
     // AH = 0x41 Delete a file
     if (reg[rAH] == 0x41) {
+        struct Partition part = fsDeviceOpen(fsDeviceGetCurrent());
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
         
-        uint32_t fileAddress = fsFileDelete(param_string, param_length);
-        if (fileAddress == 0) {
+        FileHandle handle = fsDirectoryFindByName(part, currentDirectory, param_string);
+        if (handle == 0) {
             reg[rBL] = 2;
             return;
         }
+        
+        fsDirectoryRemoveFile(part, currentDirectory, handle);
+        fsFileDelete(part, handle);
         
         reg[rBL] = 0;
         flag_consoleDirty = 0;
@@ -162,12 +152,17 @@ void ISC_FileSystemRoutine(void) {
     
     // AH = 0x3A Delete a directory
     if (reg[rAH] == 0x3A) {
+        struct Partition part = fsDeviceOpen(fsDeviceGetCurrent());
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
         
-        uint32_t directoryAddress = fsDirectoryDelete(param_string, param_length);
-        if (directoryAddress == 0) {
+        FileHandle handle = fsDirectoryFindByName(part, currentDirectory, param_string);
+        if (handle == 0) {
             reg[rBL] = 2;
             return;
         }
+        
+        fsDirectoryRemoveFile(part, currentDirectory, handle);
+        fsDirectoryDelete(part, handle);
         
         reg[rBL] = 0;
         flag_consoleDirty = 0;
@@ -176,32 +171,36 @@ void ISC_FileSystemRoutine(void) {
     
     // AH = 0x4C Print a file
     if (reg[rAH] == 0x4C) {
-        uint32_t fileAddress = fsFileExists(param_string, param_length);
-        if (fileAddress != 0) {
-            int32_t file = fsFileOpen(fileAddress);
-            uint32_t fileSz = fsFileGetSize(fileAddress);
-            
-            uint8_t fileBuffer[fileSz];
-            fsFileRead(file, fileBuffer, fileSz);
-            for (unsigned int i=0; i < fileSz; i++) {
-                if (ConsoleGetCursorPosition() >= ConsoleGetDisplayWidth()) 
-                    printLn();
-                
-                if (fileBuffer[i] == '\n') {
-                    printLn();
-                    continue;
-                }
-                printChar(fileBuffer[i]);
-            }
-            
-            fsFileClose(file);
-            reg[rBL] = 0;
+        struct Partition part = fsDeviceOpen(fsDeviceGetCurrent());
+        DirectoryHandle currentDirectory = fsWorkingDirectoryGetCurrent();
+        
+        FileHandle handle = fsDirectoryFindByName(part, currentDirectory, param_string);
+        if (handle == 0) {
+            reg[rBL] = 2;
             return;
         }
-        reg[rBL] = 2;
+        
+        File file = fsFileOpen(part, handle);
+        uint32_t fileSz = fsFileGetSize(part, handle);
+        uint8_t fileBuffer[fileSz];
+        
+        fsFileRead(part, file, fileBuffer, fileSz);
+        for (unsigned int i=0; i < fileSz; i++) {
+            if (ConsoleGetCursorPosition() >= ConsoleGetDisplayWidth()) 
+                printLn();
+            
+            if (fileBuffer[i] == '\n') {
+                printLn();
+                continue;
+            }
+            printChar(fileBuffer[i]);
+        }
+        
+        fsFileClose(file);
+        reg[rBL] = 0;
         return;
     }
-    */
+    
     /*
     // AH = 0x3B Change the current working directory
     if (reg[rAH] == 0x3B) {
@@ -232,12 +231,10 @@ void ISC_FileSystemRoutine(void) {
     */
     
     reg[rBL] = 1;
-    return;
 }
 
 
 void ISC_NetworkRoutine(void) {
-    
     // AH = 0x0A Initiate the network device
     if (reg[rAH] == 0x0A) {
         if (ntInit() == 0) {
@@ -280,6 +277,5 @@ void ISC_NetworkRoutine(void) {
     }
     
     reg[rBL] = 1;
-    return;
 }
 

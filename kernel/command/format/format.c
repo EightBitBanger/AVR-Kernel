@@ -142,14 +142,9 @@ void functionFORMAT(uint8_t* param, uint8_t param_length) {
     
     printLn();
     */
-    return;
 }
 
 void registerCommandFormat(void) {
-    
     uint8_t formatCommandName[] = "format";
-    
     ConsoleRegisterCommand(formatCommandName, sizeof(formatCommandName), functionFORMAT);
-    
-    return;
 }

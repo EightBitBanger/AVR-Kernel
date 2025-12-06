@@ -142,13 +142,11 @@ void bus_initiate(void) {
 	_BUS_LOWER_DIR__ = 0xff;
 	bus_control_zero();
     bus_address_zero();
-    return;
 }
 
 void bus_control_zero(void) {
     _CONTROL_DIR__=0xff;
 	_CONTROL_OUT__=0xff;
-	return;
 }
 
 void bus_address_zero(void) {
@@ -160,7 +158,6 @@ void bus_address_zero(void) {
 	
 	_BUS_UPPER_DIR__=0x0f;
 	_BUS_UPPER_OUT__=0xff;
-	return;
 }
 
 void bus_raw_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
@@ -192,8 +189,6 @@ void bus_raw_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
 	_BUS_UPPER_OUT__  = 0x00;
 	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
 	_BUS_LOWER_DIR__ = 0xff;
-	
-	return;
 }
 
 
@@ -222,25 +217,20 @@ void bus_raw_write_memory(struct Bus* bus, uint32_t address, uint8_t byte) {
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
 	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
-	
-	return;
 }
 
 void bus_read_byte(struct Bus* bus, uint32_t address, uint8_t* buffer) {
     bus_raw_read_memory(bus, address, buffer);
-	return;
 }
 
 void bus_write_byte(struct Bus* bus, uint32_t address, uint8_t byte) {
     bus_raw_write_memory(bus, address, byte);
-    return;
 }
 
 
 void bus_write_byte_eeprom(struct Bus* bus, uint32_t address, uint8_t byte) {
     bus_raw_write_memory(bus, address, byte);
     _delay_ms(10);
-	return;
 }
 
 
@@ -263,7 +253,6 @@ void bus_flush_cache(struct Bus* bus, uint32_t address) {
     
     cache_begin = address;
     cache_end = address + CACHE_SIZE;
-    return;
 }
 
 void bus_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
@@ -274,7 +263,6 @@ void bus_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
     
     bus_flush_cache(bus, address);
     *buffer = cache[0];
-    return;
 }
 
 
@@ -289,10 +277,6 @@ void bus_write_memory(struct Bus* bus, uint32_t address, uint8_t byte) {
     bus_flush_cache(bus, address);
     cache[0] = byte;
     dirty_bits[0] = 1;
-    
-    return;
 }
-
-
 
 #endif

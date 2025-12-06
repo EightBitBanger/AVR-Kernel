@@ -1,5 +1,4 @@
 #include <avr/io.h>
-
 #include <kernel/command/cli.h>
 
 extern uint32_t fs_working_directory_address;
@@ -72,8 +71,10 @@ void KeyFunctionReturn(void) {
     
     // Separate the function name
     uint8_t functionName[FILE_NAME_LENGTH];
+    for (uint8_t i=0; i <= console_string_length; i++) 
+        functionName[i] = ' ';
     for (uint8_t i=0; i <= console_string_length; i++) {
-        if (console_string[i] == ' ') {
+        if (console_string[i] == ' ' || console_string[i] == '\0') {
             functionName[i] = '\0';
             break;
         }
@@ -110,6 +111,10 @@ void KeyFunctionReturn(void) {
         }
     }
     
+    // Look up function name
+    if (passed == 0) 
+        passed = CommandFunctionLookup(parameters_begin);
+    
     // Check device is ready
     struct Partition part = fsDeviceOpen(0x00000);
     if (passed == 0 && part.block_size == 0) {
@@ -118,10 +123,6 @@ void KeyFunctionReturn(void) {
         printLn();
         passed = 1;
     }
-    
-    // Look up function name
-    if (passed == 0) 
-        passed = CommandFunctionLookup(parameters_begin);
     
     // Check file executable
     if (passed == 0 && console_string_length_old > 0) {
@@ -183,7 +184,6 @@ void KeyFunctionReturn(void) {
     ConsoleClearKeyboardString();
     
     console_string_length = 0;
-    return;
 }
 
 

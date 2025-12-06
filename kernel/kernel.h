@@ -53,7 +53,7 @@ void kInit(void);
 
 void KernelVectorTableInit(void);
 
-void SetInterruptVector(uint8_t index, void(*servicePtr)());
+void SetInterruptVectorCallback(uint8_t index, void(*callbackService)());
 
 void _ISR_hardware_service_routine(void);
 

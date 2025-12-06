@@ -15,7 +15,10 @@ void VirtualAccessSetMode(uint8_t mode);
 void VirtualWrite(uint32_t address, uint8_t* byte, uint32_t size);
 void VirtualRead(uint32_t address, uint8_t* byte, uint32_t size);
 
+// Set the virtual target to main memory.
 void VirtualBegin(void);
+
+// Set the virtual target back to the previous state.
 void VirtualEnd(void);
 
 #endif

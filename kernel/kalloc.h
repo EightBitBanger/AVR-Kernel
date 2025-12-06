@@ -10,5 +10,4 @@ uint32_t kAllocGetTotal(void);
 
 void AllocateExternalMemory(void);
 
-
 #endif

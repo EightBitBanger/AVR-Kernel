@@ -2,17 +2,14 @@
 
 extern struct Driver* displayDevice;
 
-
 union Resigner {
     uint8_t unsign;
     int8_t sign;
 };
 
-
 void swapBuffers(void) {
     __glBusyWait();
     displayDevice->write(0x0000F, 1); // Trigger a buffer swap
-    return;
 }
 
 int8_t glInit(uint8_t mode) {
@@ -24,7 +21,6 @@ int8_t glInit(uint8_t mode) {
 void glBufferSetSize(uint8_t size) {
     __glBusyWait();
     displayDevice->write(0x00008, size);
-    return;
 }
 
 void glUniformTranslate(float x, float y, float z) {
@@ -46,7 +42,6 @@ void glUniformTranslate(float x, float y, float z) {
     }
     
     displayDevice->write(0x00007, 0); // Reset to VRAM
-    return;
 }
 
 void glUniformRotation(float yaw, float pitch, float roll) {
@@ -70,7 +65,6 @@ void glUniformRotation(float yaw, float pitch, float roll) {
     }
     
     displayDevice->write(0x00007, 0); // Reset to VRAM
-    return;
 }
 
 void glUniformScale(float scale) {
@@ -87,13 +81,11 @@ void glUniformScale(float scale) {
     }
     
     displayDevice->write(0x00007, 0); // Reset to VRAM
-    return;
 }
 
 void glBegin(uint8_t primitive) {
     __glBusyWait();
     displayDevice->write(0x0000A, primitive); // Set primitive drawing type
-    return;
 }
 
 void glBufferData(int8_t* buffer, uint16_t size) {
@@ -110,7 +102,6 @@ void glBufferData(int8_t* buffer, uint16_t size) {
     
     displayDevice->write(0x00007, 0); // Back to VRAM
     displayDevice->write(0x00008, size / 10); // Set the buffer size
-    return;
 }
 
 void glDrawBuffer(uint8_t begin, uint8_t size) {
@@ -119,17 +110,14 @@ void glDrawBuffer(uint8_t begin, uint8_t size) {
     displayDevice->write(0x0000D, size);  // Number of bytes
     displayDevice->write(0x0000E, 1);     // Trigger the draw
     __glBusyWait();
-    return;
 }
 
 void glClear(uint8_t character) {
     __glBusyWait();
     displayDevice->write(0x00009, 1);
-    return;
 }
 
 
 void __glBusyWait(void) {
     DeviceBusyWait((struct Device*)displayDevice, 0x10);
-    return;
 };

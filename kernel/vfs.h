@@ -18,7 +18,6 @@ uint8_t vfsLookup(uint8_t* path, uint8_t pathLength);
 
 
 struct VirtualFileSystemInterface {
-    
     int32_t(*open)(uint8_t*, uint8_t);              // Open or create a file
     uint8_t(*close)(int32_t);                       // Close a file
     
@@ -28,7 +27,6 @@ struct VirtualFileSystemInterface {
     uint8_t(*chdir)(uint8_t*, uint8_t);             // Change directory
     uint8_t(*mkdir)(uint8_t*, uint8_t);             // Create directory
     uint8_t(*rmdir)(uint8_t*, uint8_t);             // Remove directory
-    
 };
 
 

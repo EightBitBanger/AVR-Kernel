@@ -73,17 +73,11 @@ void functionGRAPH(uint8_t* param, uint8_t param_length) {
     }
     
     glInit(0);
-    
-    return;
 }
 
 
 void registerCommandGRAPHICS(void) {
-    
     uint8_t graphCommandName[] = "graph";
-    
     ConsoleRegisterCommand(graphCommandName, sizeof(graphCommandName), functionGRAPH);
-    
-    return;
 }
 

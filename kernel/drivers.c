@@ -1,3 +1,5 @@
+// Statically baked-in kernel drivers
+
 #include <kernel/drivers.h>
 
 void InitBakedDrivers(void) {

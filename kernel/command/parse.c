@@ -1,7 +1,5 @@
 #include <avr/io.h>
-
 #include <kernel/delay.h>
-
 #include <kernel/command/cli.h>
 
 extern uint8_t console_string[CONSOLE_STRING_LENGTH];
@@ -63,7 +61,6 @@ uint8_t* ConsoleGetParameter(uint8_t index, uint8_t delimiter) {
         }
         
     }
-    
     return 0;
 }
 

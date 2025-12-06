@@ -40,7 +40,6 @@
 
 
 struct ProcessDescription {
-	
 	// Process name
 	uint8_t  name[TASK_NAME_LENGTH_MAX];
 	
@@ -63,9 +62,7 @@ struct ProcessDescription {
     
 	// Pointer to the entry point of the task program
 	void (*function)(uint8_t);
-	
 };
-
 
 int32_t TaskCreate(uint8_t* name, uint8_t name_length, void(*task_ptr)(uint8_t), uint8_t priority, uint8_t privilege, uint8_t type);
 
@@ -80,7 +77,6 @@ uint32_t FindNextAvailableMemoryRange(void);
 
 void SchedulerStart(void);
 void SchedulerStop(void);
-
 
 void _ISR_SCHEDULER_MAIN__(void);
 void _ISR_SCHEDULER_TIMER__(void);

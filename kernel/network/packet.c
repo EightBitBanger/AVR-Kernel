@@ -9,7 +9,6 @@
 extern struct Driver* networkDevice;
 
 uint8_t ntPacketSend(struct NetworkPacket* packet) {
-    
     // Start byte to indicate the beginning of a packet
     ntSend(&packet->start, 1);
     
@@ -25,12 +24,10 @@ uint8_t ntPacketSend(struct NetworkPacket* packet) {
     
     // Stop byte to indicate the packet is complete
     ntSend(&packet->stop, 1);
-    
     return 1;
 }
 
 uint8_t ntPacketReceive(struct NetworkPacket* packet, uint8_t clearOldPacket) {
-    
     uint8_t buffer[80];
     
     for (uint8_t i=0; i < 80; i++) 
@@ -67,26 +64,18 @@ uint8_t ntPacketReceive(struct NetworkPacket* packet, uint8_t clearOldPacket) {
                         networkDevice->write( 0x10 + i + c, 0x00);
                     
                 }
-                
                 return 1;
             }
-            
         }
-        
     }
-    
     return 0;
 }
 
 uint8_t ntPacketClearAll(void) {
-    
     uint8_t receiveBufferSz = 0;
-    
     for (uint8_t i=0; i < 200; i++) 
         networkDevice->write( 0x10 + i, 0x00);
-    
     networkDevice->write( 0x0b, receiveBufferSz);
-    
     return 1;
 }
 

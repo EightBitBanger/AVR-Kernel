@@ -3,7 +3,6 @@
 void fs_write_byte(uint32_t address, uint8_t data);
 void fs_read_byte(uint32_t address, uint8_t* data);
 
-
 void fsParsePath(struct Partition part, uint8_t* path) {
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
     
@@ -17,7 +16,6 @@ void fsParsePath(struct Partition part, uint8_t* path) {
         
         token = strtok(NULL, delimiter);
     }
-    return;
 }
 
 
@@ -80,5 +78,4 @@ void fsFree(struct Partition part, uint32_t address) {
     // Mark sectors as free
     for (uint32_t i=0; i < numberOfSectors; i++) 
         fs_write_byte(part.block_address + address + (i * part.sector_size), SECTOR_FREE);
-    return;
 }

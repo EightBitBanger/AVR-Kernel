@@ -12,7 +12,9 @@ void (*_timer_comp_a_ptr__)() = dummyFunction;
 void (*_timer_comp_b_ptr__)() = dummyFunction;
 void (*_timer_comp_c_ptr__)() = dummyFunction;
 
-void (*_external_int_ptr__)() = dummyFunction;
+void (*_external_int_a_ptr__)() = dummyFunction;
+void (*_external_int_b_ptr__)() = dummyFunction;
+void (*_external_int_c_ptr__)() = dummyFunction;
 
 
 void DisableGlobalInterrupts(void) {
@@ -56,41 +58,36 @@ void InterruptStopHardware(void) {
 }
 
 
-
 //
 // Interrupts
 //
 
 uint8_t SetInterruptService(uint8_t index, void (*service_ptr)()) {
     switch (index) {
-    case 0: _timer_comp_a_ptr__ = service_ptr;
-    case 1: _timer_comp_b_ptr__ = service_ptr;
-    case 2: _timer_comp_c_ptr__ = service_ptr;
+    case 0: _timer_comp_a_ptr__ = service_ptr; break;
+    case 1: _timer_comp_b_ptr__ = service_ptr; break;
+    case 2: _timer_comp_c_ptr__ = service_ptr; break;
     }
-    return 1;
+    return 0;
 }
 
-uint8_t SetHardwareInterruptService(void (*service_ptr)()) {
-    _external_int_ptr__ = service_ptr;
-    return 1;
+uint8_t SetHardwareInterruptService(uint8_t index, void (*service_ptr)()) {
+    switch (index) {
+    case 0: _external_int_a_ptr__ = service_ptr; return 1;
+    case 1: _external_int_b_ptr__ = service_ptr; return 2;
+    case 2: _external_int_c_ptr__ = service_ptr; return 3;
+    }
+    return 0;
 }
 
 //
 // Interrupt service routines
 //
 
-ISR (TIMER0_COMPA_vect) {
-    _timer_comp_a_ptr__();
-}
+ISR (TIMER0_COMPA_vect) {_timer_comp_a_ptr__();}
+ISR (TIMER1_COMPA_vect) {_timer_comp_b_ptr__();}
+ISR (TIMER2_COMPA_vect) {_timer_comp_c_ptr__();}
 
-ISR (TIMER1_COMPA_vect) {
-    _timer_comp_b_ptr__();
-}
-
-ISR (TIMER2_COMPA_vect) {
-    _timer_comp_c_ptr__();
-}
-
-ISR (INT2_vect) {
-    _external_int_ptr__();
-}
+ISR (INT0_vect) {_external_int_a_ptr__();}
+ISR (INT1_vect) {_external_int_b_ptr__();}
+ISR (INT2_vect) {_external_int_c_ptr__();}

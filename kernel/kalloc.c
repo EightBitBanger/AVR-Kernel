@@ -3,12 +3,10 @@
 uint32_t totalAllocatedMemory = 0;
 
 uint32_t kAllocGetTotal(void) {
-    
     return totalAllocatedMemory;
 }
 
 void AllocateExternalMemory(void) {
-    
     ConsoleCursorDisable();
     
     uint8_t totalString[10];
@@ -42,12 +40,10 @@ void AllocateExternalMemory(void) {
         
         counter = 0;
         
-        place = int_to_string(address + 1, totalString);
+        place = int_to_string(address + 1, totalString) + 1;
         
         ConsoleSetCursor(0, 0);
-        print(totalString, 10);
-        printLn();
-        ConsoleSetCursor(0, place);
+        print(totalString, place);
     }
     
     totalAllocatedMemory = address + 1;
@@ -61,8 +57,6 @@ void AllocateExternalMemory(void) {
     print(byteFreeString, sizeof(byteFreeString));
     
     printLn();
-    
-    return;
 }
 
 
