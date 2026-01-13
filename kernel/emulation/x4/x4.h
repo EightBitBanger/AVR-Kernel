@@ -1,7 +1,7 @@
 #ifndef _EMULATOR_X4__
 #define _EMULATOR_X4__
 
-#define MAX_PROGRAM_SIZE  256
+#define MAX_PROGRAM_SIZE  512
 
 // Opcodes
 

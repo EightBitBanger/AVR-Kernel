@@ -1,27 +1,26 @@
 #ifndef __KERNEL_INTERRUPT_
 #define __KERNEL_INTERRUPT_
 
-// Timers / counters
+#include <stdint.h>
 
+// Timer / Scheduler Controls
 void InterruptStartTimeCounter(void);
 void InterruptStartScheduler(void);
 void InterruptStartHardware(void);
 
-void InterruptStopTimerCounter(void);
+void InterruptStopTimeCounter(void);
 void InterruptStopScheduler(void);
 void InterruptStopHardware(void);
 
-// Global interrupts
-
+// Global Interrupts
 void EnableGlobalInterrupts(void);
 void DisableGlobalInterrupts(void);
 
-// Interrupt service routines
+// ISR Handler Registration
+void SetTimerInterruptService(void (*service_ptr)(void));
+void SetSchedulerInterruptService(void (*service_ptr)(void));
 
-uint8_t SetInterruptService(uint8_t index, void(*service_ptr)());
-
-// Hardware interrupt service routines
-
-uint8_t SetHardwareInterruptService(uint8_t index, void(*service_ptr)());
+// Set the callback function for the hardware interrupt
+void SetHardwareInterruptService(void (*service_ptr)(void));
 
 #endif

@@ -41,8 +41,6 @@ void KeyFunctionPrintChar(uint8_t scanCode);
 
 
 uint8_t cliRunShell(void) {
-    
-    // Check the current scan code
     uint8_t scanCode = ConsoleGetLastChar();
     
     if (scanCode == 0) 
@@ -53,14 +51,11 @@ uint8_t cliRunShell(void) {
     if (scanCode == 0x12) shiftState = 0;
     
     if (scanCode < 0x20) {
-        
         if (scanCode == 0x01) {KeyFunctionBackspace();}
         if (scanCode == 0x02) {KeyFunctionReturn();}
         
     } else {
-        
         KeyFunctionPrintChar(scanCode);
-        
     }
     
     return 1;

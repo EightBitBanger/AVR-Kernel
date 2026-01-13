@@ -1,6 +1,8 @@
 #ifndef __BUS_INTERFACE_
 #define __BUS_INTERFACE_
 
+#include <stdint.h>
+
 struct Bus {
     /// Number of wait cycles to perform during the read operation
     uint16_t read_waitstate;

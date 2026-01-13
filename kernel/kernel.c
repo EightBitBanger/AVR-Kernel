@@ -1,5 +1,4 @@
 #include <kernel/kernel.h>
-
 #include <kernel/delay.h>
 
 #define HARDWARE_INTERRUPT_VECTOR       0x00000
@@ -7,9 +6,12 @@
 
 void (*hardware_interrupt_table[HARDWARE_INTERRUPT_TABLE_SIZE])();
 
+void nullfunction(void) {}
+
 struct Bus isr_bus;
 
-uint32_t dirProcAddress;
+uint32_t devDirectoryHandle  = 0;
+uint32_t procDirectoryHandle = 0;
 
 struct VirtualFileSystemInterface vfs;
 
@@ -28,15 +30,16 @@ void kInit(void) {
     struct Partition part = fsDeviceOpen(0x00000);
     fsDeviceFormat(&part, 0, 32768, 32, FS_DEVICE_TYPE_MEMORY, (uint8_t*)"master");
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
+    uint32_t deviceSize = fsDeviceGetSize(part);
     
     fsWorkingDirectorySetRoot(part, rootDirectory);
     
     uint8_t devDirectoryName[] = "dev";
-    DirectoryHandle devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
+    devDirectoryHandle = fsDirectoryCreate(part, devDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, devDirectoryHandle);
     
     uint8_t procDirectoryName[] = "proc";
-    DirectoryHandle procDirectoryHandle = fsDirectoryCreate(part, procDirectoryName);
+    procDirectoryHandle = fsDirectoryCreate(part, procDirectoryName);
     fsDirectoryAddFile(part, rootDirectory, procDirectoryHandle);
     
     // List devices on the bus
@@ -72,6 +75,9 @@ void kInit(void) {
         
         // Initiate file
         uint32_t fileSize = fsFileGetSize(part, fileHandle);
+        if (fileSize >= deviceSize) 
+            continue;
+        
         uint8_t fileBuffer[fileSize];
         for (unsigned int i=0; i < fileSize; i++) 
             fileBuffer[i] = ' ';
@@ -89,7 +95,7 @@ void kInit(void) {
         fileBuffer[7] = 'o';
         fileBuffer[8] = 't';
         fileBuffer[9] = '=';
-        fileBuffer[10] = devPtr->hardware_slot + '1';
+        fileBuffer[10] = devPtr->hardware_slot + '0';
         fileBuffer[11] = '\n';
         
         // Address
@@ -104,11 +110,11 @@ void kInit(void) {
         continue;
     }
     
-    
     // Find an active storage device on the bus
     fsDeviceSetCurrent( 0x00000 );
     struct Partition devicePart;
     devicePart.block_address=0;
+    devicePart.block_size=0;
     
     for (uint8_t index=0; index < NUMBER_OF_PERIPHERALS; index++) {
         // Get the root directory from the storage device
@@ -156,6 +162,12 @@ void kInit(void) {
         
         // Get file size
         uint32_t fileSize = fsFileGetSize(devicePart, handle);
+        if (fileSize >= deviceSize) 
+            continue;
+        
+        uint8_t filename[FILE_NAME_LENGTH];
+        fsFileGetName(devicePart, handle, filename);
+        
         uint8_t driverBuffer[fileSize];
         
         // Load the file
@@ -171,42 +183,34 @@ void kInit(void) {
                 continue;
             uint8_t nameLength=0;
             for (unsigned int i=0; i < DEVICE_NAME_LEN; i++) {
-                nameLength = i;
+                nameLength = i+1;
                 if (devicePtr->device_name[i] == ' ') 
                     break;
             }
             
+#ifdef _BOOT_DETAILS__
+            
             // Check device name match
-            if (StringCompare(devicePtr->device_name, nameLength, &driverBuffer[2], nameLength) == 0) {
+            if (StringCompare(devicePtr->device_name, nameLength-2, &driverBuffer[2], nameLength-2) == 0) {
                 print(&driverBuffer[2], nameLength);
                 printLn();
                 
                 // Load the driver into the kernel
-                int8_t libState = LoadLibrary(devicePart, directoryAddress, devicePtr->device_name);
+                int8_t libState = LoadLibrary(devicePart, directoryAddress, filename);
                 
                 // Driver was not loaded correctly or is corrupted
-                if (libState >= 0) {
-                    
+                if (libState < 0) {
+                    uint8_t driverError[] = "Error loading driver";
+                    print(driverError, sizeof(driverError));
+                    printLn();
+                    break;
                 }
                 
             }
             
-        }
-        
-        
-#ifdef _BOOT_DETAILS__
-        /*
-        // Load the driver into the kernel
-        int8_t libState = LoadLibrary(devicePart, directoryAddress, &driverBuffer[2]);
-        
-        // Driver was not loaded correctly or is corrupted
-        if (libState >= 0 || libState == -32) {
-            // Driver loaded successfully
-            print(&driverBuffer[2], DEVICE_NAME_LEN);
-            printLn();
-        }
-        */
 #endif
+            
+        }
         
     }
 #endif
@@ -235,16 +239,11 @@ void _ISR_hardware_service_routine(void) {
     while (mask != 0) {
         // Get the least-significant set bit index
         uint8_t bit = __builtin_ctz(mask);
-        uint8_t index = 7 - bit;
+        hardware_interrupt_table[bit]();
         
-        hardware_interrupt_table[index]();
-        
-        // Clear the bit
+        // clear it
         mask &= (uint8_t)(mask - 1);
     }
     
     MutexUnlock(&isr_mux);
 }
-
-
-void nullfunction(void) {}

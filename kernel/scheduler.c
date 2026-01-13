@@ -13,27 +13,22 @@ volatile uint64_t system_timer_ms = 0;
 
 uint8_t schedulerIsActive = 0;
 
-extern uint32_t dirProcAddress; // Process directory address 
-extern uint32_t procSuperBlock; // Super block address
+extern uint32_t procDirectoryHandle;        // Process directory address 
+extern uint32_t procSuperBlock;             // Super block address
 
-extern uint32_t __virtual_address_begin__; // Global range
+extern uint32_t __virtual_address_begin__;  // Global memory access range
 extern uint32_t __virtual_address_end__;
 
-extern uint32_t __heap_begin__; // Process specific heap range
+extern uint32_t __heap_begin__;             // Process specific heap range
 extern uint32_t __heap_end__;
 
 
-int32_t TaskCreate(uint8_t* name, uint8_t name_length, void(*task_ptr)(uint8_t), uint8_t priority, uint8_t privilege, uint8_t type) {
-    /*
-    // Find an available memory range
+int32_t TaskCreate(uint8_t* name, void(*task_ptr)(uint8_t), uint8_t priority, uint8_t privilege, uint8_t type) {
     uint32_t nextMemoryRange = FindNextAvailableMemoryRange();
-    
-    // No available memory range found
     if (nextMemoryRange == 0) 
         return -1;
-    
-    if (name_length > TASK_NAME_LENGTH_MAX)
-        name_length = TASK_NAME_LENGTH_MAX;
+    if (name[0] == '\0') 
+        return -1;
     
     struct ProcessDescription* newProcPtr = (struct ProcessDescription*)malloc(sizeof(struct ProcessDescription));
     if (newProcPtr == NULL) 
@@ -41,13 +36,15 @@ int32_t TaskCreate(uint8_t* name, uint8_t name_length, void(*task_ptr)(uint8_t),
     
     ListAddNode(&ProcessNodeTable, newProcPtr);
     
-    // Set process name
-    for (uint8_t i = 0; i < TASK_NAME_LENGTH_MAX; i++)
+    for (uint8_t i = 0; i < TASK_NAME_LENGTH_MAX; i++) 
         newProcPtr->name[i] = ' ';
-    for (uint8_t i = 0; i < name_length; i++)
-        newProcPtr->name[i] = name[i];
     
-    // Process parameters
+    for (uint8_t i = 0; i < TASK_NAME_LENGTH_MAX; i++) {
+        newProcPtr->name[i] = name[i];
+        if (name[i] == '\0') 
+            break;
+    }
+    
     newProcPtr->type = type;
     newProcPtr->privilege = privilege;
     newProcPtr->priority = priority;
@@ -65,21 +62,31 @@ int32_t TaskCreate(uint8_t* name, uint8_t name_length, void(*task_ptr)(uint8_t),
 	VirtualAccessSetMode( VIRTUAL_ACCESS_MODE_USER );
 	VirtualBegin();
     
-    newProcPtr->block = fsDirectoryCreate(name, name_length);
-    fsDirectoryAddFile(dirProcAddress, newProcPtr->block);
+    struct Partition part = fsDeviceOpen(0x00000);
     
-    //struct FSAttribute attrProcFile = { 's', 'r', ' ', ' ' };
-    //fsFileSetAttributes(newProcPtr->block, &attrProcFile);
+    uint32_t procBlock = fsDirectoryCreate(part, name);
+    if (procBlock == 0) {
+        ListRemoveNode(&ProcessNodeTable, newProcPtr);
+        free(newProcPtr);
+        
+        VirtualEnd();
+        VirtualAccessSetMode( VIRTUAL_ACCESS_MODE_KERNEL );
+        return -1;
+    }
+    
+    newProcPtr->block = procBlock;
+    fsDirectoryAddFile(part, procDirectoryHandle, procBlock);
+    
+    uint8_t attributes[] = {'s','r',' ','d'};
+    fsFileSetAttributes(part, newProcPtr->block, attributes);
     
     VirtualEnd();
     VirtualAccessSetMode( VIRTUAL_ACCESS_MODE_KERNEL );
-	*/
-    return 1;
+	return 0;
 }
 
 
 uint8_t TaskDestroy(int32_t index) {
-	/*
 	uint32_t listSz = ListGetSize(ProcessNodeTable);
 	
 	if (index >= listSz) 
@@ -94,46 +101,46 @@ uint8_t TaskDestroy(int32_t index) {
 	VirtualAccessSetMode( VIRTUAL_ACCESS_MODE_USER );
 	VirtualBegin();
     
-    fsDirectoryRemoveFile(dirProcAddress, proc_desc->block);
+    struct Partition part = fsDeviceOpen(0x00000);
+    
+    fsDirectoryRemoveFile(part, procDirectoryHandle, proc_desc->block);
+	fsDirectoryDelete(part, proc_desc->block);
 	
     VirtualEnd();
     VirtualAccessSetMode( VIRTUAL_ACCESS_MODE_KERNEL );
 	
-	// Free the process descriptor
 	free(proc_desc);
-	*/
-	return 1;
+	return 0;
 }
 
-int32_t TaskFind(uint8_t* name, uint8_t name_length) {
-	/*
-	if (name_length > TASK_NAME_LENGTH_MAX)
-        name_length = TASK_NAME_LENGTH_MAX;
-	
+int32_t TaskFind(uint8_t* name) {
 	int32_t index = -1;
-	
 	uint32_t numberOfTasks = ListGetSize(ProcessNodeTable);
+	
+	uint32_t length = strlen((char*)name);
+	
 	for (uint32_t i=0; i < numberOfTasks; i++) {
         
         struct Node* nodePtr = ListGetNode(ProcessNodeTable, i);
         struct ProcessDescription* proc = nodePtr->data;
         
         // Check task name
-        if (StringCompare(name, name_length, proc->name, FILE_NAME_LENGTH) > 0) 
+        if (StringCompare(name, length, proc->name, FILE_NAME_LENGTH) > 0) 
             continue;
         
         index = i;
         break;
 	}
 	return index;
-    */
-    return 0;
 }
 
 
-struct ProcessDescription* GetProcInfo(int32_t index) {
+int8_t GetProcInfo(int32_t index, struct ProcessDescription* procDesc) {
 	struct Node* nodePtr = ListGetNode(ProcessNodeTable, index);
-	return (struct ProcessDescription*)nodePtr->data;
+	if (nodePtr == NULL) 
+        return -1;
+	procDesc = (struct ProcessDescription*)nodePtr->data;
+	return 0;
 }
 
 uint32_t FindNextAvailableMemoryRange(void) {
@@ -171,8 +178,8 @@ void SchedulerStart(void) {
     schedulerIsActive = 1;
 	
 	// Set the ISRs
-	SetInterruptService(0, _ISR_SCHEDULER_TIMER__);
-    SetInterruptService(1, _ISR_SCHEDULER_MAIN__);
+	SetTimerInterruptService(_ISR_SCHEDULER_TIMER__);
+    SetSchedulerInterruptService(_ISR_SCHEDULER_MAIN__);
 }
 
 
@@ -187,22 +194,18 @@ void SchedulerStop(void) {
 //
 // Scheduler entry point
 
-volatile uint32_t procIndex=0; 
-
+volatile uint32_t procIndex=0;
 volatile uint8_t flagProcActive = 0;
-
 volatile struct ProcessDescription* proc_info;
 
 struct Mutex mux = {0};
 
 
 void _ISR_SCHEDULER_MAIN__(void) {
-    // Check no tasks running
     uint32_t numberOfTasks = ListGetSize(ProcessNodeTable);
     if (numberOfTasks == 0) 
         return;
     
-    // Lock the mutex
     if (MutexLock(&mux) == 1) 
         return;
     
@@ -264,9 +267,7 @@ void _ISR_SCHEDULER_MAIN__(void) {
     
     // Process task type
     switch (proc_info->type) {
-        
         case TASK_TYPE_VOLATILE: {
-            
             TaskDestroy(procIndex);
             procIndex = 0;
         }
@@ -281,7 +282,6 @@ void _ISR_SCHEDULER_MAIN__(void) {
     
     VirtualAccessSetMode(currentMode);
     
-    // Release the mutex
     MutexUnlock(&mux);
 }
 

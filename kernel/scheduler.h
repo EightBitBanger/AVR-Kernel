@@ -64,13 +64,13 @@ struct ProcessDescription {
 	void (*function)(uint8_t);
 };
 
-int32_t TaskCreate(uint8_t* name, uint8_t name_length, void(*task_ptr)(uint8_t), uint8_t priority, uint8_t privilege, uint8_t type);
+int32_t TaskCreate(uint8_t* name, void(*task_ptr)(uint8_t), uint8_t priority, uint8_t privilege, uint8_t type);
 
 uint8_t TaskDestroy(int32_t index);
 
-int32_t TaskFind(uint8_t* name, uint8_t name_length);
+int32_t TaskFind(uint8_t* name);
 
-struct ProcessDescription* GetProcInfo(int32_t index);
+int8_t GetProcInfo(int32_t index, struct ProcessDescription* procDesc);
 
 uint32_t FindNextAvailableMemoryRange(void);
 

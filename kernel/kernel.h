@@ -22,6 +22,7 @@
 #include <kernel/driver/driver.h>
 
 #include <kernel/command/cli.h>
+#include <kernel/command/command.h>
 
 #include <kernel/drivers.h>
 

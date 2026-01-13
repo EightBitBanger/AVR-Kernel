@@ -7,24 +7,7 @@
 
 
 void functionTASK(uint8_t* param, uint8_t param_length) {
-    
-    uint8_t msgTaskFound[]     = "Task stopped";
-    uint8_t msgTaskNotFound[]  = "Task not found";
-    
-    int32_t taskIndex = TaskFind(param, param_length);
-    
-    if (TaskDestroy(taskIndex) == 0) {
-        print(msgTaskNotFound, sizeof(msgTaskNotFound));
-        printLn();
-        return;
-    }
-    
-    print(msgTaskFound, sizeof(msgTaskFound));
-    printLn();
-    
-    
     /*
-    
     uint8_t msgTaskFound[]     = "Task stopped";
     uint8_t msgTaskNotFound[]  = "Task not found";
     
@@ -33,12 +16,11 @@ void functionTASK(uint8_t* param, uint8_t param_length) {
     // List tasks
     if ((param[0] == ' ') & (param[1] == ' ')) {
         
-        struct ProcessDescription proc_desc;
-        
-        
         for (uint8_t i=0; i < TASK_LIST_SIZE; i++) {
             
-            if (GetProcInfo(i, &proc_desc) == 0) 
+            struct ProcessDescription proc_desc* = GetProcInfo(i);
+            
+            if ( == 0) 
                 continue;
             
             if (proc_desc.block == 0) 
@@ -113,14 +95,9 @@ void functionTASK(uint8_t* param, uint8_t param_length) {
         return;
     }
     */
-    return;
 }
 
 void registerCommandTASK(void) {
-    
-    uint8_t taskCommandName[] = "stop";
-    
+    uint8_t taskCommandName[] = "task";
     ConsoleRegisterCommand(taskCommandName, sizeof(taskCommandName), functionTASK);
-    
-    return;
 }

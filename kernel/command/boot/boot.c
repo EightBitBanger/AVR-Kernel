@@ -24,13 +24,12 @@ void functionBoot(uint8_t* param, uint8_t param_length) {
         struct Partition slave = fsDeviceOpen(0x00000);
         fsDeviceFormat(&slave, 0, 32 * 20, 32, FS_DEVICE_TYPE_EEPROM, (uint8_t*)"ssd");
         
-        //DirectoryHandle slaveRootHandle = fsDeviceGetRootDirectory(slave);
+        DirectoryHandle slaveRootHandle = fsDeviceGetRootDirectory(slave);
+        
+        fsWorkingDirectorySetRoot(slave, slaveRootHandle);
         
         fsDeviceSetType(FS_DEVICE_TYPE_MEMORY);
-        fsDeviceSetCurrent(0x00000);
-        
     }
-    
     
     if ((param[0] == '-') & 
         (param[1] == 'b') & 
@@ -94,8 +93,6 @@ void registerCommandBoot(void) {
     ConsoleRegisterCommand(bootCommandName, sizeof(bootCommandName), functionBoot);
 }
 
-
-
 void dropFile(uint8_t* filename, uint8_t* destName, uint8_t* data, uint32_t size, uint8_t attribute) {
     struct Partition part = fsDeviceOpen(0x00000);
     DirectoryHandle rootDirectory = fsDeviceGetRootDirectory(part);
@@ -118,6 +115,7 @@ void dropFile(uint8_t* filename, uint8_t* destName, uint8_t* data, uint32_t size
 void DropFileSystemFunc(void) {
     uint8_t dirNameBin[] = "bin";
     
+    /*
     {
     uint8_t program[] = {
         0x89, 0x01, 0x09, 0x83, 0x06, 0x0D, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x20, 0x30, 0x2E, 0x31, 0x2E, 0x30, 0x00 
@@ -173,7 +171,7 @@ void DropFileSystemFunc(void) {
     };
     dropFile((uint8_t*)"mk", (uint8_t*)dirNameBin, program, sizeof(program), 'x');
     }
-    
+    */
     {
     uint8_t program[] = {
         0x89, 0x01, 0x39, 0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x25, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x41, 0x00, 0x00, 0x00, 0x38, 0x02, 0x02, 
@@ -185,7 +183,7 @@ void DropFileSystemFunc(void) {
     };
     dropFile((uint8_t*)"mkdir", (uint8_t*)dirNameBin, program, sizeof(program), 'x');
     }
-    
+    /*
     {
     uint8_t program[] = {
         0x89, 0x01, 0x41, 0xCD, 0x13, 0x38, 0x02, 0x00, 0x74, 0x2F, 0x00, 0x00, 0x00, 0x38, 0x02, 0x01, 0x74, 0x3E, 0x00, 0x00, 0x00, 0x89, 0x01, 0x3A, 
@@ -197,6 +195,7 @@ void DropFileSystemFunc(void) {
     };
     dropFile((uint8_t*)"rm", (uint8_t*)dirNameBin, program, sizeof(program), 'x');
     }
+    */
     
 }
 

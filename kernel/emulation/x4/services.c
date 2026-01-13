@@ -141,7 +141,6 @@ void ISC_FileSystemRoutine(void) {
             reg[rBL] = 2;
             return;
         }
-        
         fsDirectoryRemoveFile(part, currentDirectory, handle);
         fsFileDelete(part, handle);
         

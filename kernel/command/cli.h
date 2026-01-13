@@ -33,6 +33,7 @@ void ConsoleCursorDisable(void);
 void ConsoleSetCursorPosition(uint8_t position);
 void ConsoleSetBlinkRate(uint8_t rate);
 void ConsoleSetPrompt(uint8_t* prompt, uint8_t length);
+uint8_t ConsoleGetPromptLength(void);
 void ConsoleClearScreen(uint8_t clearToCharacter);
 
 uint8_t ConsoleGetCursorPosition(void);

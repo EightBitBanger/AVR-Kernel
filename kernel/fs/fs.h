@@ -62,6 +62,7 @@ uint32_t fsMountGetNumberOfPoints(uint8_t letter);
 struct MountPoint* fsMountGetMountPointByIndex(uint16_t index);
 
 // Partition
+uint8_t fsDeviceCheck(struct Partition part);
 
 uint32_t fsDeviceGetBase(void);
 void fsDeviceSetBase(uint32_t address);

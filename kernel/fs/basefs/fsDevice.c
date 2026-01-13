@@ -6,8 +6,8 @@ const uint8_t DeviceHeaderString[] = {0x13, 'f','s',' ',' ',' ',' ',' ',' ',' ',
 
 struct Bus fs_bus;
 
-uint32_t current_partition;
-uint32_t base_address;
+volatile uint32_t current_partition;
+volatile uint32_t base_address;
 
 extern uint32_t device_home_address;
 
@@ -48,6 +48,16 @@ void fsInit(void) {
     fsReadSectorByte = bus_read_memory;
     
     device_home_address = 0;
+}
+
+uint8_t fsDeviceCheck(struct Partition part) {
+    uint8_t readByte[32];
+    for (uint8_t i=0; i < 32; i++) 
+        fs_read_byte(part.block_address + i, &readByte[i]);
+    
+    if (readByte[0] == 0x13 && readByte[1] == 'f' && readByte[2] == 's') 
+        return 1;
+    return 0;
 }
 
 struct Partition fsDeviceOpen(uint32_t device_address) {

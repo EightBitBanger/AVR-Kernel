@@ -1,6 +1,36 @@
 #include <avr/io.h>
 #include <kernel/command/cli.h>
 
+#include <kernel/command/command.h>
+
+void RegisterCommands() {
+    registerCommandLS();
+    registerCommandCD();
+    
+    //registerCommandTest();
+    
+    //registerCommandEDIT();
+    //registerCommandASM();
+    
+    //registerCommandMK();
+    
+    //registerCommandType();
+    //registerCommandList();
+    //registerCommandRM();
+    //registerCommandTASK();
+    
+    //registerCommandGRAPHICS();
+    
+    //registerCommandRN();
+    //registerCommandCOPY();
+    
+    //registerCommandNet();
+    
+    //registerCommandFormat();
+    //registerCommandBoot();
+}
+
+
 extern uint32_t fs_working_directory_address;
 
 extern uint16_t display_width;
@@ -70,7 +100,7 @@ void KeyFunctionReturn(void) {
     }
     
     // Separate the function name
-    uint8_t functionName[FILE_NAME_LENGTH];
+    uint8_t functionName[console_string_length];
     for (uint8_t i=0; i <= console_string_length; i++) 
         functionName[i] = ' ';
     for (uint8_t i=0; i <= console_string_length; i++) {
@@ -105,7 +135,7 @@ void KeyFunctionReturn(void) {
                 struct Partition part = fsDeviceOpen(0x00000);
                 fsWorkingDirectorySetRoot(part, fsDeviceGetRootDirectory(part));
             }
-            ConsoleSetCursorPosition(2);
+            ConsoleSetCursorPosition(ConsoleGetPromptLength());
             console_string_length = 0;
             passed = 1;
         }

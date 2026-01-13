@@ -136,6 +136,7 @@ void VirtualBegin(void) {
     }
     currentDevice = 'x';
     currentBase = fsDeviceGetBase();
+    fsDeviceSetBase(0);
 }
 
 void VirtualEnd(void) {

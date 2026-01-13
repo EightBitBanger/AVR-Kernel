@@ -1,19 +1,11 @@
-#include <kernel/main.h>
+#include <avr/io.h>
+#include <stdlib.h>
+
+#include <kernel/delay.h>
+#include <kernel/kernel.h>
 
 void _ISR_shell_service(void) {
-    //_delay_ms(90);
-    
-    //MutexLock(&isr_mux);
-    
-    //uint8_t msgTest[] = "A";
-    //print(msgTest, sizeof(msgTest));
-    //printSpace(1);
-    //printLn();
-    
-    //MutexUnlock(&isr_mux);
-    
     cliRunShell();
-    
 }
 
 int main(void) {
@@ -46,32 +38,7 @@ int main(void) {
     kInit();          // Kernel environment
     
     // Console command functions
-    
-    registerCommandLS();
-    registerCommandCD();
-    
-    //registerCommandTest();
-    
-    //registerCommandEDIT();
-    //registerCommandASM();
-    
-    //registerCommandMK();
-    
-    //registerCommandType();
-    //registerCommandList();
-    //registerCommandRM();
-    //registerCommandTASK();
-    
-    //registerCommandGRAPHICS();
-    
-    //registerCommandRN();
-    //registerCommandCOPY();
-    
-    //registerCommandNet();
-    
-    //registerCommandFormat();
-    //registerCommandBoot();
-    
+    RegisterCommands();
     
     // Boot the kernel
     
@@ -82,7 +49,7 @@ int main(void) {
     printPrompt();
     
     // Set master interrupt callback
-    SetHardwareInterruptService(2, &cliRunShell);
+    SetHardwareInterruptService((void(*)())cliRunShell);
     
     // Enable hardware interrupt handling
     //  Trigger on the HIGH to LOW transition of PIN2
@@ -90,20 +57,20 @@ int main(void) {
     
     // Prepare the scheduler and its 
     // associated hardware interrupts
-    //SchedulerStart();
+    SchedulerStart();
     
-    //InterruptStartScheduler();
-    //InterruptStartTimeCounter();
+    InterruptStartScheduler();
+    InterruptStartTimeCounter();
     
     EnableGlobalInterrupts();
 	
     while(1) {}
     
     //InterruptStopTimerCounter();
-    //InterruptStopScheduler();
-    //InterruptStopHardware();
+    InterruptStopScheduler();
+    InterruptStopHardware();
     
-    //SchedulerStop();
+    SchedulerStop();
     
     return 0;
 }

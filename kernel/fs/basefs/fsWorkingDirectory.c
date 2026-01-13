@@ -1,13 +1,13 @@
+#include <kernel/bus/bus.h>
 #include <kernel/fs/fs.h>
 
 #define MAX_DIRECTORY_DEPTH  8
 
-uint8_t current_directory_index;
-DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
-uint32_t fs_working_device[MAX_DIRECTORY_DEPTH];
+volatile uint8_t current_directory_index;
+volatile DirectoryHandle fs_working_directory[MAX_DIRECTORY_DEPTH];
+volatile uint32_t fs_working_device[MAX_DIRECTORY_DEPTH];
 
-uint32_t device_home_address;
-
+volatile uint32_t device_home_address;
 
 void fsWorkingDirectorySetRoot(struct Partition part, DirectoryHandle handle) {
     fs_working_directory[0] = handle;

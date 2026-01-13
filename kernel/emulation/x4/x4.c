@@ -15,23 +15,23 @@ extern uint32_t __heap_end__;
 
 // Program memory segment
 uint8_t programBuffer[MAX_PROGRAM_SIZE];
-uint32_t programSize;
+volatile uint32_t programSize;
 
 // Parameters from the console
 uint8_t param_string[32];
-uint32_t param_length;
+volatile uint32_t param_length=0;
 
 uint8_t reg[8];          // Registers
-uint8_t stack[100];      // Temporary stack implementation
+volatile uint8_t stack[100];      // Temporary stack implementation
 
 // Counters
-uint32_t pc = 0;         // Program counter
-uint32_t pcRet  = 0;     // Where to return from a call
-uint32_t stack_ptr = 0;
+volatile uint32_t pc = 0;         // Program counter
+volatile uint32_t pcRet  = 0;     // Where to return from a call
+volatile uint32_t stack_ptr = 0;
 // Flags
-uint8_t flag_compare = 0;
-uint8_t flag_greater = 0;
-uint8_t flag_consoleDirty = 1;
+volatile uint8_t flag_compare = 0;
+volatile uint8_t flag_greater = 0;
+volatile uint8_t flag_consoleDirty = 1;
 
 // Interrupt service callbacks
 void ISC_DisplayRoutine(void);
@@ -39,6 +39,7 @@ void ISC_NetworkRoutine(void);
 void ISC_FileSystemRoutine(void);
 void ISC_OperatingSystem(void);
 
+// Intermittent crash reset: Non of these messages appeared before crash, it happened earlier.
 
 void EmulatorSetProgram(uint8_t* buffer, uint32_t size) {
     memcpy(programBuffer, buffer, size);
@@ -72,7 +73,7 @@ void EmulateX4(uint8_t messages) {
     __heap_begin__ = __virtual_address_begin__;
     __heap_end__   = __virtual_address_end__;
     
-    while(pc < programSize) {
+    while(pc <= programSize) {
         
         uint8_t opCode = programBuffer[pc];
         uint8_t argA   = programBuffer[pc + 1];

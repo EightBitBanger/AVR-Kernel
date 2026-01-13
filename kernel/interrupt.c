@@ -3,91 +3,91 @@
 
 #include <kernel/interrupt.h>
 #include <kernel/kernel.h>
-
 #include <kernel/mutex.h>
 
-void dummyFunction(void) {};
+// Default empty ISR callback
+static void DummyFunction(void) {}
 
-void (*_timer_comp_a_ptr__)() = dummyFunction;
-void (*_timer_comp_b_ptr__)() = dummyFunction;
-void (*_timer_comp_c_ptr__)() = dummyFunction;
+// Timer/scheduler callback
+void (*timer_callback)(void)     = DummyFunction;
+void (*scheduler_callback)(void) = DummyFunction;
 
-void (*_external_int_a_ptr__)() = dummyFunction;
-void (*_external_int_b_ptr__)() = dummyFunction;
-void (*_external_int_c_ptr__)() = dummyFunction;
+// Hardware interrupt handler
+void (*interrupt_callback)(void) = DummyFunction;
 
 
-void DisableGlobalInterrupts(void) {
-    cli();
-}
-
-void EnableGlobalInterrupts(void) {
-    sei();
-}
+// Global interrupts
+void DisableGlobalInterrupts(void) {cli();}
+void EnableGlobalInterrupts(void)  {sei();}
 
 void InterruptStartScheduler(void) {
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);  // Set CTC mode, prescaler = 64
-    TIMSK1 = (1 << OCIE1A);                             // Enable interrupt on compare match A
-    OCR1A = 391;
+    // TIMER1, CTC mode, prescaler 64
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    TIMSK1 = (1 << OCIE1A);
+    OCR1A  = 391;
 }
 
 void InterruptStartTimeCounter(void) {
-    TCCR0B = (1 << WGM02) | (1 << CS02);  // CTC mode, prescaler = 256
-    TIMSK0 = (1 << OCIE0A);               // Enable interrupt on compare match A
-    OCR0A = 98;
-}
-
-void InterruptStartHardware(void) {
-    EICRA = (1 << ISC20);   // Trigger on the falling edge
-    //EICRA = (1 << ISC21); // Rising edge
-    EIMSK |= (1 << INT2);   // Enable on pin PB2
+    // TIMER0, CTC mode, prescaler 256
+    TCCR0B = (1 << WGM02) | (1 << CS02);
+    TIMSK0 = (1 << OCIE0A);
+    OCR0A  = 98;
 }
 
 void InterruptStopScheduler(void) {
-    TCCR0B  = 0;
+    TCCR1B = 0;   // Stop TIMER1
+    TIMSK1 = 0;   // Disable its interrupts
 }
 
-void InterruptStopTimerCounter(void) {
-    TCCR1B  = 0;
-	TCCR2B  = 0;
+void InterruptStopTimeCounter(void) {
+    TCCR0B = 0;   // Stop TIMER0
+    TIMSK0 = 0;   // Disable interrupts
+}
+
+
+void InterruptStartHardware(void) {
+    EICRA &= ~((1 << ISC20) | (1 << ISC21));
+    EICRA |=  (1 << ISC20);    // Falling edge trigger
+    
+    EIMSK |= (1 << INT2);      // Enable INT2
 }
 
 void InterruptStopHardware(void) {
-    EICRA = 0;
-    EIMSK = 0;
+    EIMSK &= ~(1 << INT2);     // Disable INT2
 }
 
-
-//
-// Interrupts
-//
-
-uint8_t SetInterruptService(uint8_t index, void (*service_ptr)()) {
-    switch (index) {
-    case 0: _timer_comp_a_ptr__ = service_ptr; break;
-    case 1: _timer_comp_b_ptr__ = service_ptr; break;
-    case 2: _timer_comp_c_ptr__ = service_ptr; break;
-    }
-    return 0;
+void SetTimerInterruptService(void (*service_ptr)(void)) {
+    uint8_t sreg = SREG;
+    cli();
+    
+    timer_callback = service_ptr;
+    
+    SREG = sreg;
+    return;
 }
 
-uint8_t SetHardwareInterruptService(uint8_t index, void (*service_ptr)()) {
-    switch (index) {
-    case 0: _external_int_a_ptr__ = service_ptr; return 1;
-    case 1: _external_int_b_ptr__ = service_ptr; return 2;
-    case 2: _external_int_c_ptr__ = service_ptr; return 3;
-    }
-    return 0;
+void SetSchedulerInterruptService(void (*service_ptr)(void)) {
+    uint8_t sreg = SREG;
+    cli();
+    
+    scheduler_callback = service_ptr;
+    
+    SREG = sreg;
+    return;
 }
 
-//
-// Interrupt service routines
-//
+void SetHardwareInterruptService(void (*service_ptr)(void)) {
+    uint8_t sreg = SREG;
+    cli();
+    
+    interrupt_callback = service_ptr ? service_ptr : DummyFunction;
+    
+    SREG = sreg;
+    return;
+}
 
-ISR (TIMER0_COMPA_vect) {_timer_comp_a_ptr__();}
-ISR (TIMER1_COMPA_vect) {_timer_comp_b_ptr__();}
-ISR (TIMER2_COMPA_vect) {_timer_comp_c_ptr__();}
+// ISR Definitions
+ISR(TIMER0_COMPA_vect) { timer_callback(); }      // Timer
+ISR(TIMER1_COMPA_vect) { scheduler_callback(); }  // Scheduler
 
-ISR (INT0_vect) {_external_int_a_ptr__();}
-ISR (INT1_vect) {_external_int_b_ptr__();}
-ISR (INT2_vect) {_external_int_c_ptr__();}
+ISR(INT2_vect) { interrupt_callback(); }          // System interrupt handler

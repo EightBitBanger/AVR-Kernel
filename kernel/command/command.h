@@ -1,21 +1,21 @@
-#include <avr/io.h>
-#include <stdlib.h>
+#ifndef _COMMAND_REGISTRY__
+#define _COMMAND_REGISTRY__
 
-#include <kernel/delay.h>
-#include <kernel/kernel.h>
+void RegisterCommands();
 
 // Included console commands
 #include <kernel/command/ls/ls.h>
 #include <kernel/command/cd/cd.h>
 
 //#include <kernel/command/test/test.h>
-#include <kernel/command/boot/boot.h>
+//#include <kernel/command/boot/boot.h>
 
-#include <kernel/command/graph/graph.h>
+//#include <kernel/command/graph/graph.h>
 
 //#include <kernel/command/format/format.h>
-#include <kernel/command/list/list.h>
+//#include <kernel/command/list/list.h>
 
+//#include <kernel/command/task/task.h>
 
 /*
 // Text editor
@@ -29,7 +29,6 @@
 #include <kernel/command/list/list.h>
 #include <kernel/command/device/device.h>
 #include <kernel/command/cls/cls.h>
-#include <kernel/command/task/task.h>
 
 #include <kernel/command/boot/boot.h>
 
@@ -59,3 +58,4 @@
 #include <kernel/command/repair/repair.h>
 #include <kernel/command/format/format.h>
 */
+#endif

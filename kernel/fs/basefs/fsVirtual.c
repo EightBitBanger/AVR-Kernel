@@ -4,6 +4,9 @@
 uint8_t vfsList(struct Partition part, DirectoryHandle handle) {
     uint8_t msgDir[] = "<dir>";
     
+    if (fsDeviceCheck(part) == 0) 
+        return 0;
+    
     uint32_t directoryRefTotal = fsDirectoryGetTotalSize(part, handle);
     if (directoryRefTotal == 0) 
         return 0;

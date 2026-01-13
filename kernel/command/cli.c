@@ -227,7 +227,6 @@ uint8_t ConsoleWait(void) {
 //
 
 void ConsoleSetBlinkRate(uint8_t rate) {
-    
     cursor_blink_rate = rate;
     
     __glBusyWait();
@@ -235,7 +234,6 @@ void ConsoleSetBlinkRate(uint8_t rate) {
 }
 
 void ConsoleSetCursor(uint8_t line, uint8_t position) {
-    
     console_line = line;
     
     console_position = position;
@@ -246,11 +244,14 @@ void ConsoleSetCursor(uint8_t line, uint8_t position) {
 }
 
 void ConsoleSetCursorPosition(uint8_t position) {
-    
     console_position = position;
     
     __glBusyWait();
     displayDevice->write( 2, console_position );
+}
+
+uint8_t ConsoleGetPromptLength(void) {
+    return console_prompt_length;
 }
 
 void ConsoleCursorEnable(void) {
@@ -286,7 +287,6 @@ void ConsoleClearScreen(uint8_t clearToCharacter) {
             displayDevice->write( 0x00010 + c, clearToCharacter );
         
     }
-    
     swapBuffers();
 }
 
