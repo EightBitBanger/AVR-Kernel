@@ -25,14 +25,14 @@ void fs_read_byte(uint32_t address, uint8_t* data) {
 
 void fsDeviceSetType(uint8_t device_type) {
     if (device_type == FS_DEVICE_TYPE_EEPROM) {
-        fsWriteSectorByte = bus_write_byte_eeprom;
-        fsReadSectorByte = bus_read_memory;
+        fsWriteSectorByte = mmio_write_byte_eeprom;
+        fsReadSectorByte = mmio_read_byte;
         return;
     }
     
     // Default
-    fsWriteSectorByte = bus_write_memory;
-    fsReadSectorByte = bus_read_memory;
+    fsWriteSectorByte = mmio_write_cache;
+    fsReadSectorByte = mmio_read_cache;
 }
 
 
@@ -44,8 +44,8 @@ void fsInit(void) {
     current_partition = 0x00000000;
     base_address      = 0x00000000;
     
-    fsWriteSectorByte = bus_write_memory;
-    fsReadSectorByte = bus_read_memory;
+    fsWriteSectorByte = mmio_write_cache;
+    fsReadSectorByte = mmio_read_cache;
     
     device_home_address = 0;
 }

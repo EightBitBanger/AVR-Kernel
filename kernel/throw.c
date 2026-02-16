@@ -2,7 +2,7 @@
 
 #include <kernel/throw.h>
 #include <kernel/pointers.h>
-#include <kernel/syscalls/print/print.h>
+#include <kernel/syscall/print.h>
 
 uint8_t msgErrorEvent[]   = "Fatal kernel error";
 uint8_t msgHardwareAddr[] = "0x";

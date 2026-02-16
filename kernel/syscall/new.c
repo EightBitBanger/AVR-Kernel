@@ -1,6 +1,6 @@
 #include <avr/io.h>
 
-#include <kernel/syscalls/alloc/new.h>
+#include <kernel/syscall/new.h>
 
 uint32_t globalAllocs = 0;
 uint32_t globalAllocBytes = 0;

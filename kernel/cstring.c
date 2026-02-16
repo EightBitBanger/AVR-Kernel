@@ -135,6 +135,16 @@ uint8_t string_get_hex_char(uint8_t* string) {
     return value_a + (value_b * 16);
 }
 
+int8_t strcmp_u8(const uint8_t* stra, const uint8_t* strb) {
+    while (*stra && *strb) {
+        if (*stra != *strb)
+            return (int8_t)(*stra - *strb);
+        stra++;
+        strb++;
+    }
+    return (int8_t)(*stra - *strb);
+}
+
 uint8_t StringCompare(uint8_t* stringA, uint8_t lengthA, uint8_t* stringB, uint8_t lengthB) {
     uint8_t max = lengthB;
     if (lengthA > lengthB) 

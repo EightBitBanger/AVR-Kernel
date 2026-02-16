@@ -1,4 +1,4 @@
-#include <kernel/syscalls/timer/timer.h>
+#include <kernel/syscall/timer.h>
 
 extern volatile uint64_t system_timer_ms;
 

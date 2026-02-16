@@ -65,18 +65,18 @@ int8_t LoadLibrary(struct Partition part, DirectoryHandle directoryHandle, uint8
         default:
             
         case 0:
-            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) bus_read_byte;
-            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  bus_write_byte;
+            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) mmio_read_byte;
+            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  mmio_write_byte;
             break;
             
         case 1:
-            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) bus_read_memory;
-            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  bus_write_memory;
+            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) mmio_read_cache;
+            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  mmio_write_cache;
             break;
             
         case 2:
-            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) bus_read_byte;
-            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  bus_write_byte;
+            newDeviceDriver->read  = (void(*)(uint32_t, uint8_t*)) mmio_read_byte;
+            newDeviceDriver->write = (void(*)(uint32_t, uint8_t))  mmio_write_byte;
             break;
         
     }

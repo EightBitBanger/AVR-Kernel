@@ -103,7 +103,7 @@ void EmulateX4(uint8_t messages) {
             if (ptr.address > __heap_end__) 
                 kThrow(HALT_SEGMENTATION_FAULT, __heap_begin__ + ptr.address);
             
-            bus_read_memory(&mem_bus, __heap_begin__ + ptr.address, &reg[argA]);
+           mmio_read_cache(&mem_bus, __heap_begin__ + ptr.address, &reg[argA]);
             pc += 5;
             continue;
             }
@@ -121,7 +121,7 @@ void EmulateX4(uint8_t messages) {
             if (ptr.address > __heap_end__) 
                 kThrow(HALT_SEGMENTATION_FAULT, __heap_begin__ + ptr.address);
             
-            bus_write_memory(&mem_bus, __heap_begin__ + ptr.address, reg[argA]);
+            mmio_write_cache(&mem_bus, __heap_begin__ + ptr.address, reg[argA]);
             pc += 5;
             continue;
             }

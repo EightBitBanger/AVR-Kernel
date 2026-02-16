@@ -13,8 +13,8 @@ void AllocateExternalMemory(void) {
     memset(totalString, 0x20, 10);
     
     struct Bus memoryBus;
-	memoryBus.read_waitstate  = 1;
-	memoryBus.write_waitstate = 1;
+	memoryBus.read_waitstate  = 20;
+	memoryBus.write_waitstate = 20;
 	
     uint32_t address=0;
     uint8_t buffer=0;
@@ -22,14 +22,10 @@ void AllocateExternalMemory(void) {
     uint16_t counter=0;
     
     for (address=0x00000000; address < MAX_MEMORY_SIZE; address++) {
-        bus_raw_write_memory(&memoryBus, address, 0x55);
-        bus_raw_read_memory(&memoryBus, address, &buffer);
-        if (buffer != 0x55) 
-            break;
         
-        bus_raw_write_memory(&memoryBus, address, 0xAA);
-        bus_raw_read_memory(&memoryBus, address, &buffer);
-        if (buffer != 0xAA) 
+        mmio_write_byte(&memoryBus, address, 0xff);
+        mmio_read_byte(&memoryBus, address, &buffer);
+        if (buffer != 0xff) 
             break;
         
         // Print total allocated memory
@@ -47,9 +43,6 @@ void AllocateExternalMemory(void) {
     }
     
     totalAllocatedMemory = address + 1;
-    
-    if (totalAllocatedMemory < 1024) 
-        return;
     
     printSpace(1);
     

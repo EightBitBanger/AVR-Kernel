@@ -40,9 +40,9 @@ void initiateDisplayDriver(void) {
 
 
 void __read_display_device(uint32_t address, uint8_t* buffer) {
-    bus_read_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
+    mmio_read_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
 }
 
 void __write_display_device(uint32_t address, uint8_t buffer) {
-    bus_write_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
+    mmio_write_byte( &displayDriver->device.bus, displayDriver->device.hardware_address + address, buffer );
 }

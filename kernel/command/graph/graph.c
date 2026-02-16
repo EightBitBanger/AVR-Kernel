@@ -2,7 +2,7 @@
 #include <kernel/delay.h>
 
 #include <kernel/kernel.h>
-#include <kernel/syscalls/timer/timer.h>
+#include <kernel/syscall/timer.h>
 
 #include <kernel/command/graph/graph.h>
 

@@ -103,9 +103,9 @@ uint8_t ntCheckInitiated(void) {
 // Low level IO
 
 void __read_network_device(uint32_t address, uint8_t* buffer) {
-    bus_read_byte( &networkDevice->device.bus, networkDevice->device.hardware_address + address, buffer );
+    mmio_read_byte( &networkDevice->device.bus, networkDevice->device.hardware_address + address, buffer );
 }
 
 void __write_network_device(uint32_t address, uint8_t buffer) {
-    bus_write_byte( &networkDevice->device.bus, networkDevice->device.hardware_address + address, buffer );
+    mmio_write_byte( &networkDevice->device.bus, networkDevice->device.hardware_address + address, buffer );
 }

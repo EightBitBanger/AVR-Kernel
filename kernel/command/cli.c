@@ -80,7 +80,7 @@ void cliInit(void) {
     keyboadDevice->read( 0x00000, &oldScanCodeHigh );
 #endif
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     keyboadDevice->read( 0x00000, &oldScanCodeLow );
     keyboadDevice->read( 0x00001, &oldScanCodeHigh );
 #endif
@@ -116,7 +116,7 @@ uint8_t ConsoleGetRawChar(void) {
     keyboadDevice->read( 0x00000, &scanCodeHigh );
 #endif
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     keyboadDevice->read( 0x00000, &scanCodeLow );
     keyboadDevice->read( 0x00001, &scanCodeHigh );
 #endif
@@ -134,7 +134,7 @@ uint8_t ConsoleGetLastChar(void) {
     keyboadDevice->read( 0x00000, &scanCodeHigh );
 #endif
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     keyboadDevice->read( 0x00000, &scanCodeLow );
     keyboadDevice->read( 0x00001, &scanCodeHigh );
 #endif
@@ -188,7 +188,7 @@ uint8_t ConsoleWait(void) {
     keyboadDevice->read( 0x00000, &oldScanCodeHigh );
 #endif
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     keyboadDevice->read( 0x00000, &oldScanCodeLow );
     keyboadDevice->read( 0x00001, &oldScanCodeHigh );
 #endif
@@ -203,7 +203,7 @@ uint8_t ConsoleWait(void) {
         keyboadDevice->read( 0x00000, &oldScanCodeHigh );
 #endif
         
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
         keyboadDevice->read( 0x00000, &oldScanCodeLow );
         keyboadDevice->read( 0x00001, &oldScanCodeHigh );
 #endif

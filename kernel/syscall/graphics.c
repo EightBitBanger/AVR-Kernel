@@ -1,4 +1,4 @@
-#include <kernel/syscalls/graphics/graphics.h>
+#include <kernel/syscall/graphics.h>
 
 extern struct Driver* displayDevice;
 

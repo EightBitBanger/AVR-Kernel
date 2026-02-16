@@ -200,7 +200,7 @@ void kInit(void) {
                 
                 // Driver was not loaded correctly or is corrupted
                 if (libState < 0) {
-                    uint8_t driverError[] = "Error loading driver";
+                    uint8_t driverError[] = "!";
                     print(driverError, sizeof(driverError));
                     printLn();
                     break;
@@ -216,7 +216,7 @@ void kInit(void) {
 #endif
 }
 
-void KernelVectorTableInit(void) {
+void InitHardwareInterruptTable(void) {
     isr_bus.read_waitstate  = 1;
     
     for (uint8_t i=0; i < HARDWARE_INTERRUPT_TABLE_SIZE; i++) 
@@ -234,7 +234,7 @@ void _ISR_hardware_service_routine(void) {
     MutexLock(&isr_mux);
     
     // Get the interrupt vector to determine what triggered it
-    bus_read_byte(&isr_bus, HARDWARE_INTERRUPT_VECTOR, &mask);
+    mmio_read_byte(&isr_bus, HARDWARE_INTERRUPT_VECTOR, &mask);
     
     while (mask != 0) {
         // Get the least-significant set bit index

@@ -2,7 +2,7 @@
 #include <kernel/delay.h>
 
 #include <kernel/command/cli.h>
-#include <kernel/syscalls/print/print.h>
+#include <kernel/syscall/print.h>
 
 extern uint8_t console_prompt[16];
 extern uint8_t console_prompt_length;

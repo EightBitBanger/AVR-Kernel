@@ -36,7 +36,7 @@ void InitiateDeviceTable(void) {
         
         // Get device ID
         uint8_t deviceID;
-        bus_read_byte(&deviceBus, hardware_address, &deviceID);
+        mmio_read_byte(&deviceBus, hardware_address, &deviceID);
         
         if (deviceID == 0xff) 
             continue;
@@ -49,7 +49,7 @@ void InitiateDeviceTable(void) {
         
         // Get device name
         for (uint8_t i=0; i < DEVICE_NAME_LEN; i++) 
-            bus_read_byte(&deviceBus, hardware_address + i + 1, &newDevicePtr->device_name[i]);
+            mmio_read_byte(&deviceBus, hardware_address + i + 1, &newDevicePtr->device_name[i]);
         
         // Blank the name once a space character is found
         uint8_t checkFinished = 0;
@@ -123,7 +123,7 @@ uint32_t GetHardwareDeviceByName(uint8_t* name, uint8_t nameLength) {
         // Get device name
         uint8_t deviceName[DEVICE_NAME_LEN];
         for (uint8_t i=0; i < DEVICE_NAME_LEN; i++) 
-            bus_read_byte(&bus, hardware_address + i + 1, &deviceName[i]);
+            mmio_read_byte(&bus, hardware_address + i + 1, &deviceName[i]);
         
         if (StringCompare(deviceName, nameLength, name, nameLength) == 0) 
             return hardware_address;
@@ -161,9 +161,9 @@ uint8_t GetNumberOfDevices(void) {
 
 void DeviceBusyWait(struct Device* devicePtr, uint8_t deviceID) {
     uint8_t checkByte = 0;
-    bus_read_byte(&deviceBus, devicePtr->hardware_address, &checkByte);
+    mmio_read_byte(&deviceBus, devicePtr->hardware_address, &checkByte);
     while (checkByte != deviceID) {
-        bus_read_byte(&deviceBus, devicePtr->hardware_address, &checkByte);
+        mmio_read_byte(&deviceBus, devicePtr->hardware_address, &checkByte);
     }
 }
 

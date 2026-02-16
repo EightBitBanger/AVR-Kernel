@@ -1,6 +1,8 @@
 #include <avr/io.h>
 #include <kernel/delay.h>
 
+#include <kernel/syscall/print.h>
+
 #include <kernel/network/network.h>
 #include <kernel/network/packet.h>
 
@@ -10,6 +12,13 @@ struct RoutingTable routingTable;
 
 
 void InitiateRouter(void) {
+    uint8_t msgInitiate[] = "Packet router init";
+    
+    print(msgInitiate, sizeof(msgInitiate));
+    printLn();
+    
+    /*
+    
     uint16_t reconnRequestMax = 2700;
     uint16_t reconnRequestMin = 1000;
     
@@ -382,4 +391,6 @@ void InitiateRouter(void) {
         }
         continue;
     }
+    */
+    
 }

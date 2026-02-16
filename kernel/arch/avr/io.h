@@ -1,24 +1,7 @@
-#include <avr/io.h>
+#ifndef __AVR_IO_INTERFACE_
+#define __AVR_IO_INTERFACE_
 
-#include <kernel/delay.h>
-#include <kernel/kernel.h>
-
-#include <kernel/bus/bus.h>
-
-
-#ifdef BOARD_RETROBOARD_REV2
-
-// Caching
-
-#define CACHE_SIZE   32
-
-uint8_t cache[CACHE_SIZE];
-
-uint8_t dirty_bits[CACHE_SIZE];
-
-uint32_t cache_begin = 0;
-uint32_t cache_end   = 0;
-
+#include <stdint.h>
 
 // NOTE: Address and data buses are multiplexed requiring external logic
 #define _BUS_LOWER_PORT_A__     // Define port A as the lower address bus
@@ -135,21 +118,13 @@ uint32_t cache_end   = 0;
   #define _CONTROL_IN__      PIND
 #endif
 
-void bus_initiate(void) {
-    // Set internal pull-up resistors
-    _BUS_LOWER_DIR__ = 0x00;
-	_BUS_LOWER_OUT__ = 0xff;
-	_BUS_LOWER_DIR__ = 0xff;
-	bus_control_zero();
-    bus_address_zero();
-}
 
-void bus_control_zero(void) {
+static inline void mmio_control_zero(void) {
     _CONTROL_DIR__=0xff;
 	_CONTROL_OUT__=0xff;
 }
 
-void bus_address_zero(void) {
+static inline void mmio_address_zero(void) {
 	_BUS_LOWER_DIR__=0xff;
 	_BUS_LOWER_OUT__=0xff;
 	
@@ -160,12 +135,18 @@ void bus_address_zero(void) {
 	_BUS_UPPER_OUT__=0xff;
 }
 
-void bus_raw_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
-	
-	// Address the device
-	_BUS_UPPER_OUT__  = (address >> 16) & 0xff;
-	_BUS_MIDDLE_OUT__ = (address >> 8) & 0xff;
-	_BUS_LOWER_OUT__  = address & 0xff;
+static inline void mmio_initiate(void) {
+    _BUS_LOWER_DIR__ = 0x00;
+	_BUS_LOWER_OUT__ = 0xff; // Set internal pull-up resistors
+	_BUS_LOWER_DIR__ = 0xff;
+	mmio_control_zero();
+    mmio_address_zero();
+}
+
+static inline void mmio_readb(struct Bus* bus, uint32_t* address, uint8_t* byte) {
+    _BUS_UPPER_OUT__  = (*address >> 16) & 0xff;
+	_BUS_MIDDLE_OUT__ = (*address >> 8) & 0xff;
+	_BUS_LOWER_OUT__  =  *address & 0xff;
 	
     // Latch in preparation of a read cycle
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
@@ -182,7 +163,7 @@ void bus_raw_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
     while (wait--) __asm__ volatile("nop");
 	
 	// Read the data byte
-	*buffer = _BUS_LOWER_IN__;
+	*byte = _BUS_LOWER_IN__;
 	
 	// End cycle (reset the select logic)
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
@@ -191,20 +172,17 @@ void bus_raw_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
 	_BUS_LOWER_DIR__ = 0xff;
 }
 
-
-void bus_raw_write_memory(struct Bus* bus, uint32_t address, uint8_t byte) {
-	
-	// Address the device
-	_BUS_UPPER_OUT__  = (address >> 16) & 0xff;
-	_BUS_MIDDLE_OUT__ = (address >> 8) & 0xff;
-	_BUS_LOWER_OUT__  = address & 0xff;
+static inline void mmio_writeb(struct Bus* bus, uint32_t* address, uint8_t* byte) {
+    _BUS_UPPER_OUT__  = (*address >> 16) & 0xff;
+	_BUS_MIDDLE_OUT__ = (*address >> 8) & 0xff;
+	_BUS_LOWER_OUT__  =  *address & 0xff;
 	
 	// Latch in preparation of a write cycle
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_CONTROL_OUT__ = _CONTROL_WRITE_LATCH__;
 	
 	// Cast the data byte
-	_BUS_LOWER_OUT__ = byte;
+	_BUS_LOWER_OUT__ = *byte;
 	
 	// Begin the write strobe
 	_CONTROL_OUT__ = _CONTROL_WRITE_CYCLE__;
@@ -217,66 +195,6 @@ void bus_raw_write_memory(struct Bus* bus, uint32_t address, uint8_t byte) {
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
 	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
-}
-
-void bus_read_byte(struct Bus* bus, uint32_t address, uint8_t* buffer) {
-    bus_raw_read_memory(bus, address, buffer);
-}
-
-void bus_write_byte(struct Bus* bus, uint32_t address, uint8_t byte) {
-    bus_raw_write_memory(bus, address, byte);
-}
-
-
-void bus_write_byte_eeprom(struct Bus* bus, uint32_t address, uint8_t byte) {
-    bus_raw_write_memory(bus, address, byte);
-    _delay_ms(10);
-}
-
-
-// Cache
-
-void bus_flush_cache(struct Bus* bus, uint32_t address) {
-    // Write back only modified cache bytes
-    for (uint32_t i = 0; i < CACHE_SIZE; i++) {
-        if (dirty_bits[i]) {  // Only write if modified
-            bus_raw_write_memory(bus, cache_begin + i, cache[i]);
-            dirty_bits[i] = 0; // Clear dirty bit after writing
-        }
-    }
-    
-    // Fetch new data
-    for (uint32_t i = 0; i < CACHE_SIZE; i++) {
-        bus_raw_read_memory(bus, address + i, &cache[i]);
-        dirty_bits[i] = 0; // Reset dirty state for new data
-    }
-    
-    cache_begin = address;
-    cache_end = address + CACHE_SIZE;
-}
-
-void bus_read_memory(struct Bus* bus, uint32_t address, uint8_t* buffer) {
-	if (address >= cache_begin && address < cache_end) {
-        *buffer = cache[address - cache_begin];
-        return;
-    }
-    
-    bus_flush_cache(bus, address);
-    *buffer = cache[0];
-}
-
-
-void bus_write_memory(struct Bus* bus, uint32_t address, uint8_t byte) {
-	if (address >= cache_begin && address < cache_end) {
-        uint32_t offset = address - cache_begin;
-        cache[offset] = byte;
-        dirty_bits[offset] = 1;  // Mark as modified
-        return;
-    }
-    
-    bus_flush_cache(bus, address);
-    cache[0] = byte;
-    dirty_bits[0] = 1;
 }
 
 #endif

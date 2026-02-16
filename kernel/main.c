@@ -4,29 +4,26 @@
 #include <kernel/delay.h>
 #include <kernel/kernel.h>
 
+#include <kernel/arch/avr/io.h>
+
 void _ISR_shell_service(void) {
     cliRunShell();
 }
 
 int main(void) {
+    mmio_initiate();
     
-    // Zero the system bus
-    bus_initiate();
-    
-    // Allow some time to stabilize for the board level IO and logic
+    // Allow some time to stabilize the board level IO and logic
     _delay_ms(1000);
     
-    // Initiate core kernel systems (in this order)
+    // Initiate core kernel (in this order)
     InitBakedDrivers();           // Static kernel level device drivers
-    InitiateDeviceTable();        // Hardware device table
-    KernelVectorTableInit();      // Hardware interrupt vector table
+    InitiateDeviceTable();        // Detect hardware on the bus
+    InitHardwareInterruptTable(); // Initiate hardware interrupts
     
     cliInit();
     
-    // Check amount of external memory
     AllocateExternalMemory();
-    
-    // Speaker beep error codes
     
     // Check RAM error
     if (kAllocGetTotal() < 1024) 
@@ -37,10 +34,12 @@ int main(void) {
     fsInit();         // File system
     kInit();          // Kernel environment
     
+    ConsoleClearScreen(' ');
+    ConsoleSetCursor(0, 0);
+    InitiateRouter();
+    
     // Console command functions
     RegisterCommands();
-    
-    // Boot the kernel
     
     // Set keyboard interrupt handler
     //SetInterruptVector(0, (void(*)())cliRunShell);
@@ -62,11 +61,11 @@ int main(void) {
     InterruptStartScheduler();
     InterruptStartTimeCounter();
     
-    EnableGlobalInterrupts();
+    
+    //EnableGlobalInterrupts();
 	
     while(1) {}
     
-    //InterruptStopTimerCounter();
     InterruptStopScheduler();
     InterruptStopHardware();
     

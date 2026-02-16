@@ -5,8 +5,7 @@
 // Target board
 //
 
-#define  BOARD_RETROBOARD_REV2
-//#define  BOARD_RETRO_AVR_X4_REV1
+#define  BOARD_AVR_RETROBOARD
 
 
 // --------------------------------------------
@@ -27,7 +26,7 @@
 // Map offset ranges for peripheral and memory
 // regions based on the target platform.
 
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     #define EXTERNAL_MEMORY_BEGIN     0x00000
     #define MAX_MEMORY_SIZE           0x40000
     #define PERIPHERAL_ADDRESS_BEGIN  0x40000

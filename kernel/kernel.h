@@ -31,11 +31,11 @@
 #include <kernel/fs/fs.h>
 
 // System subroutine calls
-#include <kernel/syscalls/alloc/new.h>
-#include <kernel/syscalls/print/print.h>
-#include <kernel/syscalls/beep/beep.h>
-#include <kernel/syscalls/timer/timer.h>
-#include <kernel/syscalls/graphics/graphics.h>
+#include <kernel/syscall/new.h>
+#include <kernel/syscall/print.h>
+#include <kernel/syscall/beep.h>
+#include <kernel/syscall/timer.h>
+#include <kernel/syscall/graphics.h>
 
 // Firmware
 #include <kernel/network/network.h>
@@ -51,8 +51,7 @@
 void nullfunction(void);
 
 void kInit(void);
-
-void KernelVectorTableInit(void);
+void InitHardwareInterruptTable(void);
 
 void SetInterruptVectorCallback(uint8_t index, void(*callbackService)());
 

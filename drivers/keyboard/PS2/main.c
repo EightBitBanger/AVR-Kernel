@@ -26,7 +26,7 @@ void initiatePS2Driver(void) {
 	
 	// Set hardware device details
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     keyboardDriver->device.hardware_address = 0x90000;
 #endif
     
@@ -50,12 +50,12 @@ void initiatePS2Driver(void) {
 
 
 void __read_ps2_device(uint32_t address, uint8_t* buffer) {
-    bus_read_byte( &keyboardDriver->device.bus, keyboardDriver->device.hardware_address + address, buffer );
+    mmio_read_byte( &keyboardDriver->device.bus, keyboardDriver->device.hardware_address + address, buffer );
     return;
 }
 
 void __write_ps2_device(uint32_t address, uint8_t buffer) {
-    bus_write_byte( &keyboardDriver->device.bus, keyboardDriver->device.hardware_address + address, buffer );
+    mmio_write_byte( &keyboardDriver->device.bus, keyboardDriver->device.hardware_address + address, buffer );
     return;
 }
 
@@ -178,7 +178,7 @@ uint8_t kbDecodeScanCode(uint8_t scancode_low, uint8_t scancode_high) {
 	
 #endif
     
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
     
 	if ( (scancode_low == 0x98)|(scancode_low == 0x99)|(scancode_low == 0x92)|(scancode_low == 0x91)|(scancode_low == 0x90)|(scancode_low == 0x9a)|(scancode_low == 0x9b) ) {
 		if (scancode_high == 0xc4) {return 0x11;} // Left shift pressed
@@ -290,7 +290,7 @@ void kbPrintInput(void) {
         keyboadDevice->read( 0x00000, &currentScanCodeHigh );
 #endif
         
-#ifdef BOARD_RETROBOARD_REV2
+#ifdef BOARD_AVR_RETROBOARD
         keyboadDevice->read( 0x00000, &currentScanCodeLow );
         keyboadDevice->read( 0x00001, &currentScanCodeHigh );
 #endif
