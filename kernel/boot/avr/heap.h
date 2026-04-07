@@ -24,12 +24,12 @@ void heap_init(uint32_t block_size, uint32_t total_memory);
 void heap_set_base_address(uint32_t base);
 uint32_t heap_get_base_address(void);
 
-struct KMallocHeader {
+struct KmallocHeader {
     uint32_t size;
-    //uint8_t  flags;
-    //uint8_t  type;
-    //uint8_t  reserved;
-    //uint8_t  magic;
+    uint8_t  flags;
+    uint8_t  type;
+    uint8_t  reserved;
+    uint8_t  magic;
 };
 
 uint32_t kmalloc(uint32_t size);
@@ -40,11 +40,11 @@ uint32_t kmalloc_next(uint32_t previous_address);
 void kmem_write(uint32_t address, const void* source, uint32_t size);
 void kmem_read(uint32_t address, void* destination, uint32_t size);
 
-uint8_t kmalloc_get_flags(uint32_t address);
-void    kmalloc_set_flags(uint32_t address, uint8_t flags);
+uint8_t  kmalloc_get_flags(uint32_t address);
+void     kmalloc_set_flags(uint32_t address, uint8_t flags);
 
-uint8_t kmalloc_get_type(uint32_t address);
-void    kmalloc_set_type(uint32_t address, uint8_t type);
+uint8_t  kmalloc_get_type(uint32_t address);
+void     kmalloc_set_type(uint32_t address, uint8_t type);
 
 uint32_t kmalloc_get_size(uint32_t address);
 
