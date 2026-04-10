@@ -26,7 +26,7 @@ static volatile uint8_t key_ready         = 0;
 static char    keyboard_string[16];
 static uint8_t keyboard_length = 0;
 
-static char* prompt_string = "/>";
+static char prompt_string[16] = "/>";
 static uint8_t prompt_length = sizeof(prompt_string);
 
 char kb_getc(void);
@@ -110,26 +110,30 @@ void console_init(void) {
     last_character = current_character;
     display_address = device_get_hardware_address("display");
     
-    //if (display_address == 0) 
-    //    return;
+    if (display_address == 0) 
+        return;
+    
+    prompt_length = strlen(prompt_string);
     
     keyboard_length = 0;
     memset(keyboard_string, 0x00, sizeof(keyboard_string));
 }
 
-void console_busy_wait(uint32_t address) {
+void console_busy_wait(void) {
     struct Bus bus;
     bus.write_waitstate = 20;
     bus.read_waitstate  = 20;
     
     uint8_t checkByte = 0;
-    mmio_readb(&bus, address, &checkByte);
+    mmio_readb(&bus, display_address, &checkByte);
     while (checkByte != 0x10) {
-        mmio_readb(&bus, address, &checkByte);
+        mmio_readb(&bus, display_address, &checkByte);
     }
 }
 
-void console_set_cursor(uint8_t x, uint8_t y) {
+void console_set_position(uint8_t x, uint8_t y) {
+    console_busy_wait();
+    
     struct Bus bus;
     bus.write_waitstate = 20;
     bus.read_waitstate  = 20;
@@ -150,7 +154,13 @@ void print_prompt(void) {
     print(prompt_string);
 }
 
-void console_cursor_blink_rate(uint8_t rate) {
+void console_set_prompt(const char* prompt) {
+    strcpy(prompt_string, prompt);
+    prompt_length = strlen(prompt);
+}
+
+void console_set_blink_rate(uint8_t rate) {
+    console_busy_wait();
     struct Bus bus;
     bus.write_waitstate = 20;
     bus.read_waitstate  = 20;
@@ -159,11 +169,20 @@ void console_cursor_blink_rate(uint8_t rate) {
 }
 
 void console_clear(void) {
+    console_busy_wait();
+    
     struct Bus bus;
     bus.write_waitstate = 20;
     bus.read_waitstate  = 20;
     
-    mmio_writeb(&bus, display_address + 0x00009, (uint8_t*)1);
+    console_set_position(0, 0);
+    
+    for (uint8_t h=0; h < display_height; h++) 
+        for (uint8_t w=0; w < display_width; w++) 
+            print(" ");
+    
+    console_set_position(0, 0);
+    return;
 }
 
 uint16_t display_get_width(void) {
@@ -171,11 +190,11 @@ uint16_t display_get_width(void) {
 }
 
 uint16_t display_get_height(void) {
-    return display_width;
+    return display_height;
 }
 
 void print(const char* str) {
-    console_busy_wait(display_address);
+    console_busy_wait();
     
     struct Bus bus;
     bus.write_waitstate = 20;
@@ -205,7 +224,7 @@ void print(const char* str) {
             } else {
                 uint8_t one = 1;
                 mmio_writeb(&bus, display_address + 0x00005, &one);
-                console_busy_wait(display_address);
+                console_busy_wait();
             }
             
             continue;
@@ -219,7 +238,7 @@ void print(const char* str) {
                 } else {
                     uint8_t one = 1;
                     mmio_writeb(&bus, display_address + 0x00005, &one);
-                    console_busy_wait(display_address);
+                    console_busy_wait();
                 }
             }
         }

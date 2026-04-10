@@ -1,12 +1,13 @@
-#ifndef DEVICE_BLOCK_H
-#define DEVICE_BLOCK_H
+#ifndef _DEVICE_H_
+#define _DEVICE_H_
 
 #include <kernel/bus/bus.h>
 
 #include <stdint.h>
 
 struct Device {
-    char device_name[16];
+    char name[16];
+    
     uint8_t device_id;
     uint8_t device_class;
     

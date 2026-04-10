@@ -10,16 +10,24 @@
 #include <kernel/boot/avr/heap.h>
 
 #include <kernel/syscall/print.h>
+#include <kernel/syscall/console.h>
 
 #include <kernel/bus/bus.h>
-#include <kernel/driver/driver.h>
+#include <kernel/device/driver.h>
 #include <kernel/device/device.h>
+#include <kernel/device/knode.h>
 
-uint32_t create_device(struct Device* device);
+#include <kernel/knode.h>
 
-void destroy_device(uint32_t address);
+void kernel_init(void);
 
-void hardware_identify_devices(void);
+uint32_t create_device(const char* name);
+void     destroy_device(uint32_t address);
+
+uint32_t create_driver(const char* name);
+void     destroy_driver(uint32_t address);
+
+void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount);
 
 uint32_t device_get_hardware_address(const char* name);
 

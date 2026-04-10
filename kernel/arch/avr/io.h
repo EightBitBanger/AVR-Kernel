@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <kernel/bus/bus.h>
+#include <kernel/delay.h>
 
 // NOTE: Address and data buses are multiplexed requiring external logic
 #define _BUS_LOWER_PORT_A__     // Define port A as the lower address bus
@@ -197,6 +198,11 @@ static inline void mmio_writeb(struct Bus* bus, uint32_t address, uint8_t* byte)
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
 	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
+}
+
+static inline void mmio_writeb_eeprom(struct Bus* bus, uint32_t address, uint8_t* byte) {
+    mmio_writeb(bus, address, byte);
+    _delay_ms(5);
 }
 
 #endif

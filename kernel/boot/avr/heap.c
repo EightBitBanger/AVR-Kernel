@@ -14,7 +14,7 @@ static uint32_t kmalloc_bitmap_size      = 0;
 static uint32_t kmalloc_reserved_blocks  = 0;
 
 #define KMALLOC_MAGIC        0x55UL
-#define KMALLOC_HEADER_SIZE  ((uint32_t)sizeof(struct KmallocHeader))
+#define KMALLOC_HEADER_SIZE  ((uint32_t)sizeof(struct KMallocHeader))
 
 uint8_t* kmalloc_bitmap = 0;
 
@@ -111,20 +111,20 @@ static uint32_t kmalloc_read32(uint32_t address) {
     return value;
 }
 
-static void kmalloc_header_write(uint32_t address, const struct KmallocHeader* header) {
+static void kmalloc_header_write(uint32_t address, const struct KMallocHeader* header) {
     kmalloc_write32(address + 0, header->size);
     kmalloc_write8 (address + 4, header->flags);
-    kmalloc_write8 (address + 5, header->type);
+    kmalloc_write8 (address + 5, header->permissions);
     kmalloc_write8 (address + 6, header->reserved);
     kmalloc_write8 (address + 7, header->magic);
 }
 
-static void kmalloc_header_read(uint32_t address, struct KmallocHeader* header) {
-    header->size     = kmalloc_read32(address + 0);
-    header->flags    = kmalloc_read8(address + 4);
-    header->type     = kmalloc_read8(address + 5);
-    header->reserved = kmalloc_read8(address + 6);
-    header->magic    = kmalloc_read8(address + 7);
+static void kmalloc_header_read(uint32_t address, struct KMallocHeader* header) {
+    header->size        = kmalloc_read32(address + 0);
+    header->flags       = kmalloc_read8(address + 4);
+    header->permissions = kmalloc_read8(address + 5);
+    header->reserved    = kmalloc_read8(address + 6);
+    header->magic       = kmalloc_read8(address + 7);
 }
 
 static inline uint32_t kmalloc_blocks_required(uint32_t size) {
@@ -156,7 +156,7 @@ bool kmalloc_is_valid(uint32_t address) {
     uint32_t             total_size;
     uint32_t             required_blocks;
     uint32_t             start_block;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (address == KMALLOC_NULL)
         return false;
@@ -197,6 +197,14 @@ bool kmalloc_is_valid(uint32_t address) {
         return false;
     
     return true;
+}
+
+uint32_t heap_get_block_size(void) {
+    return kmalloc_block_size;
+}
+
+uint32_t heap_get_total_memory(void) {
+    return kmalloc_pool_size;
 }
 
 void heap_init(uint32_t block_size, uint32_t total_memory) {
@@ -260,7 +268,7 @@ uint32_t kmalloc(uint32_t size) {
                 uint32_t             block_offset;
                 uint32_t             header_address;
                 uint32_t             payload_address;
-                struct KmallocHeader header;
+                struct KMallocHeader header;
                 
                 for (block_offset = 0; block_offset < required_blocks; block_offset++) {
                     kmalloc_block_set_used(start_block + block_offset);
@@ -269,11 +277,11 @@ uint32_t kmalloc(uint32_t size) {
                 header_address  = start_block * kmalloc_block_size;
                 payload_address = header_address + KMALLOC_HEADER_SIZE;
                 
-                header.size     = size;
-                header.flags    = 0;
-                header.type     = 0;
+                header.size = size;
+                header.flags = 0;
+                header.permissions = 0;
                 header.reserved = 0;
-                header.magic    = KMALLOC_MAGIC;
+                header.magic = KMALLOC_MAGIC;
                 
                 kmalloc_header_write(header_address, &header);
                 
@@ -294,7 +302,7 @@ void kfree(uint32_t address) {
     uint32_t             start_block;
     uint32_t             required_blocks;
     uint32_t             block_offset;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return;
@@ -312,11 +320,11 @@ void kfree(uint32_t address) {
     if ((start_block + required_blocks) > kmalloc_block_count)
         return;
     
-    header.size     = 0;
-    header.flags    = 0;
-    header.type     = 0;
+    header.size = 0;
+    header.flags = 0;
+    header.permissions = 0;
     header.reserved = 0;
-    header.magic    = 0;
+    header.magic = 0;
     
     kmalloc_header_write(header_address, &header);
     
@@ -327,7 +335,7 @@ void kfree(uint32_t address) {
 
 uint8_t kmalloc_get_flags(uint32_t address) {
     uint32_t             header_address;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return 0;
@@ -340,7 +348,7 @@ uint8_t kmalloc_get_flags(uint32_t address) {
 
 void kmalloc_set_flags(uint32_t address, uint8_t flags) {
     uint32_t             header_address;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return;
@@ -352,9 +360,9 @@ void kmalloc_set_flags(uint32_t address, uint8_t flags) {
     kmalloc_header_write(header_address, &header);
 }
 
-uint8_t kmalloc_get_type(uint32_t address) {
+uint8_t kmalloc_get_permissions(uint32_t address) {
     uint32_t             header_address;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return 0;
@@ -362,12 +370,12 @@ uint8_t kmalloc_get_type(uint32_t address) {
     header_address = address - KMALLOC_HEADER_SIZE;
     kmalloc_header_read(header_address, &header);
     
-    return header.type;
+    return header.permissions;
 }
 
-void kmalloc_set_type(uint32_t address, uint8_t type) {
+void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
     uint32_t             header_address;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return;
@@ -375,13 +383,13 @@ void kmalloc_set_type(uint32_t address, uint8_t type) {
     header_address = address - KMALLOC_HEADER_SIZE;
     kmalloc_header_read(header_address, &header);
     
-    header.type = type;
+    header.permissions = permissions;
     kmalloc_header_write(header_address, &header);
 }
 
 uint32_t kmalloc_get_size(uint32_t address) {
     uint32_t             header_address;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
         return 0;
@@ -398,7 +406,7 @@ uint32_t kmalloc_next(uint32_t previous_address) {
     uint32_t             header_address;
     uint32_t             total_size;
     uint32_t             used_blocks;
-    struct KmallocHeader header;
+    struct KMallocHeader header;
     
     if (previous_address == KMALLOC_NULL) {
         start_block = kmalloc_reserved_blocks;
