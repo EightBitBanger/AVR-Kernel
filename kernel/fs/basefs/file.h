@@ -4,15 +4,39 @@
 #include <kernel/fs/fs.h>
 
 #include <stdint.h>
+#include <stdbool.h>
 
-uint32_t fs_file_create(const char* name, uint8_t permissions);
-void     fs_file_delete(uint32_t address);
+#define FS_FILE_MODE_READ   0x01
+#define FS_FILE_MODE_WRITE  0x02
+#define FS_FILE_MODE_APPEND 0x04
 
-uint32_t fs_directory_create(const char* name, uint8_t permissions);
-void     fs_directory_delete(uint32_t address);
+typedef struct {
+    uint32_t address;
+    uint32_t position;
+    uint8_t  mode;
+    uint8_t  is_open;
+} FileHandle;
 
-uint8_t  fs_directory_add_reference(uint32_t directory_address, uint32_t reference_address);
-uint8_t  fs_directory_remove_reference(uint32_t directory_address, uint32_t reference_address);
-uint32_t fs_directory_get_reference(uint32_t directory_address, uint32_t index);
+uint32_t fs_file_create(const char* name, uint8_t permissions, uint32_t size, uint32_t parent_directory);
+void fs_file_delete(uint32_t address);
+
+uint32_t fs_file_get_size(uint32_t address);
+void fs_file_get_name(uint32_t address, char* filename);
+
+bool fs_file_get_permissions(uint32_t address, uint8_t* permissions);
+bool fs_file_set_permissions(uint32_t address, uint8_t permissions);
+
+bool fs_file_get_attributes(uint32_t address, uint8_t* attributes);
+bool fs_file_set_attributes(uint32_t address, uint8_t attributes);
+
+bool fs_file_open(FileHandle* file, uint32_t address, uint8_t mode);
+void fs_file_close(FileHandle* file);
+
+uint32_t fs_file_read(FileHandle* file, void* destination, uint32_t size);
+uint32_t fs_file_write(FileHandle* file, const void* source, uint32_t size);
+
+uint32_t fs_file_seek(FileHandle* file, uint32_t position);
+uint32_t fs_file_tell(const FileHandle* file);
+uint32_t fs_file_get_address(const FileHandle* file);
 
 #endif

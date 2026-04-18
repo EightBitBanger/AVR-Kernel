@@ -1,6 +1,7 @@
 #include <kernel/boot/avr/interrupt.h>
 
 #include <kernel/kernel.h>
+#include <kernel/mutex.h>
 #include <kernel/bus/bus.h>
 #include <kernel/arch/avr/io.h>
 
@@ -11,46 +12,54 @@
 
 #include <string.h>
 
-uint32_t display_address;
+extern uint32_t display_address;
 
-static uint8_t display_width  = 21;
-static uint8_t display_height = 8;
-
-static uint8_t console_position = 0;
-static uint8_t console_line     = 0;
+extern uint8_t console_position;
+extern uint8_t console_line;
 
 static volatile char    current_character = 0x00;
 static volatile char    last_character    = 0x00;
 static volatile uint8_t key_ready         = 0;
 
-static char    keyboard_string[16];
-static uint8_t keyboard_length = 0;
+extern char* keyboard_string;
+extern uint8_t keyboard_length;
 
-static char prompt_string[16] = "/>";
-static uint8_t prompt_length = sizeof(prompt_string);
+extern char* prompt_string;
+extern uint8_t prompt_length;
 
-char kb_getc(void);
+void kb_init(void) {
+    current_character = kb_getc();
+    last_character = current_character;
+    display_address = device_get_hardware_address("display");
+    
+    if (display_address == 0) 
+        return;
+}
 
 void kb_isr_callback(void) {
     current_character = kb_getc();
-    
-    if (last_character == current_character)
+    if (last_character == current_character) 
         return;
-    
     last_character = current_character;
-    key_ready      = 1;
+    
+    key_ready = 1;
 }
 
+uint8_t kb_check_input_state(void) {
+    return key_ready;
+}
 
-void kb_handler(void) {
-    char ch;
-    
+void kb_clear_input_state(void) {
+    key_ready = 0;
+}
+
+void kb_event_handler(void) {
     if (key_ready == 0)
         return;
     
     interrupt_disable();
     
-    ch = current_character;
+    char ch = current_character;
     key_ready = 0;
     
     interrupt_enable();
@@ -66,7 +75,6 @@ void kb_handler(void) {
             
             print("\x01");
         }
-        
         return;
     }
     
@@ -76,7 +84,7 @@ void kb_handler(void) {
         print("\n");
         
         if (keyboard_length > 0) {
-            process_command((char*)keyboard_string);
+            console_process_command((char*)keyboard_string);
             
             if (console_position != 0) 
                 print("\n");
@@ -92,7 +100,7 @@ void kb_handler(void) {
     if (ch < 0x20 || ch == 0x7f)
         return;
     
-    if (keyboard_length < (sizeof(keyboard_string) - 1)) {
+    if (keyboard_length < (KEYBOARD_STRING_LENGTH - 1)) {
         keyboard_string[keyboard_length] = ch;
         keyboard_length++;
         keyboard_string[keyboard_length] = '\0';
@@ -103,94 +111,6 @@ void kb_handler(void) {
         
         print(input);
     }
-}
-
-void console_init(void) {
-    current_character = kb_getc();
-    last_character = current_character;
-    display_address = device_get_hardware_address("display");
-    
-    if (display_address == 0) 
-        return;
-    
-    prompt_length = strlen(prompt_string);
-    
-    keyboard_length = 0;
-    memset(keyboard_string, 0x00, sizeof(keyboard_string));
-}
-
-void console_busy_wait(void) {
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    uint8_t checkByte = 0;
-    mmio_readb(&bus, display_address, &checkByte);
-    while (checkByte != 0x10) {
-        mmio_readb(&bus, display_address, &checkByte);
-    }
-}
-
-void console_set_position(uint8_t x, uint8_t y) {
-    console_busy_wait();
-    
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    // Boundary checks to prevent memory corruption/glitches
-    if (x >= display_width) x = display_width - 1;
-    if (y >= display_height) y = display_height - 1;
-    
-    console_position = x;
-    console_line = y;
-    
-    // Update the hardware MMIO registers immediately
-    mmio_writeb(&bus, display_address + 0x00002, &console_position);
-    mmio_writeb(&bus, display_address + 0x00001, &console_line);
-}
-
-void print_prompt(void) {
-    print(prompt_string);
-}
-
-void console_set_prompt(const char* prompt) {
-    strcpy(prompt_string, prompt);
-    prompt_length = strlen(prompt);
-}
-
-void console_set_blink_rate(uint8_t rate) {
-    console_busy_wait();
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    mmio_writeb(&bus, display_address + 0x00003, &rate);
-}
-
-void console_clear(void) {
-    console_busy_wait();
-    
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    console_set_position(0, 0);
-    
-    for (uint8_t h=0; h < display_height; h++) 
-        for (uint8_t w=0; w < display_width; w++) 
-            print(" ");
-    
-    console_set_position(0, 0);
-    return;
-}
-
-uint16_t display_get_width(void) {
-    return display_width;
-}
-
-uint16_t display_get_height(void) {
-    return display_height;
 }
 
 void print(const char* str) {
@@ -219,7 +139,7 @@ void print(const char* str) {
         if (ch == '\n') {
             console_position = 0;
             
-            if (console_line < (display_height - 1)) {
+            if (console_line < (display_get_height() - 1)) {
                 console_line++;
             } else {
                 uint8_t one = 1;
@@ -230,10 +150,10 @@ void print(const char* str) {
             continue;
         } else {
             
-            if (console_position >= display_width) {
+            if (console_get_position() >= display_get_width()) {
                 console_position = 0;
                 
-                if (console_line < (display_height - 1)) {
+                if (console_get_line() < (display_get_height() - 1)) {
                     console_line++;
                 } else {
                     uint8_t one = 1;
@@ -295,96 +215,95 @@ void print_int(int32_t value) {
     print(reversed);
 }
 
+void print_hex(uint8_t value) {
+    char buffer[3];
+    for (int i = 0; i < 2; i++) {
+        // Extract high nibble first, then low nibble
+        uint8_t nibble = (value >> (4 - (i * 4))) & 0x0F;
+        if (nibble < 10) {
+            buffer[i] = '0' + nibble;
+        } else {
+            buffer[i] = 'A' + (nibble - 10);
+        }
+    }
+    buffer[2] = '\0';
+    print(buffer);
+}
+
+void print_hex16(uint16_t value) {
+    for (int i = 1; i >= 0; i--) {
+        uint8_t byte = (uint8_t)(value >> (i * 8));
+        print_hex(byte);
+    }
+}
+
+void print_hex32(uint32_t value) {
+    for (int i = 3; i >= 0; i--) {
+        uint8_t byte = (uint8_t)(value >> (i * 8));
+        print_hex(byte);
+    }
+}
+
+void print_bits(uint8_t value) {
+    char buffer[9]; 
+    for (int i = 0; i < 8; i++) {
+        buffer[i] = ((value >> (7 - i)) & 1) ? '1' : '0';
+    }
+    buffer[8] = '\0';
+    print(buffer);
+}
+
+void print_bits16(uint16_t value) {
+    for (int i = 1; i >= 0; i--) {
+        uint8_t byte = (uint8_t)(value >> (i * 8));
+        print_bits(byte);
+    }
+}
+
+void print_bits32(uint32_t value) {
+    for (int i = 3; i >= 0; i--) {
+        uint8_t byte = (uint8_t)(value >> (i * 8));
+        print_bits(byte);
+    }
+}
+
+void print_prompt(void) {
+    print(prompt_string);
+}
+
+
+typedef struct {
+    uint8_t high;
+    char ascii;
+} KeyMap;
+
+static const KeyMap map_DF[] = {{0x9A, 0x05}, {0x96, ']'}, {0x90, 'i'}, {0xC6, 's'}, {0x88, 'd'}, {0xCA, 'f'}, {0xCC, 'h'}, {0x8E, 'j'}, {0xD2, 'l'}};
+static const KeyMap map_9F[] = {{0xC4, 0x12}, {0xD9, 0x01}, {0xD6, 0x02}, {0xDC, 0x04}, {0xD3, '-'}, {0x83, '`'}, {0x9D, 0x07}, {0x92, '/'}, {0x94, 0x27}, {0x91, '9'}, {0x8F, '8'}, {0xCD, '6'}, {0xCB, '5'}, {0x89, '3'}, {0xC7, '2'}, {0x85, '1'}, {0x86, 'z'}, {0xC8, 'x'}, {0x8A, 'v'}, {0x8C, 'b'}, {0xCE, 'm'}, {0xD0, 'k'}};
+static const KeyMap map_5F[] = {{0xD6, 0x12}, {0x9D, 0x03}, {0x8A, 0x20}, {0xC4, 0x09}, {0xD5, '='}, {0xDC, 0x10}, {0xD0, ','}, {0x92, '.'}, {0x97, 0x5C}, {0x91, '0'}, {0x8F, '7'}, {0x89, '4'}, {0xC8, 'c'}, {0x8C, 'n'}, {0x85, 'q'}, {0xC7, 'w'}, {0xCB, 'r'}, {0xCD, 'y'}, {0xD3, 'p'}};
+static const KeyMap map_1F[] = {{0xDD, 0x06}, {0xC5, 0x08}, {0x93, ';'}, {0x95, '['}, {0xC9, 'e'}, {0x8B, 't'}, {0xCF, 'u'}, {0xD1, 'o'}, {0x87, 'a'}, {0x8D, 'g'}};
+
+char lookup(const KeyMap* table, size_t len, uint8_t high) {
+    for (size_t i = 0; i < len; i++) {
+        if (table[i].high == high) return table[i].ascii;
+    }
+    return 0;
+}
 
 char kb_getc(void) {
-    struct Bus bus;
-    bus.write_waitstate = 1;
-    bus.read_waitstate  = 2;
+    struct Bus bus = {1, 2};
+    uint8_t low, high;
+    mmio_readb(&bus, 0x90000, &low);
+    mmio_readb(&bus, 0x90001, &high);
     
-    uint8_t scancode_low;
-    uint8_t scancode_high;
-    mmio_readb(&bus, 0x90000, &scancode_low);
-    mmio_readb(&bus, 0x90001, &scancode_high);
+    // Shift Logic
+    if (high == 0xC4 && (low >= 0x90 && low <= 0x9B)) return 0x11; // Left Shift
+    if (high == 0xD6 && (low >= 0x50 && low <= 0x5B)) return 0x12; // Right Shift
     
-    if ( (scancode_low == 0x98)|(scancode_low == 0x99)|(scancode_low == 0x92)|(scancode_low == 0x91)|(scancode_low == 0x90)|(scancode_low == 0x9a)|(scancode_low == 0x9b) ) {
-		if (scancode_high == 0xc4) {return 0x11;} // Left shift pressed
-	}
-	
-	if ( (scancode_low == 0x58)|(scancode_low == 0x59)|(scancode_low == 0x52)|(scancode_low == 0x51)|(scancode_low == 0x50)|(scancode_low == 0x5a)|(scancode_low == 0x5b) ) {
-		if (scancode_high == 0xd6) {return 0x11;} // Right shift pressed
-	}
-	
-	if (scancode_low == 0xdf) {
-		if (scancode_high == 0x9a) {return 0x05;} // Left arrow
-		if (scancode_high == 0x96) {return ']';}  // Right square bracket
-		if (scancode_high == 0x90) {return 'i';}
-		if (scancode_high == 0xc6) {return 's';}
-		if (scancode_high == 0x88) {return 'd';}
-		if (scancode_high == 0xca) {return 'f';}
-		if (scancode_high == 0xcc) {return 'h';}
-		if (scancode_high == 0x8e) {return 'j';}
-		if (scancode_high == 0xd2) {return 'l';}
-		return  0x00;
-	}
-	if (scancode_low == 0x9f) {
-		if (scancode_high == 0xc4) {return 0x12;} // Shift left released
-		if (scancode_high == 0xd9) {return 0x01;} // Backspace
-		if (scancode_high == 0xd6) {return 0x02;} // Enter
-		if (scancode_high == 0xdc) {return 0x04;} // Down arrow
-		if (scancode_high == 0xd3) {return '-';}  // Dash
-		if (scancode_high == 0x83) {return '`';}  // Apostrophe
-		if (scancode_high == 0x9d) {return 0x07;} // Escape
-		if (scancode_high == 0x92) {return '/';}  // Forward slash
-		if (scancode_high == 0x94) {return 0x27;} // '
-		if (scancode_high == 0x91) {return '9';}
-		if (scancode_high == 0x8f) {return '8';}
-		if (scancode_high == 0xcd) {return '6';}
-		if (scancode_high == 0xcb) {return '5';}
-		if (scancode_high == 0x89) {return '3';}
-		if (scancode_high == 0xc7) {return '2';}
-		if (scancode_high == 0x85) {return '1';}
-		if (scancode_high == 0x86) {return 'z';}
-		if (scancode_high == 0xc8) {return 'x';}
-		if (scancode_high == 0x8a) {return 'v';}
-		if (scancode_high == 0x8c) {return 'b';}
-		if (scancode_high == 0xce) {return 'm';}
-		if (scancode_high == 0xd0) {return 'k';}
-		return  0x00;
-	}
-	if (scancode_low == 0x5f) {
-		if (scancode_high == 0xd6) {return 0x12;} // Right shift released
-		if (scancode_high == 0x9d) {return 0x03;} // Up arrow
-		if (scancode_high == 0x8a) {return 0x20;} // Space
-		if (scancode_high == 0xc4) {return 0x09;} // Alt
-		if (scancode_high == 0xd5) {return '=';}  // Equals
-		if (scancode_high == 0xdc) {return 0x10;} // Delete
-		if (scancode_high == 0xd0) {return ',';}  // Comma
-		if (scancode_high == 0x92) {return '.';}  // Period
-		if (scancode_high == 0x97) {return 0x5c;} // Backslash
-		if (scancode_high == 0x91) {return '0';}
-		if (scancode_high == 0x8f) {return '7';}
-		if (scancode_high == 0x89) {return '4';}
-		if (scancode_high == 0xc8) {return 'c';}
-		if (scancode_high == 0x8c) {return 'n';}
-		if (scancode_high == 0x85) {return 'q';}
-		if (scancode_high == 0xc7) {return 'w';}
-		if (scancode_high == 0xcb) {return 'r';}
-		if (scancode_high == 0xcd) {return 'y';}
-		if (scancode_high == 0xd3) {return 'p';}
-		return  0x00;
-	}
-	if (scancode_low == 0x1f) {
-		if (scancode_high == 0xdd) {return 0x06;} // Right arrow
-		if (scancode_high == 0xc5) {return 0x08;} // Control
-		if (scancode_high == 0x93) {return ';';}  // Semi-colon
-		if (scancode_high == 0x95) {return '[';}  // Left square bracket
-		if (scancode_high == 0xc9) {return 'e';}
-		if (scancode_high == 0x8b) {return 't';}
-		if (scancode_high == 0xcf) {return 'u';}
-		if (scancode_high == 0xd1) {return 'o';}
-		if (scancode_high == 0x87) {return 'a';}
-		if (scancode_high == 0x8d) {return 'g';}
-		return  0x00;
-	}
-	return 0x00;
+    switch (low) {
+        case 0xDF: return lookup(map_DF, sizeof(map_DF), high);
+        case 0x9F: return lookup(map_9F, sizeof(map_9F), high);
+        case 0x5F: return lookup(map_5F, sizeof(map_5F), high);
+        case 0x1F: return lookup(map_1F, sizeof(map_1F), high);
+        default: return 0;
+    }
 }

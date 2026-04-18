@@ -17,6 +17,7 @@ static uint32_t kmalloc_reserved_blocks  = 0;
 #define KMALLOC_HEADER_SIZE  ((uint32_t)sizeof(struct KMallocHeader))
 
 uint8_t* kmalloc_bitmap = 0;
+uint8_t* kmalloc_dirty = 0;
 
 uint32_t __KMALLOC_HEAP_BEGIN__ = 0;
 
@@ -30,8 +31,15 @@ static inline uint32_t kmalloc_heap_data_size(void) {
     return kmalloc_pool_size - kmalloc_heap_data_begin();
 }
 
-void kmalloc_bitmap_set(uint8_t* bitmap) {
+void kmalloc_bitmap_set(uint8_t* bitmap, uint8_t* bitmap_dirty) {
     kmalloc_bitmap = bitmap;
+    kmalloc_dirty = bitmap_dirty;
+    
+    if (kmalloc_dirty != 0) {
+        for (uint32_t index = 0; index < kmalloc_bitmap_size; index++) {
+            kmalloc_dirty[index] = 0;
+        }
+    }
 }
 
 void heap_set_base_address(uint32_t base) {
@@ -40,6 +48,12 @@ void heap_set_base_address(uint32_t base) {
 
 uint32_t heap_get_base_address(void) {
     return __KMALLOC_HEAP_BEGIN__;
+}
+
+static inline void kmalloc_bitmap_mark_dirty(uint32_t byte_index) {
+    if (kmalloc_dirty != 0) {
+        kmalloc_dirty[byte_index] = 1;
+    }
 }
 
 void kmalloc_bitmap_write(void) {
@@ -52,8 +66,19 @@ void kmalloc_bitmap_write(void) {
     if (kmalloc_bitmap == 0)
         return;
     
+    if (kmalloc_dirty == 0) {
+        for (index = 0; index < kmalloc_bitmap_size; index++) {
+            mmio_writeb(&bus, __KMALLOC_HEAP_BEGIN__ + index, &kmalloc_bitmap[index]);
+        }
+        return;
+    }
+    
     for (index = 0; index < kmalloc_bitmap_size; index++) {
+        if (kmalloc_dirty[index] == 0)
+            continue;
+        
         mmio_writeb(&bus, __KMALLOC_HEAP_BEGIN__ + index, &kmalloc_bitmap[index]);
+        kmalloc_dirty[index] = 0;
     }
 }
 
@@ -69,6 +94,12 @@ void kmalloc_bitmap_read(void) {
     
     for (index = 0; index < kmalloc_bitmap_size; index++) {
         mmio_readb(&bus, __KMALLOC_HEAP_BEGIN__ + index, &kmalloc_bitmap[index]);
+    }
+    
+    if (kmalloc_dirty != 0) {
+        for (index = 0; index < kmalloc_bitmap_size; index++) {
+            kmalloc_dirty[index] = 0;
+        }
     }
 }
 
@@ -114,17 +145,17 @@ static uint32_t kmalloc_read32(uint32_t address) {
 static void kmalloc_header_write(uint32_t address, const struct KMallocHeader* header) {
     kmalloc_write32(address + 0, header->size);
     kmalloc_write8 (address + 4, header->flags);
-    kmalloc_write8 (address + 5, header->permissions);
-    kmalloc_write8 (address + 6, header->reserved);
+    kmalloc_write8 (address + 5, header->type);
+    kmalloc_write8 (address + 6, header->perm);
     kmalloc_write8 (address + 7, header->magic);
 }
 
 static void kmalloc_header_read(uint32_t address, struct KMallocHeader* header) {
-    header->size        = kmalloc_read32(address + 0);
-    header->flags       = kmalloc_read8(address + 4);
-    header->permissions = kmalloc_read8(address + 5);
-    header->reserved    = kmalloc_read8(address + 6);
-    header->magic       = kmalloc_read8(address + 7);
+    header->size  = kmalloc_read32(address + 0);
+    header->flags = kmalloc_read8(address + 4);
+    header->type  = kmalloc_read8(address + 5);
+    header->perm  = kmalloc_read8(address + 6);
+    header->magic = kmalloc_read8(address + 7);
 }
 
 static inline uint32_t kmalloc_blocks_required(uint32_t size) {
@@ -142,13 +173,31 @@ static inline bool kmalloc_block_is_used(uint32_t block_index) {
 static inline void kmalloc_block_set_used(uint32_t block_index) {
     uint32_t byte_index = block_index / 8UL;
     uint8_t  bit_index  = (uint8_t)(block_index % 8UL);
-    kmalloc_bitmap[byte_index] |= (uint8_t)(1U << bit_index);
+    uint8_t  old_value;
+    uint8_t  new_value;
+    
+    old_value = kmalloc_bitmap[byte_index];
+    new_value = (uint8_t)(old_value | (uint8_t)(1U << bit_index));
+    
+    if (new_value != old_value) {
+        kmalloc_bitmap[byte_index] = new_value;
+        kmalloc_bitmap_mark_dirty(byte_index);
+    }
 }
 
 static inline void kmalloc_block_set_free(uint32_t block_index) {
     uint32_t byte_index = block_index / 8UL;
     uint8_t  bit_index  = (uint8_t)(block_index % 8UL);
-    kmalloc_bitmap[byte_index] &= (uint8_t)~(1U << bit_index);
+    uint8_t  old_value;
+    uint8_t  new_value;
+    
+    old_value = kmalloc_bitmap[byte_index];
+    new_value = (uint8_t)(old_value & (uint8_t)~(uint8_t)(1U << bit_index));
+    
+    if (new_value != old_value) {
+        kmalloc_bitmap[byte_index] = new_value;
+        kmalloc_bitmap_mark_dirty(byte_index);
+    }
 }
 
 bool kmalloc_is_valid(uint32_t address) {
@@ -208,6 +257,8 @@ uint32_t heap_get_total_memory(void) {
 }
 
 void heap_init(uint32_t block_size, uint32_t total_memory) {
+    uint32_t index;
+    
     if (block_size == 0 || total_memory == 0) {
         kmalloc_block_size      = 0;
         kmalloc_pool_size       = 0;
@@ -227,8 +278,14 @@ void heap_init(uint32_t block_size, uint32_t total_memory) {
     if (kmalloc_bitmap == 0)
         return;
     
-    for (uint32_t index = 0; index < kmalloc_bitmap_size; index++) {
+    for (index = 0; index < kmalloc_bitmap_size; index++) {
         kmalloc_bitmap[index] = 0;
+    }
+    
+    if (kmalloc_dirty != 0) {
+        for (index = 0; index < kmalloc_bitmap_size; index++) {
+            kmalloc_dirty[index] = 0;
+        }
     }
 }
 
@@ -279,8 +336,8 @@ uint32_t kmalloc(uint32_t size) {
                 
                 header.size = size;
                 header.flags = 0;
-                header.permissions = 0;
-                header.reserved = 0;
+                header.type  = 0;
+                header.perm  = 0;
                 header.magic = KMALLOC_MAGIC;
                 
                 kmalloc_header_write(header_address, &header);
@@ -322,8 +379,8 @@ void kfree(uint32_t address) {
     
     header.size = 0;
     header.flags = 0;
-    header.permissions = 0;
-    header.reserved = 0;
+    header.type  = 0;
+    header.perm  = 0;
     header.magic = 0;
     
     kmalloc_header_write(header_address, &header);
@@ -331,6 +388,33 @@ void kfree(uint32_t address) {
     for (block_offset = 0; block_offset < required_blocks; block_offset++) {
         kmalloc_block_set_free(start_block + block_offset);
     }
+}
+
+uint8_t kmalloc_get_type(uint32_t address) {
+    uint32_t             header_address;
+    struct KMallocHeader header;
+    
+    if (!kmalloc_is_valid(address))
+        return 0;
+    
+    header_address = address - KMALLOC_HEADER_SIZE;
+    kmalloc_header_read(header_address, &header);
+    
+    return header.type;
+}
+
+void kmalloc_set_type(uint32_t address, uint8_t type) {
+    uint32_t             header_address;
+    struct KMallocHeader header;
+    
+    if (!kmalloc_is_valid(address))
+        return;
+    
+    header_address = address - KMALLOC_HEADER_SIZE;
+    kmalloc_header_read(header_address, &header);
+    
+    header.type = type;
+    kmalloc_header_write(header_address, &header);
 }
 
 uint8_t kmalloc_get_flags(uint32_t address) {
@@ -370,7 +454,7 @@ uint8_t kmalloc_get_permissions(uint32_t address) {
     header_address = address - KMALLOC_HEADER_SIZE;
     kmalloc_header_read(header_address, &header);
     
-    return header.permissions;
+    return header.perm;
 }
 
 void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
@@ -383,7 +467,7 @@ void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
     header_address = address - KMALLOC_HEADER_SIZE;
     kmalloc_header_read(header_address, &header);
     
-    header.permissions = permissions;
+    header.perm = permissions;
     kmalloc_header_write(header_address, &header);
 }
 
@@ -449,7 +533,7 @@ uint32_t kmalloc_next(uint32_t previous_address) {
     return KMALLOC_NULL;
 }
 
-void kmem_write(uint32_t address, const void* source, uint32_t size) {
+void kmalloc_write(uint32_t address, const void* source, uint32_t size) {
     const uint8_t* bytes = (const uint8_t*)source;
     uint32_t       index;
     
@@ -458,7 +542,7 @@ void kmem_write(uint32_t address, const void* source, uint32_t size) {
     }
 }
 
-void kmem_read(uint32_t address, void* destination, uint32_t size) {
+void kmalloc_read(uint32_t address, void* destination, uint32_t size) {
     uint8_t* bytes = (uint8_t*)destination;
     uint32_t index;
     

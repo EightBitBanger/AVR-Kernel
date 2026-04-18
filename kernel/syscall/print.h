@@ -5,24 +5,27 @@
 
 #include <kernel/kernel.h>
 
-void console_init(void);
-void console_clear(void);
+void kb_init(void);
 
-void console_set_position(uint8_t x, uint8_t y);
-void console_set_prompt(const char* prompt);
-void console_set_blink_rate(uint8_t rate);
-
-uint16_t display_get_width(void);
-uint16_t display_get_height(void);
-
-char kb_getc(void);
 void print(const char* str);
 void print_int(int32_t value);
+
+void print_hex(uint8_t value);
+void print_hex16(uint16_t value);
+void print_hex32(uint32_t value);
+
+void print_bits(uint8_t value);
+void print_bits16(uint16_t value);
+void print_bits32(uint32_t value);
+
 void print_prompt(void);
 
-void console_busy_wait(void);
+char kb_getc(void);
+
+uint8_t kb_check_input_state(void);
+void kb_clear_input_state(void);
 
 void kb_isr_callback(void);
-void kb_handler(void);
+void kb_event_handler(void);
 
 #endif

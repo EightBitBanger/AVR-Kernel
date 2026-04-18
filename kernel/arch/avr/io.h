@@ -151,27 +151,17 @@ static inline void mmio_readb(struct Bus* bus, uint32_t address, uint8_t* byte) 
 	_BUS_MIDDLE_OUT__ = (address >> 8) & 0xff;
 	_BUS_LOWER_OUT__  =  address & 0xff;
 	
-    // Latch in preparation of a read cycle
-	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
-	_CONTROL_OUT__ = _CONTROL_READ_LATCH__;
-	
-	// Set data direction
+    _CONTROL_OUT__ = _CONTROL_READ_LATCH__;
 	_BUS_LOWER_DIR__ = 0x00;
-	
-	// Begin the read strobe
 	_CONTROL_OUT__ = _CONTROL_READ_CYCLE__;
 	
-	// Wait state
 	uint16_t wait = bus->read_waitstate;
     while (wait--) __asm__ volatile("nop");
 	
-	// Read the data byte
 	*byte = _BUS_LOWER_IN__;
 	
-	// End cycle (reset the select logic)
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
-	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
 	_BUS_LOWER_DIR__ = 0xff;
 }
 
@@ -180,24 +170,15 @@ static inline void mmio_writeb(struct Bus* bus, uint32_t address, uint8_t* byte)
 	_BUS_MIDDLE_OUT__ = (address >> 8) & 0xff;
 	_BUS_LOWER_OUT__  =  address & 0xff;
 	
-	// Latch in preparation of a write cycle
-	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_CONTROL_OUT__ = _CONTROL_WRITE_LATCH__;
-	
-	// Cast the data byte
 	_BUS_LOWER_OUT__ = *byte;
-	
-	// Begin the write strobe
 	_CONTROL_OUT__ = _CONTROL_WRITE_CYCLE__;
 	
-	// Wait state
 	uint16_t wait = bus->write_waitstate;
     while (wait--) __asm__ volatile("nop");
 	
-	// End cycle (reset the select logic)
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
-	_CONTROL_OUT__ = _CONTROL_CLOSED_LATCH__;
 }
 
 static inline void mmio_writeb_eeprom(struct Bus* bus, uint32_t address, uint8_t* byte) {

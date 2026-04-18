@@ -3,13 +3,11 @@
 
 #include <kernel/boot/avr/heap.h>
 #include <kernel/boot/avr/interrupt.h>
+#include <kernel/emulation/x4/x4.h>
 
-#include <kernel/device/driver.h>
-#include <kernel/device/device.h>
+#include <kernel/syscall/graphix.h>
 
-//#include <kernel/fs/fs.h>
-
-#include <kernel/syscall/print.h>
+#include <kernel/fs/fs.h>
 
 #include <kernel/kernel.h>
 #include <kernel/delay.h>
@@ -23,6 +21,8 @@ ISR(INT2_vect) {
 
 uint32_t allocate_external_memory(void);
 
+#include <kernel/syscall.h>
+
 int main() {
     mmio_address_zero();
     mmio_control_zero();
@@ -30,18 +30,24 @@ int main() {
     _delay_ms(1000);
     
     interrupt_init();
-    console_init();
     
-    uint32_t total_memory = 0UL;
-    uint32_t block_size   = 32UL;
+    char keyboard_string[16];
+    char prompt_string[16];
     
-    total_memory = allocate_external_memory();
-    const uint32_t ALLOCATOR_MAX = total_memory / 2;
+    kb_init();
+    
+    console_init(keyboard_string, prompt_string);
+    
+    // Allocate total memory
+    
+    uint32_t block_size = 32UL;
+    uint32_t total_memory = allocate_external_memory();
+    const uint32_t ALLOCATOR_MAX = total_memory;
     
     uint8_t bitmap[ALLOCATOR_MAX / block_size / 8UL];
     memset(bitmap, 0x00, sizeof(bitmap));
     
-    kmalloc_bitmap_set(bitmap);
+    kmalloc_bitmap_set(bitmap, 0);
     heap_set_base_address(0x00000000);
     
     heap_init(block_size, ALLOCATOR_MAX);
@@ -50,14 +56,13 @@ int main() {
     
     kernel_init();
     
-    kmalloc_bitmap_write();
-    
     
     print_prompt();
     interrupt_enable();
     
     while (1) {
-        kb_handler();
+        
+        kb_event_handler();
     }
     
 }
@@ -82,11 +87,11 @@ uint32_t allocate_external_memory(void) {
         counter++;
         if (counter > 1024) {
             counter = 0;
-            console_set_position(0, 0);
+            console_set_cursor_position(0, 0);
             print_int(total_memory);
         }
     }
-    console_set_position(0, 0);
+    console_set_cursor_position(0, 0);
     print_int(total_memory);
     print(" bytes free\n");
     

@@ -10,7 +10,7 @@ static inline void interrupt_init(void) {
     EIMSK |=  (1 << INT2);
 }
 
-static inline void interrupt_enable() { sei(); }
-static inline void interrupt_disable() { cli(); }
+static inline void interrupt_enable(void) { sei(); }
+static inline void interrupt_disable(void) { cli(); }
 
 #endif

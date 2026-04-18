@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 uint32_t create_knode(const char* name, uint32_t parent_address);
-void     destroy_knode(uint32_t address);
+void destroy_knode(uint32_t address, uint32_t parent_address);
 
 uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr);
 uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_ptr);

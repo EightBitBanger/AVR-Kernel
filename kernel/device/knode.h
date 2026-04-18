@@ -3,7 +3,10 @@
 
 #include <stdint.h>
 
-struct KernelDirectory {
+#define KDIRECTORY_REF_MAX    6
+#define KDIRECTORYEX_REF_MAX  11
+
+struct __attribute__((packed)) KernelDirectory {
     char name[16];
     
     uint32_t parent;
@@ -11,16 +14,16 @@ struct KernelDirectory {
     uint32_t next;
     uint32_t prev;
     
-    uint16_t size;
-    uint32_t reference[32];
+    uint32_t size;
+    uint32_t reference[KDIRECTORY_REF_MAX];
 };
 
-struct KernelDirectoryExtent {
+struct __attribute__((packed)) KernelDirectoryExtent {
     uint32_t next;
     uint32_t prev;
     
-    uint16_t size;
-    uint32_t reference[32];
+    uint32_t size;
+    uint32_t reference[KDIRECTORYEX_REF_MAX];
 };
 
 #endif

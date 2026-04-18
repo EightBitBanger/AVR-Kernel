@@ -8,14 +8,15 @@
 struct Device {
     char name[16];
     
-    uint8_t device_id;
-    uint8_t device_class;
+    struct Bus bus;
+    
+    uint8_t id;
+    uint8_t class;
     
     uint8_t  hardware_slot;
     uint32_t hardware_address;
     
     uint32_t block_address;
-    struct Bus bus;
 };
 
 #endif
