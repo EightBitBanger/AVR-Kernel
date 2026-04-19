@@ -1,12 +1,14 @@
 #ifndef BASE_FILE_STRUCTS_H
 #define BASE_FILE_STRUCTS_H
 
+#include <kernel/fs/config.h>
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-#define FS_DIRECTORY_REF_MAX     6
-#define FS_DIRECTORY_EX_REF_MAX  12
+#define FS_DIRECTORY_REF_MAX         6
+#define FS_DIRECTORY_EX_REF_MAX     12
 
 struct __attribute__((packed)) FSDeviceHeader {
     uint8_t id;
@@ -19,7 +21,7 @@ struct __attribute__((packed)) FSPartitionBlock {
     
     uint32_t root_directory;
     
-    char name[16];
+    char name[FS_NAME_LENGTH_MAX];
     
     uint8_t  flags;
     uint8_t  type;
@@ -33,7 +35,7 @@ struct __attribute__((packed)) FSAllocHeader {
 };
 
 struct __attribute__((packed)) FSBlockHeader {
-    char    name[16];
+    char    name[FS_NAME_LENGTH_MAX];
     
     uint8_t attributes;
     uint8_t permissions;

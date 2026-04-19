@@ -49,15 +49,10 @@ int call_routine_format(int arg_count, char** args) {
     print_int(sector_size);
     print(" sector size\n");
     
-    uint32_t bitmap_size = total_capacity / sector_size / 8UL;
-    uint8_t bitmap[bitmap_size];
-    uint8_t dirty[bitmap_size];
-    memset(bitmap, 0x00, bitmap_size);
-    
     fs_device_format(device_address, total_capacity, sector_size);
     
     struct FSPartitionBlock partition;
-    fs_device_open(device_address, bitmap, dirty, &partition);
+    fs_device_open(device_address, &partition);
     
     uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
     

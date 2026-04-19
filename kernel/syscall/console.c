@@ -142,7 +142,7 @@ void console_process_command(char* keyboard_str) {
         const char* name = syscall_get_function_name(i);
         uint8_t flags = syscall_get_flags(i);
         
-        if (!(flags & SYSCALL_FLAG_COMMAND)) 
+        if (!(flags & KSC_FLAG_COMMAND)) 
             continue;
         
         if (strcmp(command, name) != 0) 
@@ -297,10 +297,8 @@ void print_fs_entry(uint32_t directory_address) {
     struct WorkingDirectory fs_current;
     kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
     
-    uint8_t bitmap[256];
-    uint8_t dirty[256];
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, bitmap, dirty, &partition);
+    fs_device_open(fs_current.mount_device, &partition);
     
     for (uint32_t reference_index=0;;reference_index++) {
         uint32_t reference = fs_directory_get_reference(fs_current.mount_directory, reference_index);

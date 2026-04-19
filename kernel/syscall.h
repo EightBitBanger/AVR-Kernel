@@ -1,8 +1,7 @@
 #ifndef SYSCALL_COMMAND_SYSTEM_H
 #define SYSCALL_COMMAND_SYSTEM_H
 
-#define  SYSCALL_FLAG_COMMAND      1
-
+// Calls
 
 #define  SYSCALL_EXECUTE           1
 
@@ -12,6 +11,7 @@
 
 #define  SYSCALL_MAKE             16
 #define  SYSCALL_MAKEDIR          20
+#define  SYSCALL_RENAME           21
 #define  SYSCALL_REMOVE           24
 
 #define  SYSCALL_BOOT             28
@@ -20,6 +20,10 @@
 
 #define  SYSCALL_TYPE             38
 #define  SYSCALL_GRAPHICS         42
+
+// Flags
+
+#define  KSC_FLAG_COMMAND          1
 
 
 int syscall(uint16_t id, char** args);

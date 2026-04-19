@@ -1,7 +1,7 @@
+#include <kernel/fs/fs.h>
 #include <kernel/fs/basefs/directory.h>
 
 #include <string.h>
-#include <stdbool.h>
 
 static bool fs_file_alloc_header_read(uint32_t payload_address, struct FSAllocHeader* header) {
     uint32_t allocation_address;
@@ -388,9 +388,6 @@ uint32_t fs_directory_find(uint32_t directory_address, const char* name) {
         if (reference_address == FS_NULL)
             continue;
         
-        if (!fs_device_check(reference_address, sizeof(struct FSBlockHeader)))
-            continue;
-        
         fs_mem_read(reference_address, &object, sizeof(struct FSBlockHeader));
         
         if (strncmp(object.name, name, sizeof(object.name)) == 0)
@@ -407,9 +404,6 @@ uint32_t fs_directory_find(uint32_t directory_address, const char* name) {
             reference_address = extent.reference[index].ref;
             
             if (reference_address == FS_NULL)
-                continue;
-            
-            if (!fs_device_check(reference_address, sizeof(struct FSBlockHeader)))
                 continue;
             
             fs_mem_read(reference_address, &object, sizeof(struct FSBlockHeader));

@@ -14,10 +14,8 @@ int call_routine_boot(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
     kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
     
-    uint8_t bitmap[256];
-    uint8_t dirty[256];
     struct FSPartitionBlock part;
-    fs_device_open(fs_current.mount_device, bitmap, dirty, &part);
+    fs_device_open(fs_current.mount_device, &part);
     
     uint32_t handle = fs_file_create("cls", FS_PERMISSION_READ | FS_PERMISSION_WRITE | FS_PERMISSION_EXECUTE, sizeof(program), fs_current.mount_directory);
     

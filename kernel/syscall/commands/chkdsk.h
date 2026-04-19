@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <kernel/kernel.h>
+#include <kernel/fs/fs.h>
 
 int call_routine_chkdsk(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
@@ -13,10 +14,8 @@ int call_routine_chkdsk(int arg_count, char** args) {
         return 1;
     }
     
-    uint8_t bitmap[256];
-    uint8_t dirty[256];
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, bitmap, dirty, &partition);
+    fs_device_open(fs_current.mount_device, &partition);
     
     print_int(partition.sector_size);
     print("B per sector\n");

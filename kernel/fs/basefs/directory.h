@@ -3,9 +3,6 @@
 
 #include <kernel/fs/fs.h>
 
-#include <stdint.h>
-#include <stdbool.h>
-
 uint32_t fs_directory_create(const char* name, uint8_t permissions, uint32_t parent_directory);
 void     fs_directory_delete(uint32_t address);
 

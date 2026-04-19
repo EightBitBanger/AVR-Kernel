@@ -19,14 +19,14 @@ int call_routine_copy(int arg_count, char** args) {
     if (source_address == FS_NULL) 
         return 3; // Source does not exist
     
-    if (fs_is_directory(source_address)) 
+    if (fs_check_directory_valid(source_address)) 
         return 4; // Source is a directory
     
     uint32_t source_size = fs_file_get_size(source_address);
     
     // Copy to a directory
     if (destination_address != FS_NULL) {
-        if (fs_is_directory(destination_address)) {
+        if (fs_check_directory_valid(destination_address)) {
             uint32_t check_address = fs_directory_find(destination_address, args[0]);
             if (check_address != FS_NULL) 
                 return 6; // File exists in destination directory

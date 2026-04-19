@@ -1,8 +1,8 @@
+#include <kernel/fs/fs.h>
 #include <kernel/fs/basefs/file.h>
-#include <kernel/fs/basefs/structs.h>
+#include <kernel/fs/config.h>
 
 #include <string.h>
-#include <stdbool.h>
 
 bool fs_file_check(uint32_t address) {
     struct FSAllocHeader alloc;
@@ -105,6 +105,18 @@ void fs_file_get_name(uint32_t address, char* filename) {
     strcpy(filename, header.block.name);
 }
 
+void fs_file_set_name(uint32_t address, char* filename) {
+    struct FSFileHeader header;
+    fs_mem_read(address, &header, sizeof(struct FSFileHeader));
+    size_t length = strlen(filename);
+    if (length > FS_NAME_LENGTH_MAX) 
+        length = FS_NAME_LENGTH_MAX;
+    if (length == 0) 
+        return;
+    memcpy(header.block.name, filename, length);
+    fs_mem_write(address, &header, sizeof(struct FSFileHeader));
+}
+
 bool fs_file_get_permissions(uint32_t address, uint8_t* permissions) {
     struct FSFileHeader header;
     fs_mem_read(address, &header, sizeof(struct FSFileHeader));
@@ -115,9 +127,7 @@ bool fs_file_get_permissions(uint32_t address, uint8_t* permissions) {
 bool fs_file_set_permissions(uint32_t address, uint8_t permissions) {
     struct FSFileHeader header;
     fs_mem_read(address, &header, sizeof(struct FSFileHeader));
-    
     header.block.permissions = permissions;
-    
     fs_mem_write(address, &header, sizeof(struct FSFileHeader));
     return 0;
 }
@@ -132,9 +142,7 @@ bool fs_file_get_attributes(uint32_t address, uint8_t* attributes) {
 bool fs_file_set_attributes(uint32_t address, uint8_t attributes) {
     struct FSFileHeader header;
     fs_mem_read(address, &header, sizeof(struct FSFileHeader));
-    
     header.block.attributes = attributes;
-    
     fs_mem_write(address, &header, sizeof(struct FSFileHeader));
     return 0;
 }
@@ -185,10 +193,8 @@ uint32_t fs_file_read(FileHandle* file, void* destination, uint32_t size) {
     
     if (!fs_file_struct_is_valid(file))
         return 0;
-    
     if (!(file->mode & FS_FILE_MODE_READ))
         return 0;
-    
     if (size == 0)
         return 0;
     
@@ -216,10 +222,8 @@ uint32_t fs_file_write(FileHandle* file, const void* source, uint32_t size) {
     
     if (!fs_file_struct_is_valid(file))
         return 0;
-    
     if (!(file->mode & FS_FILE_MODE_WRITE))
         return 0;
-    
     if (size == 0)
         return 0;
     
@@ -243,36 +247,29 @@ uint32_t fs_file_write(FileHandle* file, const void* source, uint32_t size) {
 
 uint32_t fs_file_seek(FileHandle* file, uint32_t position) {
     uint32_t file_size;
-    
     if (!fs_file_struct_is_valid(file))
         return FS_NULL;
     
     file_size = fs_file_get_size(file->address);
-    
     if (position > file_size)
         position = file_size;
     
     file->position = position;
-    
     return position;
 }
 
 uint32_t fs_file_tell(const FileHandle* file) {
-    if (file == NULL)
+    if (file == NULL) 
         return FS_NULL;
-    
-    if (!file->is_open)
+    if (!file->is_open) 
         return FS_NULL;
-    
     return file->position;
 }
 
 uint32_t fs_file_get_address(const FileHandle* file) {
-    if (file == NULL)
+    if (file == NULL) 
         return FS_NULL;
-    
-    if (!file->is_open)
+    if (!file->is_open) 
         return FS_NULL;
-    
     return file->address;
 }

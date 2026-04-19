@@ -1,11 +1,12 @@
-#ifndef SYSCALL_MKDIR_H
-#define SYSCALL_MKDIR_H
+#ifndef SYSCALL_RN_H
+#define SYSCALL_RN_H
 
 #include <stdint.h>
 #include <kernel/kernel.h>
+#include <kernel/syscall.h>
 
-int call_routine_mkdir(int arg_count, char** args) {
-    if (arg_count == 0) 
+int call_routine_rename(int arg_count, char** args) {
+    if (arg_count < 2) 
         return 1;
     
     struct WorkingDirectory fs_current;
@@ -18,9 +19,11 @@ int call_routine_mkdir(int arg_count, char** args) {
     if (fs_device_open(fs_current.mount_device, &partition) == FS_NULL) 
         return 3;
     
-    uint32_t directory_address = fs_directory_create(args[0], FS_PERMISSION_READ | FS_PERMISSION_WRITE, fs_current.mount_directory);
-    if (directory_address == FS_NULL) 
+    uint32_t target_address = fs_directory_find(fs_current.mount_directory, args[0]);
+    if (target_address == FS_NULL) 
         return 4;
+    
+    fs_file_set_name(target_address, args[1]);
     
     fs_bitmap_flush();
     return 0;

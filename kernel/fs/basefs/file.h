@@ -3,13 +3,6 @@
 
 #include <kernel/fs/fs.h>
 
-#include <stdint.h>
-#include <stdbool.h>
-
-#define FS_FILE_MODE_READ   0x01
-#define FS_FILE_MODE_WRITE  0x02
-#define FS_FILE_MODE_APPEND 0x04
-
 typedef struct {
     uint32_t address;
     uint32_t position;
@@ -22,6 +15,7 @@ void fs_file_delete(uint32_t address);
 
 uint32_t fs_file_get_size(uint32_t address);
 void fs_file_get_name(uint32_t address, char* filename);
+void fs_file_set_name(uint32_t address, char* filename);
 
 bool fs_file_get_permissions(uint32_t address, uint8_t* permissions);
 bool fs_file_set_permissions(uint32_t address, uint8_t permissions);

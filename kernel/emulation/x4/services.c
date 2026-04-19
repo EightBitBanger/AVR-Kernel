@@ -67,10 +67,8 @@ void isc_filesystem_routine(struct X4Thread* thread, char** args, uint8_t arg_co
         char name[17];
         x4_read_string_from_dx(thread, name);
         
-        uint8_t bitmap[256];
-        uint8_t dirty[256];
         struct FSPartitionBlock partition;
-        fs_device_open(mount, bitmap, dirty, &partition);
+        fs_device_open(mount, &partition);
         
         uint32_t file_address = fs_file_create(name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, file_size.address, directory);
         if (file_address == FS_NULL) {

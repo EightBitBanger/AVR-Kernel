@@ -54,10 +54,8 @@ void kernel_init(void) {
             continue;
         device_mount = reference;
         
-        uint8_t bitmap[256];
-        uint8_t dirty[256];
         struct FSPartitionBlock part;
-        fs_device_open(device_mount, bitmap, dirty, &part);
+        fs_device_open(device_mount, &part);
         
         fs_current.current_directory = mount_point;
         fs_current.mount_device      = mount_device;
