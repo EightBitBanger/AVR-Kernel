@@ -22,7 +22,6 @@
 #define FS_NULL                 0xFFFFFFFFUL
 #define FS_INVALID_FRAME        0xFFFFFFFF
 
-
 void fs_init(void);
 
 void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size);

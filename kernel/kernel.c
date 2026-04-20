@@ -1,25 +1,21 @@
 #include <kernel/kernel.h>
-#include <kernel/fs/fs.h>
-#include <kernel/syscall.h>
 
 #include <string.h>
 #include <stdint.h>
 
-
 struct KernelSystemObject {
     struct WorkingDirectory fs_current;
-    
-    
+    struct LocalPaths paths;
 };
 uint32_t k_system_object;
 
 
 void kernel_get_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
-    kmalloc_read(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
+    kmem_read(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
 }
 
 void kernel_set_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
-    kmalloc_write(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
+    kmem_write(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
 }
 
 
@@ -29,6 +25,7 @@ void kernel_init(void) {
     uint32_t root_node = create_knode("", 0);
     
     struct WorkingDirectory fs_current;
+    struct LocalPaths fs_paths;
     fs_current.current_directory = root_node;
     fs_current.mount_device      = FS_NULL;
     fs_current.mount_directory   = FS_NULL;
@@ -65,10 +62,10 @@ void kernel_init(void) {
         
         char path_buf[32];
         console_get_path(path_buf, 32, fs_current.current_directory, fs_current.mount_directory, 16);
-        strcpy(fs_current.path, path_buf);
+        strcpy(fs_paths.path, path_buf);
         
         // Add directory to path
-        strcpy(&fs_current.path[strlen(path_buf)], "/bin;");
+        strcpy(&fs_paths.path[strlen(path_buf)], "/bin");
         
         // Complete the prompt
         
@@ -89,6 +86,7 @@ void kernel_init(void) {
         return;
     }
     
+    kernel_set_system_object(&fs_paths, KSO_LOCAL_PATHS, sizeof(struct LocalPaths));
     kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
 }
 
@@ -102,11 +100,29 @@ uint32_t create_device(const char* name) {
     kmalloc_set_type(device_address, KMALLOC_TYPE_DEVICE);
     kmalloc_set_permissions(device_address, KMALLOC_PERMISSION_READ | KMALLOC_PERMISSION_WRITE);
     
-    kmalloc_write(device_address, &device, sizeof(struct Device));
+    kmem_write(device_address, &device, sizeof(struct Device));
     return device_address;
 }
 
 void destroy_device(uint32_t address) {
+    kfree(address);
+}
+
+uint32_t create_procblock(const char* name) {
+    struct ProcessBlock proc;
+    memset(&proc, 0x00, sizeof(struct ProcessBlock));
+    strcpy(proc.name, name);
+    
+    uint32_t proc_address = kmalloc(sizeof(struct ProcessBlock));
+    
+    kmalloc_set_type(proc_address, KMALLOC_TYPE_PROCBLOCK);
+    kmalloc_set_permissions(proc_address, KMALLOC_PERMISSION_READ | KMALLOC_PERMISSION_WRITE);
+    
+    kmem_write(proc_address, &proc, sizeof(struct ProcessBlock));
+    return proc_address;
+}
+
+void destroy_procblock(uint32_t address) {
     kfree(address);
 }
 
@@ -117,19 +133,19 @@ uint32_t create_buffer(uint32_t size) {
     uint32_t buffer_address = kmalloc(size);
     kmalloc_set_type(buffer_address, KMALLOC_TYPE_DEVICE);
     
-    kmalloc_write(buffer_address, &buffer, size);
+    kmem_write(buffer_address, &buffer, size);
     return buffer_address;
 }
 
 void destroy_buffer(uint32_t address) {
     struct KMallocHeader header;
-    kmalloc_read(address - sizeof(struct KMallocHeader), &header, sizeof(struct KMallocHeader));
+    kmem_read(address - sizeof(struct KMallocHeader), &header, sizeof(struct KMallocHeader));
     
     uint32_t size = header.size;
     uint8_t buffer[size];
     memset(&buffer, 0x00, size);
     
-    kmalloc_write(address, &buffer, size);
+    kmem_write(address, &buffer, size);
     kfree(address);
 }
 
@@ -143,7 +159,7 @@ uint32_t create_driver(const char* name) {
     kmalloc_set_type(driver_address, KMALLOC_TYPE_DRIVER);
     kmalloc_set_permissions(driver_address, KMALLOC_PERMISSION_READ | KMALLOC_PERMISSION_WRITE);
     
-    kmalloc_write(driver_address, &driver, sizeof(struct Driver));
+    kmem_write(driver_address, &driver, sizeof(struct Driver));
     return driver_address;
 }
 
@@ -223,7 +239,7 @@ void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount, uint
         device.hardware_slot = (base - PERIPHERAL_ADDRESS_BEGIN) / PERIPHERAL_STRIDE + 1;
         
         uint32_t device_ptr = create_device(name);
-        kmalloc_write(device_ptr, &device, sizeof(struct Device));
+        kmem_write(device_ptr, &device, sizeof(struct Device));
         
         knode_add_reference(knode_device, device_ptr);
     }

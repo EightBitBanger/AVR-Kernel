@@ -1,27 +1,19 @@
 #include <kernel/arch/avr/io.h>
 #include <kernel/arch/avr/map.h>
-
-#include <kernel/boot/avr/heap.h>
 #include <kernel/boot/avr/interrupt.h>
-#include <kernel/emulation/x4/x4.h>
-
-#include <kernel/syscall/graphix.h>
-
-#include <kernel/fs/fs.h>
 
 #include <kernel/kernel.h>
-#include <kernel/delay.h>
+#include <kernel/knode.h>
 
 #include <string.h>
+
 
 ISR(INT2_vect) {
     
     kb_isr_callback();
 }
 
-uint32_t allocate_external_memory(void);
-
-#include <kernel/syscall.h>
+uint32_t detect_external_memory(void);
 
 int main() {
     mmio_address_zero();
@@ -41,7 +33,7 @@ int main() {
     // Allocate total memory
     
     uint32_t block_size = 32UL;
-    uint32_t total_memory = allocate_external_memory();
+    uint32_t total_memory = detect_external_memory();
     const uint32_t ALLOCATOR_MAX = total_memory;
     
     uint8_t bitmap[ALLOCATOR_MAX / block_size / 8UL];
@@ -53,14 +45,18 @@ int main() {
     heap_init(block_size, ALLOCATOR_MAX);
     
     print("kernel v0.0.0\n");
-    
     kernel_init();
     
+    scheduler_init();
     
     print_prompt();
     interrupt_enable();
     
     while (1) {
+        
+        interrupt_disable();
+            scheduler_handler();
+        interrupt_enable();
         
         kb_event_handler();
     }
@@ -68,7 +64,7 @@ int main() {
 }
 
 
-uint32_t allocate_external_memory(void) {
+uint32_t detect_external_memory(void) {
     struct Bus membus;
     membus.read_waitstate  = 2;
     membus.write_waitstate = 1;

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <kernel/kernel.h>
+#include <kernel/fs/fs.h>
 
 int call_routine_rm(int arg_count, char** args) {
     if (arg_count == 0) 

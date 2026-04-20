@@ -2,54 +2,29 @@
 #include <kernel/boot/avr/interrupt.h>
 
 #include <kernel/syscall.h>
-#include <kernel/syscall/console.h>
-#include <kernel/syscall/print.h>
+#include <kernel/syscall/commands.h>
 
-#include <kernel/fs/fs.h>
-#include <kernel/emulation/x4/x4.h>
-#include <kernel/syscall/graphix.h>
-
-
-#include <kernel/syscall/commands/execute.h>
-#include <kernel/syscall/commands/list.h>
-#include <kernel/syscall/commands/chdir.h>
-
-#include <kernel/syscall/commands/mkfile.h>
-#include <kernel/syscall/commands/mkdir.h>
-#include <kernel/syscall/commands/remove.h>
-#include <kernel/syscall/commands/rename.h>
-#include <kernel/syscall/commands/copy.h>
-
-#include <kernel/syscall/commands/boot.h>
-#include <kernel/syscall/commands/format.h>
-#include <kernel/syscall/commands/chkdsk.h>
-
-#include <kernel/syscall/commands/graph.h>
-
-#include <kernel/syscall/commands/type.h>
-
-
-// Syscall command table
+// Call command table
 
 struct CommandFunction {const char* name; uint16_t id; CommandFunction function; uint8_t flags;};
 static const struct CommandFunction command_table[] = {
-    {"",          SYSCALL_EXECUTE,      call_routine_execute,      KSC_FLAG_COMMAND},
-    {"ls",        SYSCALL_LIST,         call_routine_lsdir,        KSC_FLAG_COMMAND},
-    {"cd",        SYSCALL_CHDIR,        call_routine_chdir,        KSC_FLAG_COMMAND},
+    {"",          SYSCALL_EXECUTE,      call_routine_execute,      KSCF_COMMAND},
+    {"ls",        SYSCALL_LIST,         call_routine_lsdir,        KSCF_COMMAND},
+    {"cd",        SYSCALL_CHDIR,        call_routine_chdir,        KSCF_COMMAND},
     
-    {"mk",        SYSCALL_MAKE,         call_routine_mk,           KSC_FLAG_COMMAND},
-    {"mkdir",     SYSCALL_MAKEDIR,      call_routine_mkdir,        KSC_FLAG_COMMAND},
-    {"rm",        SYSCALL_REMOVE,       call_routine_rm,           KSC_FLAG_COMMAND},
-    {"rn",        SYSCALL_RENAME,       call_routine_rename,       KSC_FLAG_COMMAND},
-    {"cp",        SYSCALL_COPY,         call_routine_copy,         KSC_FLAG_COMMAND},
+    //{"mk",        SYSCALL_MAKE,         call_routine_mk,           KSCF_COMMAND},
+    //{"mkdir",     SYSCALL_MAKEDIR,      call_routine_mkdir,        KSCF_COMMAND},
+    //{"rm",        SYSCALL_REMOVE,       call_routine_rm,           KSCF_COMMAND},
+    //{"rn",        SYSCALL_RENAME,       call_routine_rename,       KSCF_COMMAND},
+    //{"cp",        SYSCALL_COPY,         call_routine_copy,         KSCF_COMMAND},
     
-    //{"boot",      SYSCALL_BOOT,         call_routine_boot,         KSC_FLAG_COMMAND},
-    //{"format",    SYSCALL_FORMAT,       call_routine_format,       KSC_FLAG_COMMAND},
-    //{"chkdsk",    SYSCALL_CHKDSK,       call_routine_chkdsk,       KSC_FLAG_COMMAND},
+    //{"type",      SYSCALL_TYPE,         call_routine_type,         KSCF_COMMAND},
     
-    //{"graph",     SYSCALL_GRAPHICS,     call_routine_graph,        KSC_FLAG_COMMAND},
+    {"boot",      SYSCALL_BOOT,         call_routine_boot,         KSCF_COMMAND},
+    //{"format",    SYSCALL_FORMAT,       call_routine_format,       KSCF_COMMAND},
+    //{"chkdsk",    SYSCALL_CHKDSK,       call_routine_chkdsk,       KSCF_COMMAND},
     
-    //{"type",      SYSCALL_TYPE,         call_routine_type,         KSC_FLAG_COMMAND},
+    //{"graph",     SYSCALL_GRAPHICS,     call_routine_graph,        KSCF_COMMAND},
     
 };
 

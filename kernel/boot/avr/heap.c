@@ -103,7 +103,7 @@ void kmalloc_bitmap_read(void) {
     }
 }
 
-static void kmalloc_write8(uint32_t address, uint8_t value) {
+static void kmem_write8(uint32_t address, uint8_t value) {
     struct Bus bus;
     
     bus.write_waitstate = 1;
@@ -112,7 +112,7 @@ static void kmalloc_write8(uint32_t address, uint8_t value) {
     mmio_writeb(&bus, __KMALLOC_HEAP_BEGIN__ + address, &value);
 }
 
-static uint8_t kmalloc_read8(uint32_t address) {
+static uint8_t kmem_read8(uint32_t address) {
     struct Bus bus;
     uint8_t    byte;
     
@@ -124,38 +124,38 @@ static uint8_t kmalloc_read8(uint32_t address) {
     return byte;
 }
 
-static void kmalloc_write32(uint32_t address, uint32_t value) {
-    kmalloc_write8(address + 0, (uint8_t)((value >> 0)  & 0xFF));
-    kmalloc_write8(address + 1, (uint8_t)((value >> 8)  & 0xFF));
-    kmalloc_write8(address + 2, (uint8_t)((value >> 16) & 0xFF));
-    kmalloc_write8(address + 3, (uint8_t)((value >> 24) & 0xFF));
+static void kmem_write32(uint32_t address, uint32_t value) {
+    kmem_write8(address + 0, (uint8_t)((value >> 0)  & 0xFF));
+    kmem_write8(address + 1, (uint8_t)((value >> 8)  & 0xFF));
+    kmem_write8(address + 2, (uint8_t)((value >> 16) & 0xFF));
+    kmem_write8(address + 3, (uint8_t)((value >> 24) & 0xFF));
 }
 
-static uint32_t kmalloc_read32(uint32_t address) {
+static uint32_t kmem_read32(uint32_t address) {
     uint32_t value = 0;
     
-    value |= ((uint32_t)kmalloc_read8(address + 0) << 0);
-    value |= ((uint32_t)kmalloc_read8(address + 1) << 8);
-    value |= ((uint32_t)kmalloc_read8(address + 2) << 16);
-    value |= ((uint32_t)kmalloc_read8(address + 3) << 24);
+    value |= ((uint32_t)kmem_read8(address + 0) << 0);
+    value |= ((uint32_t)kmem_read8(address + 1) << 8);
+    value |= ((uint32_t)kmem_read8(address + 2) << 16);
+    value |= ((uint32_t)kmem_read8(address + 3) << 24);
 
     return value;
 }
 
 static void kmalloc_header_write(uint32_t address, const struct KMallocHeader* header) {
-    kmalloc_write32(address + 0, header->size);
-    kmalloc_write8 (address + 4, header->flags);
-    kmalloc_write8 (address + 5, header->type);
-    kmalloc_write8 (address + 6, header->perm);
-    kmalloc_write8 (address + 7, header->magic);
+    kmem_write32(address + 0, header->size);
+    kmem_write8 (address + 4, header->flags);
+    kmem_write8 (address + 5, header->type);
+    kmem_write8 (address + 6, header->perm);
+    kmem_write8 (address + 7, header->magic);
 }
 
 static void kmalloc_header_read(uint32_t address, struct KMallocHeader* header) {
-    header->size  = kmalloc_read32(address + 0);
-    header->flags = kmalloc_read8(address + 4);
-    header->type  = kmalloc_read8(address + 5);
-    header->perm  = kmalloc_read8(address + 6);
-    header->magic = kmalloc_read8(address + 7);
+    header->size  = kmem_read32(address + 0);
+    header->flags = kmem_read8(address + 4);
+    header->type  = kmem_read8(address + 5);
+    header->perm  = kmem_read8(address + 6);
+    header->magic = kmem_read8(address + 7);
 }
 
 static inline uint32_t kmalloc_blocks_required(uint32_t size) {
@@ -533,20 +533,20 @@ uint32_t kmalloc_next(uint32_t previous_address) {
     return KMALLOC_NULL;
 }
 
-void kmalloc_write(uint32_t address, const void* source, uint32_t size) {
+void kmem_write(uint32_t address, const void* source, uint32_t size) {
     const uint8_t* bytes = (const uint8_t*)source;
     uint32_t       index;
     
     for (index = 0; index < size; index++) {
-        kmalloc_write8(address + index, bytes[index]);
+        kmem_write8(address + index, bytes[index]);
     }
 }
 
-void kmalloc_read(uint32_t address, void* destination, uint32_t size) {
+void kmem_read(uint32_t address, void* destination, uint32_t size) {
     uint8_t* bytes = (uint8_t*)destination;
     uint32_t index;
     
     for (index = 0; index < size; index++) {
-        bytes[index] = kmalloc_read8(address + index);
+        bytes[index] = kmem_read8(address + index);
     }
 }

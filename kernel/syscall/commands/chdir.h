@@ -2,10 +2,9 @@
 #define SYSCALL_CD_H
 
 #include <stdint.h>
+#include <string.h>
 #include <kernel/kernel.h>
-
-extern const char* msg_dir_not_found;
-extern const char* msg_dir_error;
+#include <kernel/fs/fs.h>
 
 int call_routine_chdir(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
@@ -42,10 +41,8 @@ int call_routine_chdir(int arg_count, char** args) {
             }
             
             uint32_t reference = fs_directory_find(fs_current.mount_directory, dirname);
-            if (reference == FS_NULL) {
-                print(msg_dir_not_found);
+            if (reference == FS_NULL) 
                 break;
-            }
             
             fs_current.mount_directory = reference;
             dirname = strtok(NULL, "/");
@@ -57,13 +54,11 @@ int call_routine_chdir(int arg_count, char** args) {
         if (strcmp(dirname, "..") == 0) {
             target_directory = knode_get_parent(fs_current.current_directory);
         } else {
-            target_directory = knode_find_in(fs_current.current_directory, dirname);
+            target_directory = knode_find_by_name(fs_current.current_directory, dirname);
         }
         
-        if (target_directory == KMALLOC_NULL) {
-            print(msg_dir_not_found);
+        if (target_directory == KMALLOC_NULL) 
             break;
-        }
         
         uint8_t flags = kmalloc_get_flags(target_directory);
         
@@ -90,10 +85,8 @@ int call_routine_chdir(int arg_count, char** args) {
             continue;
         }
         
-        if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) {
-            print(msg_dir_error);
+        if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) 
             break;
-        }
         
         fs_current.current_directory = target_directory;
         

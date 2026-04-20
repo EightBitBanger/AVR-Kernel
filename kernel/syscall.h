@@ -23,7 +23,7 @@
 
 // Flags
 
-#define  KSC_FLAG_COMMAND          1
+#define  KSCF_COMMAND          1
 
 
 int syscall(uint16_t id, char** args);

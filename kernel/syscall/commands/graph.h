@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 #include <kernel/kernel.h>
+//#include <kernel/syscall/graphix.h>
 
 int call_routine_graph(int arg_count, char** args) {
-    
+    /*
     int8_t vertexBuffer[] = {
         -10, -10, -10,   10, -10, -10,   10,  10, -10,  3, // Front face
         10,  10, -10,  -10,  10, -10,  -10, -10, -10,  3, 
@@ -71,6 +72,7 @@ int call_routine_graph(int arg_count, char** args) {
     }
     
     gl_init(0);
+    */
 }
 
 #endif

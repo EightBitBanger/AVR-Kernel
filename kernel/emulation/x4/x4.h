@@ -58,7 +58,7 @@ struct X4Thread {
     struct X4CpuRegisters cache;
 };
 
-void x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count);
+uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint16_t steps);
 
 uint32_t AssembleJoin(uint8_t* buffer, uint32_t begin_address, uint8_t* source, uint32_t length);
 

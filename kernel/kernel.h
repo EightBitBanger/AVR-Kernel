@@ -9,9 +9,6 @@
 
 #include <kernel/boot/avr/heap.h>
 
-#include <kernel/syscall/print.h>
-#include <kernel/syscall/console.h>
-
 #include <kernel/bus/bus.h>
 #include <kernel/device/kbuffer.h>
 #include <kernel/device/driver.h>
@@ -19,11 +16,19 @@
 #include <kernel/device/knode.h>
 #include <kernel/device/kevent.h>
 
+#include <kernel/console/print.h>
+#include <kernel/console/console.h>
+#include <kernel/scheduler/scheduler.h>
+#include <kernel/emulation/x4/x4.h>
+#include <kernel/fs/fs.h>
+
 #include <kernel/knode.h>
+#include <kernel/syscall.h>
+
 
 #define KSO_WORKING_DIRECTORY   0
-
-#define KSO_                    sizeof(struct WorkingDirectory)
+#define KSO_LOCAL_PATHS         sizeof(struct WorkingDirectory)
+//#define KSO_                    sizeof(struct WorkingDirectory) + sizeof(struct LocalPaths)
 
 
 void kernel_init(void);
@@ -37,6 +42,8 @@ void     destroy_buffer(uint32_t address);
 uint32_t create_driver(const char* name);
 void     destroy_driver(uint32_t address);
 
+uint32_t create_procblock(const char* name);
+void     destroy_procblock(uint32_t address);
 
 
 void kernel_get_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size);

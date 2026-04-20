@@ -24,7 +24,7 @@ void isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_count
         for (uint32_t i = 0;; i++) {
             uint8_t buffer;
             struct X4Pointer dataOffset = x4_pointer_from_low16(thread->cache.dl, thread->cache.dh);
-            kmalloc_read(thread->cache.cs + dataOffset.address + i, &buffer, 1);
+            kmem_read(thread->cache.cs + dataOffset.address + i, &buffer, 1);
             
             if (buffer == '\0')
                 break;

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <kernel/kernel.h>
+#include <kernel/fs/fs.h>
 
 void print_fs_entry(uint32_t directory_address);
 void print_reference_entry(uint32_t address);
