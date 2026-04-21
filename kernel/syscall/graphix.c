@@ -1,6 +1,6 @@
 #include <kernel/syscall/graphix.h>
-#include <kernel/syscall/console.h>
-#include <kernel/syscall/print.h>
+#include <kernel/console/console.h>
+#include <kernel/console/print.h>
 
 extern uint32_t display_address;
 
@@ -100,6 +100,8 @@ void glUniformScale(float scale) {
 void glBegin(uint8_t primitive) {
     gl_busy_wait();
     mmio_writeb(&display_bus, display_address + 0x0000A, &primitive); // Set primitive drawing type
+    
+    scheduler_handler();
 }
 
 void glBufferData(int8_t* buffer, uint16_t size) {

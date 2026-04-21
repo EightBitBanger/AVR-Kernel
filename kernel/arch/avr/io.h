@@ -179,11 +179,38 @@ static inline void mmio_writeb(struct Bus* bus, uint32_t address, uint8_t* byte)
 	
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
+	
+	__asm__ volatile("nop");
+	__asm__ volatile("nop");
 }
 
 static inline void mmio_writeb_eeprom(struct Bus* bus, uint32_t address, uint8_t* byte) {
     mmio_writeb(bus, address, byte);
     _delay_ms(5);
+}
+
+static inline void mmio_read_block(struct Bus* bus, uint32_t address, uint8_t* byte, uint32_t size) {
+    for (uint32_t i=0; i < size; i++) {
+        uint32_t block_address = address + i;
+        _BUS_UPPER_OUT__  = (block_address >> 16) & 0xff;
+        _BUS_MIDDLE_OUT__ = (block_address >> 8) & 0xff;
+        _BUS_LOWER_OUT__  =  block_address & 0xff;
+        
+        _CONTROL_OUT__ = _CONTROL_READ_LATCH__;
+        _BUS_LOWER_DIR__ = 0x00;
+        _CONTROL_OUT__ = _CONTROL_READ_CYCLE__;
+        
+        __asm__ volatile("nop");
+        __asm__ volatile("nop");
+        
+        byte[i] = _BUS_LOWER_IN__;
+        
+        _CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
+        _BUS_LOWER_DIR__ = 0xff;
+    }
+	
+	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
+    _BUS_LOWER_DIR__ = 0xff;
 }
 
 #endif

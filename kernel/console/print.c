@@ -49,6 +49,10 @@ uint8_t kb_check_input_state(void) {
     return key_ready;
 }
 
+uint8_t kb_get_current_char(void) {
+    return current_character;
+}
+
 void kb_clear_input_state(void) {
     key_ready = 0;
 }
@@ -56,11 +60,11 @@ void kb_clear_input_state(void) {
 void kb_event_handler(void) {
     if (key_ready == 0)
         return;
+    key_ready = 0;
     
     interrupt_disable();
     
     char ch = current_character;
-    key_ready = 0;
     
     interrupt_enable();
     

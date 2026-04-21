@@ -70,13 +70,13 @@
 #define  rDH       0x07
 #define  rEP       0x08
 
+uint8_t isc_display_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
+uint8_t isc_keyboard_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
+uint8_t isc_network_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
+uint8_t isc_filesystem_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
+uint8_t isc_operating_system(struct X4Thread* thread, char** op_args, uint8_t arg_count);
+
 struct Bus mem_bus;
-
-void isc_display_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
-void isc_network_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
-void isc_filesystem_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count);
-void isc_operating_system(struct X4Thread* thread, char** op_args, uint8_t arg_count);
-
 
 static inline void x4_writeb(uint32_t address, uint8_t byte) {
     mmio_writeb(&mem_bus, address, &byte);
@@ -579,40 +579,27 @@ static inline uint8_t opcode_INT(struct X4Thread* thread, uint8_t* op_args, char
 #ifdef X4_DEBUG_PRINT_INSTRUCTIONS
     debug_print_opcode_hex8x1("INT", op_args[0]);
 #endif    
+    uint8_t result=0;
+    
     switch (op_args[0]) {
         
-    case 0x10: isc_display_routine(thread, agruments, arg_count); break;
-    case 0x13: isc_filesystem_routine(thread, agruments, arg_count); break;
-    //case 0x14: isc_network_routine(thread, op_args, arg_count); break;
-    //case 0x47: isc_operating_system(thread, op_args, arg_count); break;
+    case 0x10: result = isc_display_routine(thread, agruments, arg_count); break;
+    case 0x13: result = isc_filesystem_routine(thread, agruments, arg_count); break;
+    //case 0x14: result = isc_network_routine(thread, op_args, arg_count); break;
+    //case 0x47: result = isc_operating_system(thread, op_args, arg_count); break;
+    case 0x16: result = isc_keyboard_routine(thread, agruments, arg_count); break;
         
     }
     
-    if (op_args[0] == 0x20) {
+    // INT 20 - End the program
+    if (op_args[0] == 0x20 || result == 0xD6) {
         if (thread->cache.state & X4EMM_FLAG_CONSOLE_DIRTY) {
             thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
             print("\n");
         }
-        return 0;
+        return 0xD6;
     }
-    return 1;
+    return 0;
 }
 
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

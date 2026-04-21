@@ -16,9 +16,9 @@ struct X4Pointer x4_pointer_from_low16(uint8_t low, uint8_t high) {
     return pointer;
 }
 
-void isc_operating_system(struct X4Thread* thread, uint8_t* program, uint8_t size, char** args, uint8_t arg_count) {}
+uint8_t isc_operating_system(struct X4Thread* thread, uint8_t* program, uint8_t size, char** args, uint8_t arg_count) {return 0;}
 
-void isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
+uint8_t isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
     if (thread->cache.ah == 0x09) {
         
         for (uint32_t i = 0;; i++) {
@@ -40,7 +40,7 @@ void isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_count
         }
         
         thread->cache.state |= X4EMM_FLAG_CONSOLE_DIRTY;
-        return;
+        return 0;
     }
     
     if (thread->cache.ah == 0x03) {
@@ -48,17 +48,16 @@ void isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_count
         console_set_cursor_position(0, 0);
         
         thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
-        return;
+        return 0;
     }
-    
-    thread->cache.bl = 1;
+    return 0;
 }
 
-void isc_filesystem_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
+uint8_t isc_filesystem_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
     uint32_t mount     = console_get_mounted_device();
     uint32_t directory = console_get_mounted_directory();
     if (mount == FS_NULL) 
-        return;
+        return 0;
     
     // File create
     if (thread->cache.ah == 0x3C) {
@@ -73,23 +72,24 @@ void isc_filesystem_routine(struct X4Thread* thread, char** args, uint8_t arg_co
         uint32_t file_address = fs_file_create(name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, file_size.address, directory);
         if (file_address == FS_NULL) {
             thread->cache.bl = 3;
-            return;
+            return 0;
         }
         
         fs_directory_add_reference(directory, file_address);
         
         fs_bitmap_flush();
         
-        thread->cache.bl = 0;
+        thread->cache.bl = 1;
         thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
         
-        return;
+        return 0;
     }
     
-    thread->cache.bl = 1;
+    thread->cache.bl = 0;
+    return 0;
 }
 
-void isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
+uint8_t isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count) {
     /*
     // AH = 0x0C Send a message
     if (reg[rAH] == 0x0C) {
@@ -97,7 +97,7 @@ void isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count
 
         if (offset.address >= programSize || offset.address + reg[rCL] >= programSize) {
             reg[rBL] = 1;
-            return;
+            return 0;
         }
 
         switch (reg[rAL]) {
@@ -106,7 +106,7 @@ void isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count
         }
 
         reg[rBL] = 0;
-        return;
+        return 0;
     }
 
     // AH = 0x0F Send a packet
@@ -115,7 +115,7 @@ void isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count
 
         if (offset.address >= programSize || offset.address + reg[rCL] >= programSize) {
             reg[rBL] = 1;
-            return;
+            return 0;
         }
 
         struct NetworkPacket packet;
@@ -132,9 +132,37 @@ void isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_count
         ntPacketSend(&packet);
 
         reg[rBL] = 0;
-        return;
+        return 0;
     }
-
-    reg[rBL] = 1;
     */
+    thread->cache.bl = 0;
+    return 0;
 }
+
+uint8_t isc_keyboard_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count) {
+    // (Blocking) Read character from keyboard
+    if (thread->cache.ah == 0x00) {
+        if (kb_check_input_state() == 0) 
+            return 0xD6;
+        thread->cache.al = kb_get_current_char();
+        
+        // Re execute the INT next time
+        thread->cache.ep -= 2;
+        return 0;
+    }
+    
+    // Check if a key is currently in the buffer ready to be handled
+    if (thread->cache.ah == 0x01) {
+        thread->cache.al = kb_check_input_state();
+        return 0;
+    }
+    
+    // Get the last character the keyboard sent in
+    if (thread->cache.ah == 0x03) {
+        thread->cache.al = kb_get_current_char();
+        return 0;
+    }
+    
+    //Get shift state: AH=02h checks shift, ctrl, alt ect.. are pressed
+}
+

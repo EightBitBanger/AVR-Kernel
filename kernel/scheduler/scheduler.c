@@ -9,15 +9,36 @@
 
 #include <string.h>
 
+#define SCHEDULER_TRIGGER_COUNTER_MAX    32
 
-static uint16_t task_index = 0;
+static uint32_t base_steps     = 10;    // The minimum steps a thread gets
+static uint32_t weight         = 16;    // How much each priority level adds
+static uint8_t  max_priority   = 16;    // 0 = highest, 10 = lowest
+
+static uint16_t task_index=0;           // 'proc' file name index
+static uint16_t process_index=0;        // Running process index
+static uint64_t pid_counter=0;          // Unique ID counter
+
+static volatile uint8_t trigger=0;
+
+uint32_t proc_root_node = KNODE_NULL;
+
 
 void scheduler_init(void) {
+    proc_root_node = knode_find_by_name(knode_get_root(), "proc");
     
+    // TIMER1, CTC mode, prescaler 64
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    TIMSK1 = (1 << OCIE1A);
+    OCR1A  = 391;
 }
 
+void scheduler_stop(void) {
+    TCCR1B = 0;   // Stop TIMER1
+    TIMSK1 = 0;   // Disable its interrupts
+}
 
-uint32_t create_task(const char* name, uint32_t entry_point_address, uint16_t priority, uint8_t flags) {
+uint32_t create_task(uint32_t entry_point_address, uint16_t priority, uint8_t flags) {
     struct X4Thread thread;
     memset(&thread, 0x00, sizeof(struct X4Thread));
     
@@ -29,11 +50,11 @@ uint32_t create_task(const char* name, uint32_t entry_point_address, uint16_t pr
     struct WorkingDirectory fs_current;
     kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
     
-    // Find "proc" directory
-    uint32_t proc_knode = knode_find_by_name(knode_get_root(), "proc");
-    uint32_t proc_address = create_knode(name, proc_knode);
+    char index_string[24];
+    itos(task_index, index_string);
+    uint32_t proc_address = create_knode(index_string, proc_root_node);
     
-    // Add to "proc"
+    // Add to "proc" knode
     uint32_t process_block_address = create_procblock("");
     knode_add_reference(proc_address, process_block_address);
     
@@ -42,82 +63,61 @@ uint32_t create_task(const char* name, uint32_t entry_point_address, uint16_t pr
     memset(&block, 0x00, sizeof(struct ProcessBlock));
     strcpy(block.name, "block");
     
+    block.priority = priority;
+    block.pid = pid_counter;
+    
     block.code_segment_address  = thread.cache.cs;
     block.stack_segment_address = thread.cache.ss;
     
+    memcpy(&block.thread_main, &thread, sizeof(struct X4Thread));
+    
     kmem_write(process_block_address, &block, sizeof(struct ProcessBlock));
+    
+    pid_counter++;
     task_index++;
 }
 
-
-
-uint8_t counter = 0;
-uint32_t proc_root = KNODE_NULL;
-uint16_t index=0;
-
 void scheduler_handler(void) {
-    counter++;
-    if (counter < 50) 
-        return;
-    counter=0;
+    //if (trigger == 0) 
+    //    return;
+    //trigger = 0;
     
-    if (proc_root == KNODE_NULL) {
-        proc_root = knode_find_by_name(knode_get_root(), "proc");
-        if (proc_root == KNODE_NULL) {
-            index=0;
-            return;
-        }
-    }
-    
-    uint32_t process_node = knode_get_reference(proc_root, index);
+    uint32_t process_node = knode_get_reference(proc_root_node, process_index);
     if (process_node == KNODE_NULL) {
-        index=0;
+        process_index = 0;
         return;
     }
     
     uint32_t process_block = knode_get_reference(process_node, 0);
+    struct ProcessBlock block;
+    kmem_read(process_block, &block, sizeof(struct ProcessBlock));
     
     
-    char name[16];
-    knode_get_name(process_block, name);
-    
-    print(name);
-    print("\n");
+    // if (block.flags & ) check suspended
     
     
-    //kmemcpy();
+    uint16_t steps = base_steps + ((((uint16_t)max_priority) - block.priority) * weight) * 2;
     
-    //kmemcpy();
-    //ProcessBlock
+    if (x4_emulate(&block.thread_main, (char*[]){NULL}, 0, steps) != 0) {
+        
+        // Shut down thread main and free memory blocks
+        
+        knode_remove_reference(proc_root_node, process_node);
+        knode_remove_reference(process_node, process_block);
+        
+        kfree(process_block);
+        kfree(process_node);
+        
+        kfree(block.thread_main.cache.ss);
+        kfree(block.thread_main.cache.cs);
+        
+        process_index = 0;
+        return;
+    }
     
-    
-    
-    
-    
-    // Run and free if program quit
-    /*
-    x4_emulate(&thread, (char*[]){NULL}, 0, 1000);
-    
-    kfree(thread.cache.ss);
-    kfree(thread.cache.cs);
-    */
-    
-    index++;
+    kmem_write(process_block, &block, sizeof(struct ProcessBlock));
+    process_index++;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 uint8_t execute_program(char* filename, char** args, uint8_t arg_count) {
     struct WorkingDirectory fs_current;
@@ -165,4 +165,8 @@ uint8_t execute_program(char* filename, char** args, uint8_t arg_count) {
         return 0;
     }
     return 4;
+}
+
+void scheduler_isr_callback(void) {
+    trigger = 1;
 }

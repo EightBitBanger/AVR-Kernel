@@ -23,6 +23,7 @@ void print_prompt(void);
 char kb_getc(void);
 
 uint8_t kb_check_input_state(void);
+uint8_t kb_get_current_char(void);
 void kb_clear_input_state(void);
 
 void kb_isr_callback(void);

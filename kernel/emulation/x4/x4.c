@@ -8,17 +8,21 @@
 #include <kernel/emulation/x4/x4.h>
 #include <kernel/emulation/x4/opcodes.h>
 
+extern struct Bus mem_bus;
 
-uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint16_t steps) {
+void x4_init(void) {
     mem_bus.read_waitstate  = 2;
-    mem_bus.write_waitstate = 2;
+    mem_bus.write_waitstate = 1;
+}
+
+uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint32_t steps) {
     
 #ifdef X4_DEBUG_PRINT_STACK_POINTER
     debug_print_opcode_hex32("SP ", thread->cache.sp);
     debug_print_opcode_hex32("BP ", thread->cache.bp);
 #endif
     
-    uint16_t counter=0;
+    uint32_t counter=0;
     while (counter < steps) {
         counter++;
         
@@ -98,8 +102,8 @@ uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint
         case STI: opcode_STI(thread, op_args); continue;
         
         case 0xCC:
-        case INT:
-            if (opcode_INT(thread, op_args, args, arg_count) == 0) {
+        case INT: {
+            if (opcode_INT(thread, op_args, args, arg_count) != 0) {
                 if (thread->cache.state & X4EMM_FLAG_CONSOLE_DIRTY) {
                     thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
                     print("\n");
@@ -113,7 +117,8 @@ uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint
             }
             thread->cache.ep += 1;
             continue;
-        
+            }
+            
         case NOP: continue;
         
         default: debug_print_unknown_opcode(thread->cache.ep, opcode, op_args[0], op_args[1], op_args[2], op_args[3]); return 1;

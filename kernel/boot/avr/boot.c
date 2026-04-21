@@ -7,11 +7,16 @@
 
 #include <string.h>
 
+#include <kernel/syscall/graphix.h>
+
 
 ISR(INT2_vect) {
     
     kb_isr_callback();
 }
+
+//ISR(TIMER0_COMPA_vect) { timer_isr_callback(); }      // Timer
+ISR(TIMER1_COMPA_vect) { scheduler_isr_callback(); }  // Scheduler
 
 uint32_t detect_external_memory(void);
 
@@ -30,6 +35,36 @@ int main() {
     
     console_init(keyboard_string, prompt_string);
     
+    /*
+    struct Bus bus;
+    bus.read_waitstate  = 2;
+    bus.write_waitstate = 1;
+    
+    {
+    char block[] = "What the fuck?";
+    
+    for (uint8_t i=0; i < sizeof(block); i++) 
+        mmio_writeb(&bus, 0x00000000 + i, &block[i]);
+    
+    
+    }
+    
+    
+    {
+    char block[32];
+    memset(block, 0x00, sizeof(block));
+    
+    mmio_read_block(&bus, 0x00000000, block, 32);
+    
+    block[16] = '\0';
+    
+    print(block);
+    }
+    
+    
+    while(1);
+    */
+    
     // Allocate total memory
     
     uint32_t block_size = 32UL;
@@ -47,6 +82,8 @@ int main() {
     print("kernel v0.0.0\n");
     kernel_init();
     
+    x4_init();
+    
     scheduler_init();
     
     print_prompt();
@@ -59,6 +96,7 @@ int main() {
         interrupt_enable();
         
         kb_event_handler();
+        
     }
     
 }
