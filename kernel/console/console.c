@@ -1,35 +1,40 @@
 #include <kernel/kernel.h>
 #include <kernel/boot/avr/interrupt.h>
 
-#include <kernel/syscall.h>
-
+#include <kernel/console/virtual_key.h>
 #include <kernel/console/console_const.h>
 #include <kernel/console/console.h>
+#include <kernel/console/parser.h>
 #include <kernel/console/print.h>
 
-#include <kernel/scheduler/scheduler.h>
-#include <kernel/fs/fs.h>
-
-#include <stdint.h>
-#include <stddef.h>
 #include <string.h>
-
-uint32_t display_address;
-
-uint8_t display_width;
-uint8_t display_height;
-
-uint8_t console_position;
-uint8_t console_line;
 
 char* keyboard_string;
 uint8_t keyboard_length = 0;
+uint8_t keyboard_length_max = 0;
 
 char* prompt_string;
 uint8_t prompt_length = 0;
+uint8_t prompt_length_max = 0;
 
-void print_fs_entry(uint32_t directory_address);
-void print_reference_entry(uint32_t address);
+void console_prompt_print(void) {
+    print(prompt_string);
+}
+
+void console_prompt_set_string(const char* prompt) {
+    if (strlen(prompt) >= prompt_length_max) 
+        return;
+    strcpy(prompt_string, prompt);
+    prompt_length = strlen(prompt);
+}
+
+void console_get_keyboard_string(char* kb_string) {
+    kb_string = keyboard_string;
+}
+
+uint8_t console_get_keyboard_string_length(void) {
+    return keyboard_length;
+}
 
 void console_set_directory(uint32_t address) {
     struct WorkingDirectory fs_current;
@@ -57,12 +62,9 @@ uint32_t console_get_mounted_directory(void) {
 }
 
 
-void console_init(char* kb_string, char* kb_prompt) {
-    display_width  = 21;
-    display_height = 8;
-    
-    console_position = 0;
-    console_line = 0;
+void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length) {
+    prompt_length_max = kb_string_max_length;
+    keyboard_length_max = kb_prompt_max_length;
     
     keyboard_string = kb_string;
     prompt_string = kb_prompt;
@@ -72,29 +74,9 @@ void console_init(char* kb_string, char* kb_prompt) {
     
     memset(keyboard_string, 0x00, KEYBOARD_STRING_LENGTH);
     keyboard_length = 0;
-}
-
-
-
-void parser_trim_leading_spaces(char *str) {
-    if (str == NULL) return;
     
-    int i = 0;
-    // 1. Find the first character that isn't a space
-    while (str[i] == ' ' && str[i] != '\0') {
-        i++;
-    }
-
-    // 2. If there were leading spaces, shift everything left
-    if (i > 0) {
-        int j = 0;
-        while (str[i] != '\0') {
-            str[j++] = str[i++];
-        }
-        str[j] = '\0'; // Null-terminate at the new end
-    }
+    display_clear();
 }
-
 
 void console_process_command(char* keyboard_str) {
     char* args[16];
@@ -231,7 +213,7 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     
     for (int i = knode_count - 1; i >= 0; i--) {
         struct KernelDirectory obj;
-        kmem_read(knode_stack[i], &obj, sizeof(obj));
+        kmem_read(&obj, knode_stack[i], sizeof(obj));
         
         if (obj.name[0] == '/' && obj.name[1] == '\0') continue;
         
@@ -268,7 +250,10 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     path[offset] = '\0';
 }
 
-void print_reference_entry(uint32_t address) {
+void console_print_reference_entry(uint32_t address) {
+    if (address == KMALLOC_NULL) 
+        return;
+    
     uint8_t flags = kmalloc_get_flags(address);
     uint8_t perms = kmalloc_get_permissions(address);
     
@@ -280,7 +265,7 @@ void print_reference_entry(uint32_t address) {
     
     struct KernelDirectory kdir;
     memset(&kdir, 0x00, sizeof(struct KernelDirectory));
-    kmem_read(address, &kdir, sizeof(struct KernelDirectory));
+    kmem_read(&kdir, address, sizeof(struct KernelDirectory));
     
     print(permissions);
     print(kdir.name);
@@ -294,11 +279,12 @@ void print_reference_entry(uint32_t address) {
         
         print(msg_dir_sym);
     }
-    
-    print("\n");
 }
 
-void print_fs_entry(uint32_t directory_address) {
+void console_print_fs_entry(uint32_t directory_address) {
+    if (directory_address == FS_NULL) 
+        return;
+    
     struct WorkingDirectory fs_current;
     kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
     
@@ -340,98 +326,5 @@ void print_fs_entry(uint32_t directory_address) {
             
             print_int(file_size);
         }
-        
-        print("\n");
     }
-}
-
-void console_busy_wait(void) {
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    uint8_t checkByte = 0;
-    mmio_readb(&bus, display_address, &checkByte);
-    while (checkByte != 0x10) {
-        mmio_readb(&bus, display_address, &checkByte);
-    }
-}
-
-uint16_t console_get_position(void) {
-    return console_position;
-}
-
-uint16_t console_get_line(void) {
-    return console_line;
-}
-
-void console_set_position(uint16_t position) {
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    console_position = position;
-    mmio_writeb(&bus, display_address + 0x00002, &console_position);
-}
-
-void console_set_line(uint16_t line) {
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    console_line = line;
-    mmio_writeb(&bus, display_address + 0x00001, &console_line);
-}
-
-void console_set_cursor_position(uint8_t position, uint8_t line) {
-    console_busy_wait();
-    
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    // Boundary checks to prevent memory corruption/glitches
-    if (position >= display_width)  position = display_width - 1;
-    if (line     >= display_height) line     = display_height - 1;
-    
-    console_set_position(position);
-    console_set_line(line);
-}
-
-
-void console_set_prompt(const char* prompt) {
-    strcpy(prompt_string, prompt);
-    prompt_length = strlen(prompt);
-}
-
-void console_set_blink_rate(uint8_t rate) {
-    console_busy_wait();
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    mmio_writeb(&bus, display_address + 0x00003, &rate);
-}
-
-void console_clear(void) {
-    console_busy_wait();
-    
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
-    console_set_cursor_position(0, 0);
-    for (uint8_t h=0; h < display_height; h++) 
-        for (uint8_t w=0; w < display_width; w++) 
-            print(" ");
-    console_set_cursor_position(0, 0);
-    return;
-}
-
-uint16_t display_get_width(void) {
-    return display_width;
-}
-
-uint16_t display_get_height(void) {
-    return display_height;
 }

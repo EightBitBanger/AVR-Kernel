@@ -11,7 +11,7 @@ uint32_t k_system_object;
 
 
 void kernel_get_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
-    kmem_read(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
+    kmem_read((uint8_t*)object, k_system_object + kso_sub_type, kso_size);
 }
 
 void kernel_set_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
@@ -70,7 +70,7 @@ void kernel_init(void) {
         // Complete the prompt
         
         strcpy(&path_buf[strlen(path_buf)], ">\0");
-        console_set_prompt(path_buf);
+        console_prompt_set_string(path_buf);
         break;
     }
     
@@ -82,7 +82,7 @@ void kernel_init(void) {
         fs_current.mount_root        = FS_NULL;
         kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
         
-        console_set_prompt("/>");
+        console_prompt_set_string("/>");
         return;
     }
     
@@ -139,7 +139,7 @@ uint32_t create_buffer(uint32_t size) {
 
 void destroy_buffer(uint32_t address) {
     struct KMallocHeader header;
-    kmem_read(address - sizeof(struct KMallocHeader), &header, sizeof(struct KMallocHeader));
+    kmem_read(&header, address - sizeof(struct KMallocHeader), sizeof(struct KMallocHeader));
     
     uint32_t size = header.size;
     uint8_t buffer[size];
@@ -273,4 +273,15 @@ uint32_t device_get_hardware_address(const char* name) {
         }
     }
     return 0;
+}
+
+void device_get_hardware_data(uint32_t address, char* data_buffer, uint8_t size) {
+    char device_name[size];
+    
+    struct Bus bus;
+    bus.read_waitstate  = 20;
+    bus.write_waitstate = 20;
+    
+    for (uint8_t index=0; index < size; index++) 
+        mmio_readb(&bus, address + index , &data_buffer[index]);
 }

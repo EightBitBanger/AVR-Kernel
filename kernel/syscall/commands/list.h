@@ -5,15 +5,12 @@
 #include <kernel/kernel.h>
 #include <kernel/fs/fs.h>
 
-void print_fs_entry(uint32_t directory_address);
-void print_reference_entry(uint32_t address);
-
 int call_routine_lsdir(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
     kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
     
     if (fs_current.mount_device != FS_NULL) {
-        print_fs_entry(fs_current.current_directory);
+        console_print_fs_entry(fs_current.current_directory);
         return 0;
     }
     
@@ -22,7 +19,7 @@ int call_routine_lsdir(int arg_count, char** args) {
         if (reference_address == KMALLOC_NULL) 
             break;
         
-        print_reference_entry(reference_address);
+        console_print_reference_entry(reference_address);
     }
     return 0;
 }

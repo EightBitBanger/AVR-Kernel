@@ -15,7 +15,7 @@ uint32_t AssembleJoin(uint8_t* buffer, uint32_t begin_address, uint8_t* source, 
 void x4_read_string_from_dx(struct X4Thread* thread, char* str) {
     struct X4Pointer data_offset = x4_pointer_from_low16(thread->cache.dl, thread->cache.dh);
     for (uint32_t i=0;i < 16; i++) {
-        kmem_read(thread->cache.cs + data_offset.address + i, &str[i], 1);
+        kmem_read(&str[i], thread->cache.cs + data_offset.address + i, 1);
         if (str[i] == '\0') 
             break;
     }

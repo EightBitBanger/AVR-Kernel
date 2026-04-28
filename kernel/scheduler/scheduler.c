@@ -11,15 +11,15 @@
 
 #define SCHEDULER_TRIGGER_COUNTER_MAX    32
 
-static uint32_t base_steps     = 10;    // The minimum steps a thread gets
-static uint32_t weight         = 16;    // How much each priority level adds
+static uint32_t base_steps     = 8;     // The minimum steps a thread gets
+static uint32_t weight         = 8;     // How much each priority level adds
 static uint8_t  max_priority   = 16;    // 0 = highest, 10 = lowest
 
 static uint16_t task_index=0;           // 'proc' file name index
 static uint16_t process_index=0;        // Running process index
 static uint64_t pid_counter=0;          // Unique ID counter
 
-static volatile uint8_t trigger=0;
+static volatile uint8_t isr_trigger=0;
 
 uint32_t proc_root_node = KNODE_NULL;
 
@@ -38,7 +38,7 @@ void scheduler_stop(void) {
     TIMSK1 = 0;   // Disable its interrupts
 }
 
-uint32_t create_task(uint32_t entry_point_address, uint16_t priority, uint8_t flags) {
+uint32_t task_create(uint32_t entry_point_address, uint16_t priority, uint8_t flags) {
     struct X4Thread thread;
     memset(&thread, 0x00, sizeof(struct X4Thread));
     
@@ -78,30 +78,40 @@ uint32_t create_task(uint32_t entry_point_address, uint16_t priority, uint8_t fl
 }
 
 void scheduler_handler(void) {
-    //if (trigger == 0) 
-    //    return;
-    //trigger = 0;
+    // Context switch
+    if (isr_trigger != 0) {
+        isr_trigger = 0;
+        process_index++;
+    }
     
     uint32_t process_node = knode_get_reference(proc_root_node, process_index);
     if (process_node == KNODE_NULL) {
+        
         process_index = 0;
         return;
     }
     
     uint32_t process_block = knode_get_reference(process_node, 0);
     struct ProcessBlock block;
-    kmem_read(process_block, &block, sizeof(struct ProcessBlock));
+    kmem_read(&block, process_block, sizeof(struct ProcessBlock));
     
+    if (block.flags & TASK_FLAG_SUSPENDED) {
+        return;
+    }
     
-    // if (block.flags & ) check suspended
+    uint16_t steps = base_steps + (((uint16_t)max_priority) - block.priority) * weight;
     
+    uint8_t state = x4_emulate(&block.thread_main, (char*[]){NULL}, 0, steps);
     
-    uint16_t steps = base_steps + ((((uint16_t)max_priority) - block.priority) * weight) * 2;
+    // Process yielded
+    if (state == 0xD6) {
+        process_index++;
+        kmem_write(process_block, &block, sizeof(struct ProcessBlock));
+        return;
+    }
     
-    if (x4_emulate(&block.thread_main, (char*[]){NULL}, 0, steps) != 0) {
-        
-        // Shut down thread main and free memory blocks
-        
+    // Process shutdown
+    if (state != 0) {
         knode_remove_reference(proc_root_node, process_node);
         knode_remove_reference(process_node, process_block);
         
@@ -110,8 +120,6 @@ void scheduler_handler(void) {
         
         kfree(block.thread_main.cache.ss);
         kfree(block.thread_main.cache.cs);
-        
-        process_index = 0;
         return;
     }
     
@@ -156,7 +164,7 @@ uint8_t execute_program(char* filename, char** args, uint8_t arg_count) {
         thread_main.cache.cs = code_segment;
         thread_main.cache.ss = stack_segment;
         
-        x4_emulate(&thread_main, args, arg_count, 30);
+        x4_emulate(&thread_main, args, arg_count, UINT32_MAX);
         
         kfree(code_segment);
         kfree(stack_segment);
@@ -168,5 +176,5 @@ uint8_t execute_program(char* filename, char** args, uint8_t arg_count) {
 }
 
 void scheduler_isr_callback(void) {
-    trigger = 1;
+    isr_trigger = 1;
 }

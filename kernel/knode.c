@@ -35,7 +35,7 @@ void destroy_knode(uint32_t address, uint32_t parent_address) {
 
 void knode_get_name(uint32_t address, char* name) {
     for (uint8_t i=0; i < KNODE_NAME_LENGTH_MAX; i++) {
-        kmem_read(address + i, &name[i], 1);
+        kmem_read(&name[i], address + i, 1);
         if (name[i] == '\0') 
             return;
     }
@@ -95,7 +95,7 @@ static uint8_t knode_contains_reference_address(uint32_t directory_address, uint
     if (reference_ptr == 0 || reference_ptr == KMALLOC_NULL) 
         return 0;
     
-    kmem_read(directory_address, &directory, sizeof(struct KernelDirectory));
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
     
     uint16_t reference_index;
     for (reference_index = 0; reference_index < directory.size; reference_index++) {
@@ -107,7 +107,7 @@ static uint8_t knode_contains_reference_address(uint32_t directory_address, uint
     
     while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
         struct KernelDirectoryExtent extent;
-        kmem_read(current_extent_address, &extent, sizeof(struct KernelDirectoryExtent));
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
         
         uint16_t reference_index;
         for (reference_index = 0; reference_index < extent.size; reference_index++) {
@@ -133,7 +133,7 @@ uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr) 
         return 0;
     
     struct KernelDirectory directory;
-    kmem_read(directory_address, &directory, sizeof(struct KernelDirectory));
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
     
     if (directory.size < KDIRECTORY_REF_MAX) {
         directory.reference[directory.size] = reference_ptr;
@@ -147,7 +147,7 @@ uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr) 
     
     while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
         struct KernelDirectoryExtent extent;
-        kmem_read(current_extent_address, &extent, sizeof(struct KernelDirectoryExtent));
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
     
         if (extent.size < KDIRECTORYEX_REF_MAX) {
             extent.reference[extent.size] = reference_ptr;
@@ -165,7 +165,7 @@ uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr) 
         return 0;
     
     struct KernelDirectoryExtent new_extent;
-    kmem_read(new_extent_address, &new_extent, sizeof(struct KernelDirectoryExtent));
+    kmem_read(&new_extent, new_extent_address, sizeof(struct KernelDirectoryExtent));
     
     new_extent.prev         = previous_extent_address;
     new_extent.next         = 0;
@@ -176,7 +176,7 @@ uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr) 
     
     if (previous_extent_address != 0) {
         struct KernelDirectoryExtent previous_extent;
-        kmem_read(previous_extent_address, &previous_extent, sizeof(struct KernelDirectoryExtent));
+        kmem_read(&previous_extent, previous_extent_address, sizeof(struct KernelDirectoryExtent));
         previous_extent.next = new_extent_address;
         kmem_write(previous_extent_address, &previous_extent, sizeof(struct KernelDirectoryExtent));
     } else {
@@ -194,7 +194,7 @@ uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_pt
         return 0;
     
     struct KernelDirectory directory;
-    kmem_read(directory_address, &directory, sizeof(struct KernelDirectory));
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
     
     uint16_t reference_index;
     for (reference_index = 0; reference_index < directory.size; reference_index++) {
@@ -216,7 +216,7 @@ uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_pt
     
     while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
         struct KernelDirectoryExtent extent;
-        kmem_read(current_extent_address, &extent, sizeof(struct KernelDirectoryExtent));
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
         
         for (reference_index = 0; reference_index < extent.size; reference_index++) {
             if (extent.reference[reference_index] == reference_ptr) {
@@ -234,7 +234,7 @@ uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_pt
                     
                     if (previous_extent_address != 0 && previous_extent_address != KMALLOC_NULL) {
                         struct KernelDirectoryExtent previous_extent;
-                        kmem_read(previous_extent_address, &previous_extent, sizeof(struct KernelDirectoryExtent));
+                        kmem_read(&previous_extent, previous_extent_address, sizeof(struct KernelDirectoryExtent));
                         previous_extent.next = next_extent_address;
                         kmem_write(previous_extent_address, &previous_extent, sizeof(struct KernelDirectoryExtent));
                     } else {
@@ -243,7 +243,7 @@ uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_pt
                     
                     if (next_extent_address != 0 && next_extent_address != KMALLOC_NULL) {
                         struct KernelDirectoryExtent next_extent;
-                        kmem_read(next_extent_address, &next_extent, sizeof(struct KernelDirectoryExtent));
+                        kmem_read(&next_extent, next_extent_address, sizeof(struct KernelDirectoryExtent));
                         next_extent.prev = previous_extent_address;
                         kmem_write(next_extent_address, &next_extent, sizeof(struct KernelDirectoryExtent));
                     } else {
@@ -275,7 +275,7 @@ uint32_t knode_get_reference(uint32_t directory_address, uint32_t index) {
         return KMALLOC_NULL;
     
     struct KernelDirectory directory;
-    kmem_read(directory_address, &directory, sizeof(struct KernelDirectory));
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
     
     if (index < directory.size) 
         return directory.reference[index];
@@ -285,7 +285,7 @@ uint32_t knode_get_reference(uint32_t directory_address, uint32_t index) {
     
     while (current_extent_address != 0) {
         struct KernelDirectoryExtent extent;
-        kmem_read(current_extent_address, &extent, sizeof(struct KernelDirectoryExtent));
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
         
         if (index < extent.size) 
             return extent.reference[index];
@@ -315,7 +315,7 @@ uint32_t knode_get_root(void) {
             continue;
         
         struct KernelDirectory directory;
-        kmem_read(allocation_address, &directory, sizeof(struct KernelDirectory));
+        kmem_read(&directory, allocation_address, sizeof(struct KernelDirectory));
         
         if (directory.parent == 0 || directory.parent == KMALLOC_NULL) {
             if (strcmp(directory.name, "/") == 0)
@@ -334,7 +334,7 @@ uint32_t knode_get_parent(uint32_t directory_address) {
     if (knode_is_valid_address(directory_address) == 0)
         return KMALLOC_NULL;
     
-    kmem_read(directory_address, &directory, sizeof(struct KernelDirectory));
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
     
     if (directory.parent == 0 || directory.parent == KMALLOC_NULL)
         return directory_address;
@@ -363,7 +363,7 @@ uint32_t knode_find_by_name(uint32_t directory_address, const char* name) {
         char object_name[16];
         memset(object_name, 0x00, sizeof(object_name));
         
-        kmem_read(reference_address, object_name, sizeof(object_name));
+        kmem_read(object_name, reference_address, sizeof(object_name));
         
         if (strcmp(object_name, name) == 0) 
             return reference_address;

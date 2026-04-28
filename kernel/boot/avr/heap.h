@@ -36,8 +36,8 @@ void kfree(uint32_t address);
 
 uint32_t kmalloc_next(uint32_t previous_address);
 
-void kmem_write(uint32_t address, const void* source, uint32_t size);
-void kmem_read(uint32_t address, void* destination, uint32_t size);
+void kmem_write(uint32_t destination, const void* source, uint32_t size);
+void kmem_read(void* destination, uint32_t source, uint32_t size);
 
 uint8_t kmalloc_get_flags(uint32_t address);
 void    kmalloc_set_flags(uint32_t address, uint8_t flags);
@@ -59,5 +59,12 @@ uint32_t heap_get_total_memory(void);
 
 void heap_set_base_address(uint32_t base);
 uint32_t heap_get_base_address(void);
+
+void kmemset(uint32_t destination, unsigned char value, uint32_t size);
+
+#define kmemcpy(arg1, source, sz) _Generic((arg1), \
+    uint32_t : kmem_write, \
+    default  : kmem_read \
+)((arg1), (source), (sz))
 
 #endif

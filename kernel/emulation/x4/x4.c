@@ -8,6 +8,11 @@
 #include <kernel/emulation/x4/x4.h>
 #include <kernel/emulation/x4/opcodes.h>
 
+
+#include <kernel/boot/avr/interrupt.h>
+
+
+
 extern struct Bus mem_bus;
 
 void x4_init(void) {
@@ -32,6 +37,10 @@ uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint
         kb_clear_input_state();
         if (kb_getc() == 0x00) 
             continue;
+#endif
+        
+#ifdef X4_DEBUG_STEP_DELAY
+        _delay_ms(800);
 #endif
         
         uint8_t instruction[6];
@@ -103,10 +112,15 @@ uint8_t x4_emulate(struct X4Thread* thread, char** args, uint8_t arg_count, uint
         
         case 0xCC:
         case INT: {
-            if (opcode_INT(thread, op_args, args, arg_count) != 0) {
+            uint8_t result = opcode_INT(thread, op_args, args, arg_count);
+            if (result != 0) {
                 if (thread->cache.state & X4EMM_FLAG_CONSOLE_DIRTY) {
                     thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
                     print("\n");
+                }
+                
+                if (result == 0xD6) {
+                    return result;
                 }
                 
 #ifdef X4_DEBUG_PRINT_STACK_POINTER

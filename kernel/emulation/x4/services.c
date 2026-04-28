@@ -24,7 +24,7 @@ uint8_t isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_co
         for (uint32_t i = 0;; i++) {
             uint8_t buffer;
             struct X4Pointer dataOffset = x4_pointer_from_low16(thread->cache.dl, thread->cache.dh);
-            kmem_read(thread->cache.cs + dataOffset.address + i, &buffer, 1);
+            kmem_read(&buffer, thread->cache.cs + dataOffset.address + i, 1);
             
             if (buffer == '\0')
                 break;
@@ -44,8 +44,9 @@ uint8_t isc_display_routine(struct X4Thread* thread, char** args, uint8_t arg_co
     }
     
     if (thread->cache.ah == 0x03) {
-        console_clear();
-        console_set_cursor_position(0, 0);
+        display_clear();
+        display_cursor_set_position(0);
+        display_cursor_set_line(0);
         
         thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
         return 0;
@@ -139,30 +140,50 @@ uint8_t isc_network_routine(struct X4Thread* thread, char** args, uint8_t arg_co
     return 0;
 }
 
+uint8_t last_character = 0x00;
+
 uint8_t isc_keyboard_routine(struct X4Thread* thread, char** op_args, uint8_t arg_count) {
-    // (Blocking) Read character from keyboard
     if (thread->cache.ah == 0x00) {
+        uint8_t current_character = kb_get_current_char();
+        if (current_character != last_character) {
+            last_character = current_character;
+            thread->cache.al = current_character;
+        } else {
+            thread->cache.al = 0x00;
+            return 0xD6; // Yield, still waiting
+        }
+        if (thread->cache.al != 0) {
+            return 0;
+        }
         if (kb_check_input_state() == 0) 
-            return 0xD6;
-        thread->cache.al = kb_get_current_char();
-        
-        // Re execute the INT next time
-        thread->cache.ep -= 2;
+            
         return 0;
     }
     
     // Check if a key is currently in the buffer ready to be handled
     if (thread->cache.ah == 0x01) {
-        thread->cache.al = kb_check_input_state();
+        uint8_t current_character = kb_get_current_char();
+        if (current_character != last_character) {
+            thread->cache.al = current_character;
+        } else {
+            thread->cache.al = 0x00;
+        }
         return 0;
     }
     
     // Get the last character the keyboard sent in
     if (thread->cache.ah == 0x03) {
-        thread->cache.al = kb_get_current_char();
+        uint8_t current_character = kb_get_current_char();
+        if (current_character != last_character) {
+            last_character = current_character;
+            thread->cache.al = current_character;
+        } else {
+            thread->cache.al = 0x00;
+        }
         return 0;
     }
     
     //Get shift state: AH=02h checks shift, ctrl, alt ect.. are pressed
+    return 0;
 }
 

@@ -7,7 +7,9 @@
 
 #include <string.h>
 
-#include <kernel/syscall/graphix.h>
+uint8_t code_block[] = {
+    0x89, 0x01, 0x00, 0xCD, 0x16, 0x83, 0x06, 0x0F, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x77, 0x74, 0x66, 0x0D, 0x00, 
+};
 
 
 ISR(INT2_vect) {
@@ -20,83 +22,84 @@ ISR(TIMER1_COMPA_vect) { scheduler_isr_callback(); }  // Scheduler
 
 uint32_t detect_external_memory(void);
 
+void _system_reset_(void) {
+    display_clear();
+    void(*resetFunc) (void) = 0;
+    resetFunc();
+}
+
 int main() {
     mmio_address_zero();
     mmio_control_zero();
     
-    _delay_ms(1000);
+    _delay_ms(300);
     
     interrupt_init();
     
     char keyboard_string[16];
     char prompt_string[16];
+    char virtual_key_map[84];
     
     kb_init();
+    kb_map_init(virtual_key_map, sizeof(virtual_key_map));
     
-    console_init(keyboard_string, prompt_string);
-    
-    /*
-    struct Bus bus;
-    bus.read_waitstate  = 2;
-    bus.write_waitstate = 1;
-    
-    {
-    char block[] = "What the fuck?";
-    
-    for (uint8_t i=0; i < sizeof(block); i++) 
-        mmio_writeb(&bus, 0x00000000 + i, &block[i]);
-    
-    
-    }
-    
-    
-    {
-    char block[32];
-    memset(block, 0x00, sizeof(block));
-    
-    mmio_read_block(&bus, 0x00000000, block, 32);
-    
-    block[16] = '\0';
-    
-    print(block);
-    }
-    
-    
-    while(1);
-    */
+    display_init();
+    console_init(keyboard_string, prompt_string, sizeof(keyboard_string), sizeof(prompt_string));
     
     // Allocate total memory
     
     uint32_t block_size = 32UL;
     uint32_t total_memory = detect_external_memory();
-    const uint32_t ALLOCATOR_MAX = total_memory;
+    const uint32_t allocator_max = total_memory;
     
-    uint8_t bitmap[ALLOCATOR_MAX / block_size / 8UL];
+    uint8_t bitmap[allocator_max / block_size / 8UL];
     memset(bitmap, 0x00, sizeof(bitmap));
     
     kmalloc_bitmap_set(bitmap, 0);
     heap_set_base_address(0x00000000);
     
-    heap_init(block_size, ALLOCATOR_MAX);
-    
     print("kernel v0.0.0\n");
+    
+    heap_init(block_size, allocator_max);
+    
     kernel_init();
-    
     x4_init();
-    
     scheduler_init();
     
-    print_prompt();
+    console_prompt_print();
     interrupt_enable();
     
     while (1) {
+        scheduler_handler();
         
-        interrupt_disable();
-            scheduler_handler();
         interrupt_enable();
-        
         kb_event_handler();
         
+        // Soft reset
+        if (kb_vkey_check(VK_CONTROL) && kb_vkey_check(VK_ALT) && kb_vkey_check(VK_DELETE)) {
+            _system_reset_();
+        }
+        
+        // Setup
+        if (kb_vkey_check(VK_CONTROL) && kb_vkey_check(VK_ALT) && kb_vkey_check(VK_INSERT)) {
+            display_clear();
+            
+            while(1) {
+                
+                scheduler_handler();
+                
+                if (kb_vkey_check(VK_ESCAPE)) {
+                    _system_reset_();
+                }
+                
+                // Exit
+                if (kb_vkey_check(VK_CONTROL) && kb_vkey_check(VK_ALT) && kb_vkey_check(VK_DELETE)) {
+                    _system_reset_();
+                }
+                
+            }
+        }
+        interrupt_disable();
     }
     
 }
@@ -121,11 +124,14 @@ uint32_t detect_external_memory(void) {
         counter++;
         if (counter > 1024) {
             counter = 0;
-            console_set_cursor_position(0, 0);
+            display_cursor_set_position(0);
+            display_cursor_set_line(0);
             print_int(total_memory);
         }
     }
-    console_set_cursor_position(0, 0);
+    display_cursor_set_position(0);
+    display_cursor_set_line(0);
+    
     print_int(total_memory);
     print(" bytes free\n");
     

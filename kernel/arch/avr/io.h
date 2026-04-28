@@ -140,7 +140,6 @@ static inline void mmio_address_zero(void) {
 
 static inline void mmio_initiate(void) {
     _BUS_LOWER_DIR__ = 0x00;
-	_BUS_LOWER_OUT__ = 0xff; // Set internal pull-up resistors
 	_BUS_LOWER_DIR__ = 0xff;
 	mmio_control_zero();
     mmio_address_zero();
@@ -179,9 +178,6 @@ static inline void mmio_writeb(struct Bus* bus, uint32_t address, uint8_t* byte)
 	
 	_CONTROL_OUT__ = _CONTROL_OPEN_LATCH__;
 	_BUS_UPPER_OUT__  = 0x00;
-	
-	__asm__ volatile("nop");
-	__asm__ volatile("nop");
 }
 
 static inline void mmio_writeb_eeprom(struct Bus* bus, uint32_t address, uint8_t* byte) {

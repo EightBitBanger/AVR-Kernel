@@ -592,11 +592,21 @@ static inline uint8_t opcode_INT(struct X4Thread* thread, uint8_t* op_args, char
     }
     
     // INT 20 - End the program
-    if (op_args[0] == 0x20 || result == 0xD6) {
+    if (op_args[0] == 0x20) {
         if (thread->cache.state & X4EMM_FLAG_CONSOLE_DIRTY) {
             thread->cache.state &= ~X4EMM_FLAG_CONSOLE_DIRTY;
             print("\n");
         }
+        
+        // Quit the process
+        return 0xff;
+    }
+    
+    if (result == 0xD6) {
+        // Re execute the INT next time
+        thread->cache.ep -= 2;
+        
+        // Yield to the next process
         return 0xD6;
     }
     return 0;

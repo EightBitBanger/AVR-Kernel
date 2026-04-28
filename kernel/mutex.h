@@ -1,9 +1,6 @@
 #ifndef KERNEL_MUTEX_H
 #define KERNEL_MUTEX_H
 
-#include <kernel/kernel.h>
-
-#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
 

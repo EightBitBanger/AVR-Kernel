@@ -16,8 +16,12 @@
 #include <kernel/device/knode.h>
 #include <kernel/device/kevent.h>
 
+#include <kernel/console/virtual_key.h>
 #include <kernel/console/print.h>
 #include <kernel/console/console.h>
+#include <kernel/console/keyboard.h>
+#include <kernel/console/display.h>
+
 #include <kernel/scheduler/scheduler.h>
 #include <kernel/emulation/x4/x4.h>
 #include <kernel/fs/fs.h>
@@ -54,5 +58,7 @@ void kernel_set_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_
 void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount, uint32_t nt_device);
 
 uint32_t device_get_hardware_address(const char* name);
+
+void device_get_hardware_data(uint32_t address, char* data_buffer, uint8_t size);
 
 #endif

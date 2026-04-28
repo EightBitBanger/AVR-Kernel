@@ -79,7 +79,7 @@ int call_routine_chdir(int arg_count, char** args) {
             console_get_path(path_buf, 32, target_directory, fs_current.mount_directory, 2);
             
             strcpy(&path_buf[strlen(path_buf)], ">\0");
-            console_set_prompt(path_buf);
+            console_prompt_set_string(path_buf);
             
             dirname = strtok(NULL, "/");
             continue;
@@ -99,7 +99,7 @@ int call_routine_chdir(int arg_count, char** args) {
     console_get_path(path_buf, 32, fs_current.current_directory, fs_current.mount_directory, 2);
     
     strcpy(&path_buf[strlen(path_buf)], ">\0");
-    console_set_prompt(path_buf);
+    console_prompt_set_string(path_buf);
     return 0;
 }
 

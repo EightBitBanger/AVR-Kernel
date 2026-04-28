@@ -24,7 +24,7 @@ static const struct CommandFunction command_table[] = {
     //{"format",    SYSCALL_FORMAT,       call_routine_format,       KSCF_COMMAND},
     //{"chkdsk",    SYSCALL_CHKDSK,       call_routine_chkdsk,       KSCF_COMMAND},
     
-    {"graph",     SYSCALL_GRAPHICS,     call_routine_graph,        KSCF_COMMAND},
+    //{"graph",     SYSCALL_GRAPHICS,     call_routine_graph,        KSCF_COMMAND},
     
 };
 

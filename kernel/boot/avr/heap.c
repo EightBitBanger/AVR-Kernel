@@ -201,10 +201,10 @@ static inline void kmalloc_block_set_free(uint32_t block_index) {
 }
 
 bool kmalloc_is_valid(uint32_t address) {
-    uint32_t             header_address;
-    uint32_t             total_size;
-    uint32_t             required_blocks;
-    uint32_t             start_block;
+    uint32_t header_address;
+    uint32_t total_size;
+    uint32_t required_blocks;
+    uint32_t start_block;
     struct KMallocHeader header;
     
     if (address == KMALLOC_NULL)
@@ -287,6 +287,8 @@ void heap_init(uint32_t block_size, uint32_t total_memory) {
             kmalloc_dirty[index] = 0;
         }
     }
+    
+    kmalloc_bitmap_write();
 }
 
 uint32_t kmalloc(uint32_t size) {
@@ -354,11 +356,11 @@ uint32_t kmalloc(uint32_t size) {
 }
 
 void kfree(uint32_t address) {
-    uint32_t             header_address;
-    uint32_t             total_size;
-    uint32_t             start_block;
-    uint32_t             required_blocks;
-    uint32_t             block_offset;
+    uint32_t header_address;
+    uint32_t total_size;
+    uint32_t start_block;
+    uint32_t required_blocks;
+    uint32_t block_offset;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -391,7 +393,7 @@ void kfree(uint32_t address) {
 }
 
 uint8_t kmalloc_get_type(uint32_t address) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -404,7 +406,7 @@ uint8_t kmalloc_get_type(uint32_t address) {
 }
 
 void kmalloc_set_type(uint32_t address, uint8_t type) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -418,7 +420,7 @@ void kmalloc_set_type(uint32_t address, uint8_t type) {
 }
 
 uint8_t kmalloc_get_flags(uint32_t address) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -431,7 +433,7 @@ uint8_t kmalloc_get_flags(uint32_t address) {
 }
 
 void kmalloc_set_flags(uint32_t address, uint8_t flags) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -445,7 +447,7 @@ void kmalloc_set_flags(uint32_t address, uint8_t flags) {
 }
 
 uint8_t kmalloc_get_permissions(uint32_t address) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -458,7 +460,7 @@ uint8_t kmalloc_get_permissions(uint32_t address) {
 }
 
 void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -472,7 +474,7 @@ void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
 }
 
 uint32_t kmalloc_get_size(uint32_t address) {
-    uint32_t             header_address;
+    uint32_t header_address;
     struct KMallocHeader header;
     
     if (!kmalloc_is_valid(address))
@@ -485,11 +487,11 @@ uint32_t kmalloc_get_size(uint32_t address) {
 }
 
 uint32_t kmalloc_next(uint32_t previous_address) {
-    uint32_t             start_block;
-    uint32_t             current_block;
-    uint32_t             header_address;
-    uint32_t             total_size;
-    uint32_t             used_blocks;
+    uint32_t start_block;
+    uint32_t current_block;
+    uint32_t header_address;
+    uint32_t total_size;
+    uint32_t used_blocks;
     struct KMallocHeader header;
     
     if (previous_address == KMALLOC_NULL) {
@@ -533,20 +535,28 @@ uint32_t kmalloc_next(uint32_t previous_address) {
     return KMALLOC_NULL;
 }
 
-void kmem_write(uint32_t address, const void* source, uint32_t size) {
+void kmem_write(uint32_t destination, const void* source, uint32_t size) {
     const uint8_t* bytes = (const uint8_t*)source;
-    uint32_t       index;
+    uint32_t index;
     
     for (index = 0; index < size; index++) {
-        kmem_write8(address + index, bytes[index]);
+        kmem_write8(destination + index, bytes[index]);
     }
 }
 
-void kmem_read(uint32_t address, void* destination, uint32_t size) {
+void kmemset(uint32_t destination, unsigned char value, uint32_t size) {
+    uint32_t index;
+    
+    for (index = 0; index < size; index++) {
+        kmem_write8(destination + index, value);
+    }
+}
+
+void kmem_read(void* destination, uint32_t source, uint32_t size) {
     uint8_t* bytes = (uint8_t*)destination;
     uint32_t index;
     
     for (index = 0; index < size; index++) {
-        bytes[index] = kmem_read8(address + index);
+        bytes[index] = kmem_read8(source + index);
     }
 }
