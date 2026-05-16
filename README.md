@@ -1,7 +1,8 @@
-## AVR kernel
+### AVR kernel
 
 <br></br>
 
-### Supported boards
-<a href="https://github.com/RetroBytes32/Retroboard">Retroboard</a>⁭
+#### Supported systems and devices
+
+<a href="https://github.com/RetroBytes32/Retroboard">AVR embedded systems</a>⁭
 
