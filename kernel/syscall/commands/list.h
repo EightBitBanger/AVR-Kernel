@@ -7,7 +7,7 @@
 
 int call_routine_lsdir(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     if (fs_current.mount_device != FS_NULL) {
         console_print_fs_entry(fs_current.current_directory);

@@ -6,8 +6,7 @@
 
 #include <kernel/arch/avr/io.h>
 #include <kernel/arch/avr/map.h>
-
-#include <kernel/boot/avr/heap.h>
+#include <kernel/arch/avr/heap.h>
 
 #include <kernel/bus/bus.h>
 #include <kernel/device/kbuffer.h>
@@ -30,28 +29,27 @@
 #include <kernel/syscall.h>
 
 
-#define KSO_WORKING_DIRECTORY   0
-#define KSO_LOCAL_PATHS         sizeof(struct WorkingDirectory)
-//#define KSO_                    sizeof(struct WorkingDirectory) + sizeof(struct LocalPaths)
+void kernel_get_working_directory(struct WorkingDirectory* out_dir);
+void kernel_set_working_directory(struct WorkingDirectory* out_dir);
+
+void kernel_get_local_paths(struct LocalPaths* out_paths);
+void kernel_set_local_paths(struct LocalPaths* out_paths);
 
 
 void kernel_init(void);
 
 uint32_t create_device(const char* name);
-void     destroy_device(uint32_t address);
+void destroy_device(uint32_t address);
 
 uint32_t create_buffer(uint32_t size);
-void     destroy_buffer(uint32_t address);
+void destroy_buffer(uint32_t address);
 
 uint32_t create_driver(const char* name);
-void     destroy_driver(uint32_t address);
+void destroy_driver(uint32_t address);
 
 uint32_t create_procblock(const char* name);
-void     destroy_procblock(uint32_t address);
+void destroy_procblock(uint32_t address);
 
-
-void kernel_get_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size);
-void kernel_set_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size);
 
 // Hardware identification
 

@@ -38,26 +38,26 @@ uint8_t console_get_keyboard_string_length(void) {
 
 void console_set_directory(uint32_t address) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     fs_current.current_directory = address;
-    kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_set_working_directory(&fs_current);
 }
 
 uint32_t console_get_directory(void) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     return fs_current.current_directory;
 }
 
 uint32_t console_get_mounted_device(void) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     return fs_current.mount_device;
 }
 
 uint32_t console_get_mounted_directory(void) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     return fs_current.mount_directory;
 }
 
@@ -143,8 +143,8 @@ void console_process_command(char* keyboard_str) {
         
         struct WorkingDirectory fs_current;
         struct LocalPaths fs_paths;
-        kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
-        kernel_get_system_object(&fs_paths,   KSO_LOCAL_PATHS, sizeof(struct LocalPaths));
+        kernel_get_working_directory(&fs_current);
+        kernel_get_local_paths(&fs_paths);
         
         char old_path[32];
         console_get_path(old_path, 32, fs_current.current_directory, fs_current.mount_directory, 16);
@@ -194,7 +194,7 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     }
     
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     if (fs_current.mount_device != FS_NULL && fs_addr != FS_NULL) {
         while (fs_addr != FS_NULL && fs_count < 16) {
@@ -227,7 +227,6 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
         
         for (int j = 0; obj.name[j] && offset < (path_length - 1); j++) 
             path[offset++] = obj.name[j];
-        
     }
     
     for (int i = fs_count - 2; i >= 0; i--) {
@@ -286,7 +285,7 @@ void console_print_fs_entry(uint32_t directory_address) {
         return;
     
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     struct FSPartitionBlock partition;
     fs_device_open(fs_current.mount_device, &partition);

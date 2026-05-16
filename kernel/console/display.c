@@ -37,23 +37,6 @@ void display_init(void) {
     
     if (display_address == 0) 
         return;
-    
-    
-    
-    
-    
-    /*
-    char buffer[17];
-    device_get_hardware_data(display_address, buffer, 16);
-    
-    buffer[16] = '\0';
-    
-    print(buffer);
-    */
-    
-    
-    
-    //while(1);
 }
 
 uint32_t display_get_device_address(void) {

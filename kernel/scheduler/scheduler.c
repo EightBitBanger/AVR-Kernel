@@ -1,7 +1,7 @@
 #include <kernel/arch/avr/io.h>
 #include <kernel/arch/avr/map.h>
+#include <kernel/arch/avr/heap.h>
 
-#include <kernel/boot/avr/heap.h>
 #include <kernel/boot/avr/interrupt.h>
 
 #include <kernel/kernel.h>
@@ -48,7 +48,7 @@ uint32_t task_create(uint32_t entry_point_address, uint16_t priority, uint8_t fl
     // Create process node
     
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     char index_string[24];
     itos(task_index, index_string);
@@ -129,7 +129,7 @@ void scheduler_handler(void) {
 
 uint8_t execute_program(char* filename, char** args, uint8_t arg_count) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     if (fs_current.mount_directory == FS_NULL) 
         return 1;

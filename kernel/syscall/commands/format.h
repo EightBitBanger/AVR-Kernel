@@ -7,7 +7,7 @@
 
 int call_routine_format(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     uint32_t total_capacity = 0;
     uint32_t sector_size    = 32UL;

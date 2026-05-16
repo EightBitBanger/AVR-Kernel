@@ -7,11 +7,6 @@
 
 #include <string.h>
 
-uint8_t code_block[] = {
-    0x89, 0x01, 0x00, 0xCD, 0x16, 0x83, 0x06, 0x0F, 0x00, 0x00, 0x00, 0xCD, 0x10, 0xCD, 0x20, 0x77, 0x74, 0x66, 0x0D, 0x00, 
-};
-
-
 ISR(INT2_vect) {
     
     kb_isr_callback();
@@ -70,14 +65,20 @@ int main() {
     interrupt_enable();
     
     while (1) {
+        interrupt_disable();
         scheduler_handler();
-        
         interrupt_enable();
+        
         kb_event_handler();
+        
+        if (kb_vkey_check(VK_CONTROL))  print("control\n");
+        if (kb_vkey_check(VK_ALT))      print("alt\n");
+        if (kb_vkey_check(VK_DELETE))   print("delete\n");
         
         // Soft reset
         if (kb_vkey_check(VK_CONTROL) && kb_vkey_check(VK_ALT) && kb_vkey_check(VK_DELETE)) {
             _system_reset_();
+            
         }
         
         // Setup
@@ -99,7 +100,9 @@ int main() {
                 
             }
         }
-        interrupt_disable();
+        
+        
+        
     }
     
 }

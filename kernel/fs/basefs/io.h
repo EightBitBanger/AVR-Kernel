@@ -2,7 +2,7 @@
 #define BASE_IO_H
 
 #include <kernel/arch/avr/io.h>
-#include <kernel/boot/avr/heap.h>
+#include <kernel/arch/avr/heap.h>
 
 uint8_t fs_readb(uint32_t address);
 void fs_writeb(uint32_t address, uint8_t byte);

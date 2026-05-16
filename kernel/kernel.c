@@ -2,20 +2,39 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 
 struct KernelSystemObject {
+    
     struct WorkingDirectory fs_current;
     struct LocalPaths paths;
+    
 };
 uint32_t k_system_object;
 
 
-void kernel_get_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
-    kmem_read((uint8_t*)object, k_system_object + kso_sub_type, kso_size);
+void kernel_get_working_directory(struct WorkingDirectory* out_dir) {
+    kmem_read((uint8_t*)out_dir, 
+               k_system_object + offsetof(struct KernelSystemObject, fs_current), 
+               sizeof(struct WorkingDirectory));
 }
 
-void kernel_set_system_object(void* object, uint32_t kso_sub_type, uint32_t kso_size) {
-    kmem_write(k_system_object + kso_sub_type, (uint8_t*)object, kso_size);
+void kernel_get_local_paths(struct LocalPaths* out_paths) {
+    kmem_read((uint8_t*)out_paths, 
+               k_system_object + offsetof(struct KernelSystemObject, paths), 
+               sizeof(struct LocalPaths));
+}
+
+void kernel_set_working_directory(struct WorkingDirectory* out_dir) {
+    kmem_write(k_system_object + offsetof(struct KernelSystemObject, fs_current), 
+               (uint8_t*)out_dir, 
+               sizeof(struct WorkingDirectory));
+}
+
+void kernel_set_local_paths(struct LocalPaths* out_paths) {
+    kmem_write(k_system_object + offsetof(struct KernelSystemObject, paths), 
+               (uint8_t*)out_paths, 
+               sizeof(struct LocalPaths));
 }
 
 
@@ -58,18 +77,18 @@ void kernel_init(void) {
         fs_current.mount_device      = mount_device;
         fs_current.mount_directory   = part.root_directory;
         fs_current.mount_root        = part.root_directory;
-        kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+        kernel_set_working_directory(&fs_current);
         
-        char path_buf[32];
-        console_get_path(path_buf, 32, fs_current.current_directory, fs_current.mount_directory, 16);
-        strcpy(fs_paths.path, path_buf);
+        char path_buf[64];
+        console_get_path(path_buf, 64, fs_current.current_directory, fs_current.mount_directory, 16);
+        memcpy(fs_paths.path, path_buf, 64);
         
         // Add directory to path
         strcpy(&fs_paths.path[strlen(path_buf)], "/bin");
         
         // Complete the prompt
         
-        strcpy(&path_buf[strlen(path_buf)], ">\0");
+        strcpy(&path_buf[strlen(path_buf)], ">");
         console_prompt_set_string(path_buf);
         break;
     }
@@ -80,14 +99,15 @@ void kernel_init(void) {
         fs_current.mount_device      = FS_NULL;
         fs_current.mount_directory   = FS_NULL;
         fs_current.mount_root        = FS_NULL;
-        kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+        kernel_set_working_directory(&fs_current);
         
-        console_prompt_set_string("/>");
+        char* promptStr = "/>";
+        console_prompt_set_string(promptStr);
         return;
     }
     
-    kernel_set_system_object(&fs_paths, KSO_LOCAL_PATHS, sizeof(struct LocalPaths));
-    kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_set_local_paths(&fs_paths);
+    kernel_set_working_directory(&fs_current);
 }
 
 uint32_t create_device(const char* name) {

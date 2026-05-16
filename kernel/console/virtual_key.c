@@ -21,4 +21,5 @@ char kb_vkey_check(uint8_t key) {
 char kb_vkey_set(uint8_t key, uint8_t state) {
     if (key < sizeof(VirtualKeyMap)) 
         VirtualKeyMap[key] = state;
+    return state;
 }

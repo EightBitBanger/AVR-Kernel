@@ -174,7 +174,7 @@ void kb_event_handler(void) {
 
 void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
     struct Bus bus;
-    bus.read_waitstate  = 700;
+    bus.read_waitstate  = 80;
     bus.write_waitstate = 1;
     
     mmio_readb(&bus, 0x90000, low_byte);

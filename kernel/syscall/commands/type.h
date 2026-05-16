@@ -10,7 +10,7 @@ int call_routine_type(int arg_count, char** args) {
         return 1;
     
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     if (fs_current.mount_directory == FS_NULL) 
         return 1;

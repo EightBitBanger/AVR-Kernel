@@ -8,7 +8,7 @@
 
 int call_routine_chdir(int arg_count, char** args) {
     struct WorkingDirectory fs_current;
-    kernel_get_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_get_working_directory(&fs_current);
     
     int is_absolute = (args[0][0] == '/');
     
@@ -78,7 +78,7 @@ int call_routine_chdir(int arg_count, char** args) {
             char path_buf[32];
             console_get_path(path_buf, 32, target_directory, fs_current.mount_directory, 2);
             
-            strcpy(&path_buf[strlen(path_buf)], ">\0");
+            strcpy(&path_buf[strlen(path_buf)], ">");
             console_prompt_set_string(path_buf);
             
             dirname = strtok(NULL, "/");
@@ -93,12 +93,12 @@ int call_routine_chdir(int arg_count, char** args) {
         dirname = strtok(NULL, "/");
     }
     
-    kernel_set_system_object(&fs_current, KSO_WORKING_DIRECTORY, sizeof(struct WorkingDirectory));
+    kernel_set_working_directory(&fs_current);
     
     char path_buf[32];
     console_get_path(path_buf, 32, fs_current.current_directory, fs_current.mount_directory, 2);
     
-    strcpy(&path_buf[strlen(path_buf)], ">\0");
+    strcpy(&path_buf[strlen(path_buf)], ">");
     console_prompt_set_string(path_buf);
     return 0;
 }
