@@ -1,9 +1,6 @@
 #ifndef KERNEL_CORE_H
 #define KERNEL_CORE_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #include <kernel/arch/avr/io.h>
 #include <kernel/arch/avr/map.h>
 #include <kernel/arch/avr/heap.h>
@@ -28,6 +25,8 @@
 #include <kernel/knode.h>
 #include <kernel/syscall.h>
 
+#include <stdint.h>
+#include <stdbool.h>
 
 void kernel_get_working_directory(struct WorkingDirectory* out_dir);
 void kernel_set_working_directory(struct WorkingDirectory* out_dir);
@@ -54,9 +53,7 @@ void destroy_procblock(uint32_t address);
 // Hardware identification
 
 void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount, uint32_t nt_device);
-
 uint32_t device_get_hardware_address(const char* name);
-
 void device_get_hardware_data(uint32_t address, char* data_buffer, uint8_t size);
 
 #endif

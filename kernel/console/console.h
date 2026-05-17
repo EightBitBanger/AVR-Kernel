@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define KEYBOARD_STRING_LENGTH  32
-
 struct WorkingDirectory {
     uint32_t current_directory;
     uint32_t mount_device;
@@ -15,7 +13,6 @@ struct WorkingDirectory {
 struct LocalPaths {
     char path[64];
 };
-
 
 void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length);
 

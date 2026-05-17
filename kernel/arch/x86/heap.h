@@ -34,6 +34,9 @@ void heap_init(uint32_t block_size, uint32_t total_memory);
 uint32_t kmalloc(uint32_t size);
 void kfree(uint32_t address);
 
+void* malloc(size_t size);
+void free(void* ptr);
+
 uint32_t kmalloc_next(uint32_t previous_address);
 
 void kmem_write(uint32_t destination, const void* source, uint32_t size);
@@ -62,9 +65,9 @@ uint32_t heap_get_base_address(void);
 
 void kmemset(uint32_t destination, unsigned char value, uint32_t size);
 
-#define kmemcpy(dest, source, sz) _Generic((dest), \
+#define kmemcpy(arg1, source, sz) _Generic((arg1), \
     uint32_t : kmem_write, \
     default  : kmem_read \
-)((dest), (source), (sz))
+)((arg1), (source), (sz))
 
 #endif

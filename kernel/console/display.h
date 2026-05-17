@@ -1,6 +1,8 @@
 #ifndef DISPLAY_IO_H
 #define DISPLAY_IO_H
 
+#include <stdint.h>
+
 void display_init(void);
 
 uint16_t display_get_width(void);

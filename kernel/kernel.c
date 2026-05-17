@@ -87,7 +87,6 @@ void kernel_init(void) {
         strcpy(&fs_paths.path[strlen(path_buf)], "/bin");
         
         // Complete the prompt
-        
         strcpy(&path_buf[strlen(path_buf)], ">");
         console_prompt_set_string(path_buf);
         break;
