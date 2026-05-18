@@ -4,5 +4,5 @@
 
 #### Supported systems and devices
 
-<a href="https://github.com/RetroBytes32/Retroboard">AVR embedded systems</a>⁭
-
+* x86
+* <a href="https://github.com/RetroBytes32/Retroboard">AVR embedded systems</a>⁭
