@@ -1,7 +1,8 @@
 #include <kernel/knode.h>
 #include <kernel/kernel.h>
+#include <kernel/string.h>
 
-#include <string.h>
+uint32_t knode_root = KNODE_NULL;
 
 uint32_t create_knode(const char* name, uint32_t parent_address) {
     struct KernelDirectory kdir;
@@ -297,35 +298,11 @@ uint32_t knode_get_reference(uint32_t directory_address, uint32_t index) {
 }
 
 uint32_t knode_get_root(void) {
-    uint32_t allocation_address = KMALLOC_NULL;
-    uint32_t first_top_level    = KMALLOC_NULL;
-    
-    for (;;) {
-        allocation_address = kmalloc_next(allocation_address);
-        
-        if (allocation_address == KMALLOC_NULL)
-            break;
-        
-        uint8_t flags = kmalloc_get_flags(allocation_address);
-        
-        if ((flags & KMALLOC_FLAG_DIRECTORY) == 0)
-            continue;
-        
-        if ((flags & KMALLOC_FLAG_EXTENT) != 0)
-            continue;
-        
-        struct KernelDirectory directory;
-        kmem_read(&directory, allocation_address, sizeof(struct KernelDirectory));
-        
-        if (directory.parent == 0 || directory.parent == KMALLOC_NULL) {
-            if (strcmp(directory.name, "/") == 0)
-                return allocation_address;
-            
-            if (first_top_level == KMALLOC_NULL)
-                first_top_level = allocation_address;
-        }
-    }
-    return first_top_level;
+    return knode_root;
+}
+
+void knode_set_root(uint32_t address) {
+    knode_root = address;
 }
 
 uint32_t knode_get_parent(uint32_t directory_address) {

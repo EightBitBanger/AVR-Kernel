@@ -7,11 +7,13 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_chdir(int arg_count, char** args) {
+    if (arg_count < 1 || args[0] == NULL || args[0][0] == '\0') 
+        return -1; // No path provided
+    
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
     int is_absolute = (args[0][0] == '/');
-    
     if (is_absolute) {
         fs_current.current_directory = knode_get_root();
         fs_current.mount_directory = FS_NULL;
@@ -19,11 +21,14 @@ int call_routine_chdir(int arg_count, char** args) {
         fs_current.mount_root = FS_NULL;
     }
     
-    char* dirname = strtok(args[0], "/");
+    char path_copy[256]; 
+    strncpy(path_copy, args[0], sizeof(path_copy) - 1);
+    path_copy[sizeof(path_copy) - 1] = '\0';
+    
+    char* dirname = strtok(path_copy, "/");
     
     while (dirname != NULL) {
         if (fs_current.mount_device != KMALLOC_NULL) {
-            
             if (strcmp(dirname, "..") == 0) {
                 if (fs_current.mount_directory == fs_current.mount_root) {
                     fs_current.mount_directory = FS_NULL;
@@ -35,7 +40,6 @@ int call_routine_chdir(int arg_count, char** args) {
                     if (fs_current.mount_directory == FS_NULL)
                         fs_current.mount_directory = fs_current.mount_root;
                 }
-                
                 dirname = strtok(NULL, "/");
                 continue;
             }
@@ -50,7 +54,6 @@ int call_routine_chdir(int arg_count, char** args) {
         }
         
         uint32_t target_directory;
-        
         if (strcmp(dirname, "..") == 0) {
             target_directory = knode_get_parent(fs_current.current_directory);
         } else {
@@ -65,8 +68,6 @@ int call_routine_chdir(int arg_count, char** args) {
         if (flags & KMALLOC_FLAG_MOUNT) {
             uint32_t reference_address = knode_get_reference(target_directory, 0);
             
-            uint8_t bitmap[256];
-            uint8_t dirty[256];
             struct FSPartitionBlock header;
             fs_device_open(reference_address, &header);
             
@@ -74,12 +75,6 @@ int call_routine_chdir(int arg_count, char** args) {
             fs_current.mount_device      = reference_address;
             fs_current.mount_directory   = header.root_directory;
             fs_current.mount_root        = header.root_directory;
-            
-            char path_buf[32];
-            console_get_path(path_buf, 32, target_directory, fs_current.mount_directory, 2);
-            
-            strcpy(&path_buf[strlen(path_buf)], ">");
-            console_prompt_set_string(path_buf);
             
             dirname = strtok(NULL, "/");
             continue;
@@ -89,16 +84,18 @@ int call_routine_chdir(int arg_count, char** args) {
             break;
         
         fs_current.current_directory = target_directory;
-        
         dirname = strtok(NULL, "/");
     }
     
     kernel_set_working_directory(&fs_current);
     
-    char path_buf[32];
-    console_get_path(path_buf, 32, fs_current.current_directory, fs_current.mount_directory, 2);
+    char path_buf[128]; 
+    console_get_path(path_buf, sizeof(path_buf) - 2, fs_current.current_directory, fs_current.mount_directory, 2);
     
-    strcpy(&path_buf[strlen(path_buf)], ">");
+    size_t len = strlen(path_buf);
+    path_buf[len] = '>';
+    path_buf[len + 1] = '\0';
+    
     console_prompt_set_string(path_buf);
     return 0;
 }

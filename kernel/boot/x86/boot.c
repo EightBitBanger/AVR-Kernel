@@ -3,6 +3,8 @@
 
 #include <kernel/arch/x86/heap.h>
 
+#include <kernel/kernel.h>
+
 #include <kernel/console/print.h>
 #include <kernel/console/display.h>
 #include <kernel/console/keyboard.h>
@@ -11,19 +13,12 @@
 
 extern char _kernel_end[];
 
-
-struct SomeRandomType {
-    int i;
-    float f;
-};
-
-
-
 void kmain(void) {
-    
     char keyboard_string[255];
     char prompt_string[255];
     char virtual_key_map[255];
+    
+    // Display and keyboard for the console
     
     display_init();
     display_clear();
@@ -36,7 +31,9 @@ void kmain(void) {
     
     console_init(keyboard_string, prompt_string, sizeof(keyboard_string), sizeof(prompt_string));
     
-    uint32_t heap_sz  = (uint32_t)1024 * (uint32_t)1024 * (uint32_t)1024 * 4;
+    // Heap allocator
+    
+    uint32_t heap_sz  = ((uint32_t)1024 * (uint32_t)1024 * (uint32_t)1024 * 4) - 1;
     uint32_t block_sz = 64;
     
     uint32_t heap_start = ((uint32_t)_kernel_end + 4095) & ~4095;
@@ -44,17 +41,7 @@ void kmain(void) {
     
     heap_init(block_sz, heap_sz);
     
-    
-    int* address = (int*)malloc(sizeof(int));
-    *address = 1024;
-    
-    uintptr_t* intger = ((uintptr_t*)address);
-    print_int( *intger ); print("\n");
-    
-    
-    
-    
-    
+    kernel_init();
     
     console_prompt_set_string("/>");
     print("kernel v0.0.0\n");
