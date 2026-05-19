@@ -1,7 +1,7 @@
 #include <kernel/fs/fs.h>
 #include <kernel/fs/basefs/directory.h>
 
-#include <string.h>
+#include <kernel/string.h>
 
 static bool fs_file_alloc_header_read(uint32_t payload_address, struct FSAllocHeader* header) {
     uint32_t allocation_address;

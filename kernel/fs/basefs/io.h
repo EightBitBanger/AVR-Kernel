@@ -1,8 +1,14 @@
 #ifndef BASE_IO_H
 #define BASE_IO_H
 
-#include <kernel/arch/avr/io.h>
-#include <kernel/arch/avr/heap.h>
+#ifdef KERNEL_PLATFORM_AVR
+  #include <kernel/arch/avr/io.h>
+  #include <kernel/arch/avr/heap.h>
+#endif
+
+#ifdef KERNEL_PLATFORM_X86
+  #include <kernel/arch/x86/heap.h>
+#endif
 
 uint8_t fs_readb(uint32_t address);
 void fs_writeb(uint32_t address, uint8_t byte);

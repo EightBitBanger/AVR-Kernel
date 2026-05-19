@@ -1,4 +1,5 @@
-#include <kernel/string.h>
+#include <stdint.h>
+#include <stddef.h>
 
 static inline int is_delimiter(char c, const char *delim) {
     while (*delim) {
@@ -10,18 +11,61 @@ static inline int is_delimiter(char c, const char *delim) {
     return 0;
 }
 
+// String operations
+
 size_t strlen(const char* str) {
     const char *s = str;
     while (*s != '\0') {
         s++;
     }
-    return s - str;
+    return (size_t)(s - str);
 }
 
-char* strcpy(char *dest, const char* src) {
+char* strcpy(char* dest, const char* src) {
     char *ptr = dest;
     while ((*dest++ = *src++) != '\0');
     return ptr;
+}
+
+char* strncpy(char* dest, const char* src, size_t n) {
+    size_t i;
+    for (i = 0; i < n && src[i] != '\0'; i++) {
+        dest[i] = src[i];
+    }
+    // Pad out the remainder of the buffer with null bytes
+    for (; i < n; i++) {
+        dest[i] = '\0';
+    }
+    return dest;
+}
+
+size_t strncat(char* dest, const char* src, size_t size) {
+    char *d = dest;
+    const char *s = src;
+    size_t dlen;
+    size_t n = size;
+    
+    // Find the end of dest and determine its length
+    while (n-- != 0 && *d != '\0') {
+        d++;
+    }
+    dlen = d - dest;
+    n = size - dlen;
+    
+    if (n == 0) {
+        return dlen + strlen(s);
+    }
+    
+    while (*s != '\0') {
+        if (n != 1) {
+            *d++ = *s;
+            n--;
+        }
+        s++;
+    }
+    *d = '\0';
+    
+    return dlen + (s - src);
 }
 
 int strcmp(const char* str1, const char* str2) {
@@ -32,16 +76,37 @@ int strcmp(const char* str1, const char* str2) {
     return *(const unsigned char*)str1 - *(const unsigned char*)str2;
 }
 
+int strncmp(const char *s1, const char *s2, size_t n) {
+    if (n == 0) 
+        return 0;
+    
+    while (n > 0 && *s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+        n--;
+    }
+    
+    if (n == 0) 
+        return 0;
+    
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
 char* strtok(char* str, const char* delim) {
     static char *last_token = NULL;
-    if (str != NULL) 
+    
+    if (str != NULL) {
         last_token = str;
+    }
     
-    if (last_token == NULL || *last_token == '\0') 
+    if (last_token == NULL || *last_token == '\0') {
         return NULL;
+    }
     
-    while (*last_token && is_delimiter(*last_token, delim)) 
+    // Skip leading delimiters
+    while (*last_token && is_delimiter(*last_token, delim)) {
         last_token++;
+    }
     
     if (*last_token == '\0') {
         last_token = NULL;
@@ -49,55 +114,122 @@ char* strtok(char* str, const char* delim) {
     }
     
     char* token_start = last_token;
+    
+    // Find the end of the token
     while (*last_token && !is_delimiter(*last_token, delim)) {
         last_token++;
     }
     
     if (*last_token != '\0') {
-        *last_token = '\0'; // Overwrite delimiter with null terminator
-        last_token++;       // Move past the null terminator for the next call
+        *last_token = '\0'; 
+        last_token++;       
     } else {
-        last_token = NULL;  // End of string reached
+        last_token = NULL;  
     }
     
     return token_start;
 }
 
+char* strchr(const char* str, int character) {
+    while (*str != (char)character) {
+        if (!*str) {
+            return NULL;
+        }
+        str++;
+    }
+    return (char*)str;
+}
+
+char* strstr(const char* haystack, const char* needle) {
+    if (!*needle) {
+        return (char*)haystack;
+    }
+    for (; *haystack; haystack++) {
+        if (*haystack == *needle) {
+            const char *h = haystack;
+            const char *n = needle;
+            while (*h && *n && *h == *n) {
+                h++;
+                n++;
+            }
+            if (!*n) {
+                return (char*)haystack;
+            }
+        }
+    }
+    return NULL;
+}
+
+// Memory Operations
+
 void* memset(void* s, int c, size_t n) {
-    unsigned char* p = s;
-    while (n--) 
+    unsigned char* p = (unsigned char*)s;
+    while (n--) {
         *p++ = (unsigned char)c;
+    }
     return s;
 }
 
 void* memcpy(void* dest, const void* src, size_t n) {
-    unsigned char* d = dest;
-    const unsigned char* s = src;
-    while (n--) 
+    unsigned char* d = (unsigned char*)dest;
+    const unsigned char* s = (const unsigned char*)src;
+    while (n--) {
         *d++ = *s++;
+    }
     return dest;
 }
 
+void* memmove(void* dest, const void* src, size_t n) {
+    unsigned char* d = (unsigned char*)dest;
+    const unsigned char* s = (const unsigned char*)src;
+    
+    if (d < s) {
+        // Copy forward
+        while (n--) {
+            *d++ = *s++;
+        }
+    } else if (d > s) {
+        // Copy backward to avoid overwriting src data
+        d += n;
+        s += n;
+        while (n--) {
+            *--d = *--s;
+        }
+    }
+    return dest;
+}
+
+// Translation Operations
+
 void utos(uint32_t value, char* dest) {
-    char buffer[12];
-    int8_t i=0;
-    int8_t d=0;
+    char buffer[12]; // 10 digits max for uint32_t + null terminator + safe padding
+    int32_t i = 0;
+    int32_t d = 0;
+    
+    // Explicitly handle 0 case
+    if (value == 0) {
+        dest[0] = '0';
+        dest[1] = '\0';
+        return;
+    }
     
     while (value > 0) {
-        buffer[i++] = (value % 10) + '0';
+        buffer[i++] = (char)((value % 10) + '0');
         value /= 10;
     }
     
-    while (i > 0) 
+    // Reverse the string into destination
+    while (i > 0) {
         dest[d++] = buffer[--i];
+    }
     
     dest[d] = '\0';
 }
 
 void itos(int32_t value, char* dest) {
     char buffer[12]; 
-    int8_t i = 0;
-    int8_t d = 0;
+    int32_t i = 0;
+    int32_t d = 0;
     uint32_t n;
     
     if (value == 0) {
@@ -108,18 +240,68 @@ void itos(int32_t value, char* dest) {
     
     if (value < 0) {
         dest[d++] = '-';
-        n = (uint32_t)-(int64_t)value; // Cast avoids overflow
+        // Handle INT32_MIN overflow safely by casting up before negating
+        n = (uint32_t)(-(int64_t)value); 
     } else {
         n = (uint32_t)value;
     }
     
     while (n > 0) {
-        buffer[i++] = (n % 10) + '0';
+        buffer[i++] = (char)((n % 10) + '0');
         n /= 10;
     }
     
-    while (i > 0) 
+    while (i > 0) {
         dest[d++] = buffer[--i];
+    }
     
     dest[d] = '\0';
+}
+
+int32_t stoi(const char* str) {
+    int32_t result = 0;
+    int32_t sign = 1;
+    
+    // Skip whitespace
+    while (*str == ' ' || (*str >= '\t' && *str <= '\r')) {
+        str++;
+    }
+    
+    // Handle sign
+    if (*str == '-') {
+        sign = -1;
+        str++;
+    } else if (*str == '+') {
+        str++;
+    }
+    
+    // Convert digits
+    while (*str >= '0' && *str <= '9') {
+        result = result * 10 + (*str - '0');
+        str++;
+    }
+    
+    return sign * result;
+}
+
+uint32_t stou(const char* str) {
+    uint32_t result = 0;
+    
+    // Skip whitespace characters
+    while (*str == ' ' || (*str >= '\t' && *str <= '\r')) {
+        str++;
+    }
+    
+    // Optional leading plus sign is valid for unsigned parsing
+    if (*str == '+') {
+        str++;
+    }
+    
+    // Convert digits
+    while (*str >= '0' && *str <= '9') {
+        result = result * 10 + (*str - '0');
+        str++;
+    }
+    
+    return result;
 }

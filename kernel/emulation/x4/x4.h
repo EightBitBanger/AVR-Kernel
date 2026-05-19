@@ -8,6 +8,8 @@
 #define  X4EMM_FLAG_CMP_LESS           0x10
 #define  X4EMM_FLAG_CONSOLE_DIRTY      0x20
 
+#include <stdint.h>
+
 // Debug
 
 //#define X4_DEBUG_ENABLE

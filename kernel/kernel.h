@@ -1,14 +1,10 @@
 #ifndef KERNEL_CORE_H
 #define KERNEL_CORE_H
 
-#include <kernel/arch/avr/io.h>
-#include <kernel/arch/avr/map.h>
-#include <kernel/arch/avr/heap.h>
-
-#include <kernel/bus/bus.h>
 #include <kernel/device/kbuffer.h>
 #include <kernel/device/driver.h>
 #include <kernel/device/device.h>
+#include <kernel/device/procblock.h>
 #include <kernel/device/knode.h>
 #include <kernel/device/kevent.h>
 
@@ -18,8 +14,6 @@
 #include <kernel/console/keyboard.h>
 #include <kernel/console/display.h>
 
-#include <kernel/scheduler/scheduler.h>
-#include <kernel/emulation/x4/x4.h>
 #include <kernel/fs/fs.h>
 
 #include <kernel/knode.h>
@@ -33,7 +27,6 @@ void kernel_set_working_directory(struct WorkingDirectory* out_dir);
 
 void kernel_get_local_paths(struct LocalPaths* out_paths);
 void kernel_set_local_paths(struct LocalPaths* out_paths);
-
 
 void kernel_init(void);
 

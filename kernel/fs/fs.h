@@ -1,9 +1,6 @@
 #ifndef BASE_FILE_SYSTEM_H
 #define BASE_FILE_SYSTEM_H
 
-#include <kernel/arch/avr/io.h>
-#include <kernel/arch/avr/heap.h>
-
 #include <kernel/bus/bus.h>
 #include <kernel/delay.h>
 
