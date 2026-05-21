@@ -36,8 +36,6 @@ void kernel_init(void) {
     kernel_set_local_paths(&fs_paths);
     kernel_set_working_directory(&fs_current);
     
-    
-    
 }
 
 void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount, uint32_t nt_device) {
