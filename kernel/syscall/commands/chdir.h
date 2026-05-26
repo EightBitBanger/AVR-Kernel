@@ -2,7 +2,8 @@
 #define SYSCALL_CD_H
 
 #include <stdint.h>
-#include <string.h>
+#include <kernel/util/string.h>
+
 #include <kernel/kernel.h>
 #include <kernel/fs/fs.h>
 

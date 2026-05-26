@@ -2,7 +2,7 @@
 #include <kernel/fs/basefs/file.h>
 #include <kernel/fs/config.h>
 
-#include <string.h>
+#include <kernel/util/string.h>
 
 bool fs_file_check(uint32_t address) {
     struct FSAllocHeader alloc;

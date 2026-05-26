@@ -1,6 +1,5 @@
 #include <kernel/fs/fs.h>
-
-#include <string.h>
+#include <kernel/util/string.h>
 
 uint32_t fs_device_address  = 0;
 uint32_t fs_sector_size     = 0;

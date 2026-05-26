@@ -2,7 +2,7 @@
 #define BASE_FILE_SYSTEM_H
 
 #include <kernel/bus/bus.h>
-#include <kernel/delay.h>
+#include <kernel/util/delay.h>
 
 #include <kernel/fs/basefs/io.h>
 #include <kernel/fs/basefs/structs.h>
