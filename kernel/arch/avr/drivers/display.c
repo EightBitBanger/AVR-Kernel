@@ -19,6 +19,9 @@ uint8_t cursor_line;
 uint8_t display_width;
 uint8_t display_height;
 
+uint32_t console_width;
+uint32_t console_height;
+
 struct Bus display_bus;
 
 uint32_t display_address = 0;
@@ -27,8 +30,11 @@ void display_init(void) {
     display_bus.write_waitstate = 20;
     display_bus.read_waitstate  = 20;
     
-    display_width  = 21;
-    display_height = 8;
+    display_width  = 128;
+    display_height = 64;
+    
+    console_width  = 21;
+    console_height = 8;
     
     cursor_line = 0;
     cursor_position = 0;
@@ -53,14 +59,10 @@ void display_busy_wait(void) {
     }
 }
 
-uint16_t display_get_width(void) {
-    return display_width;
-}
-
-uint16_t display_get_height(void) {
-    return display_height;
-}
-
+uint16_t display_get_width(void) {return display_width;}
+uint16_t display_get_height(void) {return display_height;}
+uint16_t display_get_rows(void) {return console_width;}
+uint16_t display_get_columbs(void) {return console_height;}
 
 void display_putc(const char ch) {
     display_busy_wait();

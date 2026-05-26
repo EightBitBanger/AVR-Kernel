@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
-#include <kernel/string.h>
+#include <kernel/util/string.h>
 
 #include <kernel/arch/x86/heap.h>
 
@@ -46,11 +46,6 @@ static inline void kmalloc_bitmap_mark_dirty(uint32_t byte_index) {
     }
 }
 
-/*
- * On x86, the bitmap exists directly in the main memory pool.
- * If you are mirroring this to an external storage/device, keep these routines. 
- * Otherwise, on a standard x86 OS kernel, the bitmap updates automatically in RAM.
- */
 void kmalloc_bitmap_write(void) {
     if (kmalloc_bitmap == 0)
         return;
@@ -83,7 +78,6 @@ void kmalloc_bitmap_read(void) {
     }
 }
 
-// Low-level memory utilities optimized for x86 flat memory layout
 static inline void kmem_write8(uint32_t address, uint8_t value) {
     *(volatile uint8_t*)(uintptr_t)(__KMALLOC_HEAP_BEGIN__ + address) = value;
 }
@@ -142,25 +136,28 @@ bool kmalloc_is_valid(uint32_t address) {
     if (address == KMALLOC_NULL)
         return false;
     
-    if (address < (kmalloc_heap_data_begin() + KMALLOC_HEADER_SIZE))
+    // Bounds check relative to absolute addresses
+    if (address < (__KMALLOC_HEAP_BEGIN__ + kmalloc_heap_data_begin() + KMALLOC_HEADER_SIZE))
         return false;
     
-    if (address >= kmalloc_pool_size)
+    if (address >= (__KMALLOC_HEAP_BEGIN__ + kmalloc_pool_size))
         return false;
     
-    uint32_t header_address = address - KMALLOC_HEADER_SIZE;
-    if (header_address < kmalloc_heap_data_begin() || header_address >= kmalloc_pool_size)
+    uint32_t header_address_abs = address - KMALLOC_HEADER_SIZE;
+    uint32_t header_address_rel = header_address_abs - __KMALLOC_HEAP_BEGIN__;
+    
+    if (header_address_rel < kmalloc_heap_data_begin() || header_address_abs >= (__KMALLOC_HEAP_BEGIN__ + kmalloc_pool_size))
         return false;
     
     struct KMallocHeader header;
-    kmalloc_header_read(header_address, &header);
+    kmalloc_header_read(header_address_rel, &header);
     
     if (header.magic != KMALLOC_MAGIC || header.size == 0)
         return false;
     
     uint32_t total_size      = header.size + KMALLOC_HEADER_SIZE;
     uint32_t required_blocks = kmalloc_blocks_required(total_size);
-    uint32_t start_block     = header_address / kmalloc_block_size;
+    uint32_t start_block     = header_address_rel / kmalloc_block_size;
     
     if (required_blocks == 0 || start_block < kmalloc_reserved_blocks)
         return false;
@@ -195,7 +192,6 @@ void heap_init(uint32_t block_size, uint32_t total_memory) {
     kmalloc_bitmap_size  = (kmalloc_block_count + 7UL) / 8UL;
     
     kmalloc_bitmap = (uint8_t*)(uintptr_t)__KMALLOC_HEAP_BEGIN__;
-    
     kmalloc_dirty  = kmalloc_bitmap + kmalloc_bitmap_size;
     
     uint32_t total_overhead_bytes = kmalloc_bitmap_size * 2;
@@ -236,8 +232,7 @@ uint32_t kmalloc(uint32_t size) {
                     kmalloc_block_set_used(start_block + block_offset);
                 }
                 
-                uint32_t header_address  = start_block * kmalloc_block_size;
-                uint32_t payload_address = header_address + KMALLOC_HEADER_SIZE;
+                uint32_t header_address_rel = start_block * kmalloc_block_size;
                 
                 struct KMallocHeader header = {
                     .size  = size,
@@ -247,8 +242,13 @@ uint32_t kmalloc(uint32_t size) {
                     .magic = KMALLOC_MAGIC
                 };
                 
-                kmalloc_header_write(header_address, &header);
-                return payload_address;
+                kmalloc_header_write(header_address_rel, &header);
+                
+                // Flush changes to the physical bitmap tracking layer
+                kmalloc_bitmap_write();
+                
+                // CRITICAL: Return absolute virtual/physical address
+                return __KMALLOC_HEAP_BEGIN__ + header_address_rel + KMALLOC_HEADER_SIZE;
             }
         } else {
             found_blocks = 0;
@@ -262,23 +262,28 @@ void kfree(uint32_t address) {
     if (!kmalloc_is_valid(address))
         return;
     
-    uint32_t header_address = address - KMALLOC_HEADER_SIZE;
+    uint32_t header_address_abs = address - KMALLOC_HEADER_SIZE;
+    uint32_t header_address_rel = header_address_abs - __KMALLOC_HEAP_BEGIN__;
+    
     struct KMallocHeader header;
-    kmalloc_header_read(header_address, &header);
+    kmalloc_header_read(header_address_rel, &header);
     
     uint32_t total_size      = header.size + KMALLOC_HEADER_SIZE;
     uint32_t required_blocks = kmalloc_blocks_required(total_size);
-    uint32_t start_block     = header_address / kmalloc_block_size;
+    uint32_t start_block     = header_address_rel / kmalloc_block_size;
     
     if (start_block < kmalloc_reserved_blocks || (start_block + required_blocks) > kmalloc_block_count)
         return;
     
     memset(&header, 0, sizeof(struct KMallocHeader));
-    kmalloc_header_write(header_address, &header);
+    kmalloc_header_write(header_address_rel, &header);
     
     for (uint32_t block_offset = 0; block_offset < required_blocks; block_offset++) {
         kmalloc_block_set_free(start_block + block_offset);
     }
+    
+    // Sync backing structure changes
+    kmalloc_bitmap_write();
 }
 
 void* malloc(size_t size) {
@@ -298,58 +303,59 @@ void free(void* ptr) {
     kfree(addr);
 }
 
+// Helpers updated to utilize fixed layout logic
 uint8_t kmalloc_get_type(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;
-    kmalloc_header_read(address - KMALLOC_HEADER_SIZE, &header);
+    kmalloc_header_read((address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__, &header);
     return header.type;
 }
 
 void kmalloc_set_type(uint32_t address, uint8_t type) {
     if (!kmalloc_is_valid(address)) return;
     struct KMallocHeader header;
-    uint32_t header_address = address - KMALLOC_HEADER_SIZE;
-    kmalloc_header_read(header_address, &header);
+    uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
+    kmalloc_header_read(header_address_rel, &header);
     header.type = type;
-    kmalloc_header_write(header_address, &header);
+    kmalloc_header_write(header_address_rel, &header);
 }
 
 uint8_t kmalloc_get_flags(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;
-    kmalloc_header_read(address - KMALLOC_HEADER_SIZE, &header);
+    kmalloc_header_read((address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__, &header);
     return header.flags;
 }
 
 void kmalloc_set_flags(uint32_t address, uint8_t flags) {
     if (!kmalloc_is_valid(address)) return;
     struct KMallocHeader header;
-    uint32_t header_address = address - KMALLOC_HEADER_SIZE;
-    kmalloc_header_read(header_address, &header);
+    uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
+    kmalloc_header_read(header_address_rel, &header);
     header.flags = flags;
-    kmalloc_header_write(header_address, &header);
+    kmalloc_header_write(header_address_rel, &header);
 }
 
 uint8_t kmalloc_get_permissions(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;
-    kmalloc_header_read(address - KMALLOC_HEADER_SIZE, &header);
+    kmalloc_header_read((address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__, &header);
     return header.perm;
 }
 
 void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
     if (!kmalloc_is_valid(address)) return;
     struct KMallocHeader header;
-    uint32_t header_address = address - KMALLOC_HEADER_SIZE;
-    kmalloc_header_read(header_address, &header);
+    uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
+    kmalloc_header_read(header_address_rel, &header);
     header.perm = permissions;
-    kmalloc_header_write(header_address, &header);
+    kmalloc_header_write(header_address_rel, &header);
 }
 
 uint32_t kmalloc_get_size(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;
-    kmalloc_header_read(address - KMALLOC_HEADER_SIZE, &header);
+    kmalloc_header_read((address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__, &header);
     return header.size;
 }
 
@@ -363,32 +369,32 @@ uint32_t kmalloc_next(uint32_t previous_address) {
         if (!kmalloc_is_valid(previous_address))
             return KMALLOC_NULL;
         
-        uint32_t header_address = previous_address - KMALLOC_HEADER_SIZE;
-        kmalloc_header_read(header_address, &header);
+        uint32_t header_address_rel = (previous_address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
+        kmalloc_header_read(header_address_rel, &header);
         
         uint32_t total_size  = header.size + KMALLOC_HEADER_SIZE;
         uint32_t used_blocks = kmalloc_blocks_required(total_size);
         
-        start_block = (header_address / kmalloc_block_size) + used_blocks;
+        start_block = (header_address_rel / kmalloc_block_size) + used_blocks;
     }
     
     for (uint32_t current_block = start_block; current_block < kmalloc_block_count; current_block++) {
         if (!kmalloc_block_is_used(current_block))
             continue;
         
-        uint32_t header_address = current_block * kmalloc_block_size;
-        if (header_address < kmalloc_heap_data_begin())
+        uint32_t header_address_rel = current_block * kmalloc_block_size;
+        if (header_address_rel < kmalloc_heap_data_begin())
             continue;
         
-        kmalloc_header_read(header_address, &header);
+        kmalloc_header_read(header_address_rel, &header);
         
         if (header.magic != KMALLOC_MAGIC || header.size == 0)
             continue;
         
-        if ((header_address + KMALLOC_HEADER_SIZE) >= kmalloc_pool_size)
+        if ((header_address_rel + KMALLOC_HEADER_SIZE) >= kmalloc_pool_size)
             continue;
         
-        return header_address + KMALLOC_HEADER_SIZE;
+        return __KMALLOC_HEAP_BEGIN__ + header_address_rel + KMALLOC_HEADER_SIZE;
     }
     
     return KMALLOC_NULL;

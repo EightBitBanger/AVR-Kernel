@@ -1,21 +1,22 @@
 #include <kernel/kernel.h>
-#include <kernel/boot/avr/interrupt.h>
 
 #include <kernel/console/virtual_key.h>
 #include <kernel/console/console_const.h>
+#include <kernel/console/display.h>
 #include <kernel/console/console.h>
 #include <kernel/console/parser.h>
 #include <kernel/console/print.h>
+#include <kernel/syscall.h>
 
-#include <string.h>
+#include <kernel/util/string.h>
 
 char* keyboard_string;
-uint8_t keyboard_length = 0;
-uint8_t keyboard_length_max = 0;
+uint8_t keyboard_length;
+uint8_t keyboard_length_max;
 
 char* prompt_string;
-uint8_t prompt_length = 0;
-uint8_t prompt_length_max = 0;
+uint8_t prompt_length;
+uint8_t prompt_length_max;
 
 void console_prompt_print(void) {
     print(prompt_string);
@@ -47,24 +48,26 @@ uint32_t console_get_directory(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.current_directory;
+    return 0;
 }
 
 uint32_t console_get_mounted_device(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.mount_device;
+    return 0;
 }
 
 uint32_t console_get_mounted_directory(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.mount_directory;
+    return 0;
 }
 
-
 void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length) {
-    prompt_length_max = kb_string_max_length;
-    keyboard_length_max = kb_prompt_max_length;
+    keyboard_length_max = kb_string_max_length;
+    prompt_length_max = kb_prompt_max_length;
     
     keyboard_string = kb_string;
     prompt_string = kb_prompt;
@@ -72,106 +75,11 @@ void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length
     strcpy(prompt_string, "/>");
     prompt_length = strlen(prompt_string);
     
-    memset(keyboard_string, 0x00, KEYBOARD_STRING_LENGTH);
+    memset(keyboard_string, 0x00, keyboard_length_max);
     keyboard_length = 0;
     
     display_clear();
 }
-
-void console_process_command(char* keyboard_str) {
-    char* args[16];
-    int arg_count = 0;
-    char* command;
-    
-    parser_trim_leading_spaces(keyboard_str);
-    
-    if (keyboard_str[0] == ' ' || keyboard_str[0] == '\0') 
-        return;
-    
-    char* token = strtok(keyboard_str, " \n\t");
-    while (token != NULL && arg_count < 16) {
-        args[arg_count++] = token;
-        token = strtok(NULL, " \n\t");
-    }
-    command = args[0];
-    
-    // Special CD handling
-    /*
-    if ((strcmp(command, "cd") == 0) || (strncmp(command, "cd", 2) == 0)) {
-        char* cd_argument = NULL;
-        if (strcmp(command, "cd") == 0) {
-            cd_argument = args[1];
-        } else {
-            cd_argument = &command[2];
-            
-            if (cd_argument[0] == '\0') {
-                cd_argument = args[1];
-            }
-        }
-        if (cd_argument == NULL || cd_argument[0] == '\0') 
-            return;
-        args[0] = cd_argument;
-        
-        if (arg_count < 2) 
-            arg_count = 2;
-        syscall(SYSCALL_CHDIR, args);
-        return;
-    }
-    */
-    
-    // Check internal commands
-    interrupt_disable();
-    for (uint32_t i = 0; i < syscall_get_count(); i++) {
-        CommandFunction function = syscall_get_function(i);
-        const char* name = syscall_get_function_name(i);
-        uint8_t flags = syscall_get_flags(i);
-        
-        if (!(flags & KSCF_COMMAND)) 
-            continue;
-        
-        if (strcmp(command, name) != 0) 
-            continue;
-        
-        function(arg_count-1, &args[1]);
-        interrupt_enable();
-        return;
-    }
-    
-    if (syscall(SYSCALL_EXECUTE, args) != 0) {
-        
-        // Executable not found, check each path directory
-        
-        struct WorkingDirectory fs_current;
-        struct LocalPaths fs_paths;
-        kernel_get_working_directory(&fs_current);
-        kernel_get_local_paths(&fs_paths);
-        
-        char old_path[32];
-        console_get_path(old_path, 32, fs_current.current_directory, fs_current.mount_directory, 16);
-        
-        char path[32];
-        strcpy(path, fs_paths.path);
-        
-        int result = 1;
-        char* fs_path = strtok(path, ";");
-        while (fs_path != NULL && result != 0) {
-            
-            syscall(SYSCALL_CHDIR, (char*[]){fs_path, NULL});
-            
-            result = syscall(SYSCALL_EXECUTE, args);
-            
-            syscall(SYSCALL_CHDIR, (char*[]){old_path, NULL});
-            
-            fs_path = strtok(NULL, ";");
-        }
-        
-        if (result != 0) 
-            print(msg_bad_command);
-    }
-    interrupt_enable();
-}
-
-
 
 void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint8_t depth) {
     uint32_t knode_stack[16];
@@ -249,6 +157,73 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     path[offset] = '\0';
 }
 
+void console_process_command(char* keyboard_str) {
+    char* args[16];
+    int arg_count = 0;
+    char* command;
+    
+    parser_trim_leading_spaces(keyboard_str);
+    
+    if (keyboard_str[0] == ' ' || keyboard_str[0] == '\0') 
+        return;
+    
+    char* token = strtok(keyboard_str, " \n\t");
+    while (token != NULL && arg_count < 16) {
+        args[arg_count++] = token;
+        token = strtok(NULL, " \n\t");
+    }
+    command = args[0];
+    // Check internal commands
+    for (uint32_t i = 0; i < syscall_get_count(); i++) {
+        CommandFunction function = syscall_get_function(i);
+        const char* name = syscall_get_function_name(i);
+        uint8_t flags = syscall_get_flags(i);
+        
+        if (!(flags & KSCF_COMMAND)) 
+            continue;
+        
+        if (strcmp(command, name) != 0) 
+            continue;
+        
+        function(arg_count-1, &args[1]);
+        return;
+    }
+    
+    if (syscall(SYSCALL_EXECUTE, args) != 0) {
+        
+        // Executable not found, check each path directory
+        
+        struct WorkingDirectory fs_current;
+        struct LocalPaths fs_paths;
+        kernel_get_working_directory(&fs_current);
+        kernel_get_local_paths(&fs_paths);
+        
+        char old_path[32];
+        console_get_path(old_path, 32, fs_current.current_directory, fs_current.mount_directory, 16);
+        
+        char path[32];
+        strcpy(path, fs_paths.path);
+        
+        int result = 1;
+        char* fs_path = strtok(path, ";");
+        while (fs_path != NULL && result != 0) {
+            
+            syscall(SYSCALL_CHDIR, (char*[]){fs_path, NULL});
+            
+            result = syscall(SYSCALL_EXECUTE, args);
+            
+            syscall(SYSCALL_CHDIR, (char*[]){old_path, NULL});
+            
+            fs_path = strtok(NULL, ";");
+        }
+        
+        if (result != 0) 
+            print(msg_bad_command);
+    }
+    
+    print("\n");
+}
+
 void console_print_reference_entry(uint32_t address) {
     if (address == KMALLOC_NULL) 
         return;
@@ -273,11 +248,12 @@ void console_print_reference_entry(uint32_t address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(kdir.name);
         
-        for (size_t i = 0; i < display_get_width() - (attr_len + name_len) - attr_len - 1; i++) 
+        for (size_t i = 0; i < display_get_columbs() - (attr_len + name_len) - attr_len - 1; i++) 
             print(" ");
         
         print(msg_dir_sym);
     }
+    print("\n");
 }
 
 void console_print_fs_entry(uint32_t directory_address) {
@@ -309,7 +285,7 @@ void console_print_fs_entry(uint32_t directory_address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(header.block.name);
         if (header.block.attributes & FS_ATTRIBUTE_DIRECTORY) {
-            for (size_t i = 0; i < display_get_width() - (attr_len + name_len) - attr_len - 1; i++) 
+            for (size_t i = 0; i < display_get_columbs() - (attr_len + name_len) - attr_len - 1; i++) 
                 print(" ");
             
             print(msg_dir_sym);
@@ -320,10 +296,11 @@ void console_print_fs_entry(uint32_t directory_address) {
             if (file_size > 99) size_len = 6;
             if (file_size > 999) size_len = 7;
             
-            for (size_t i = 0; i < display_get_width() - (size_len + name_len) - 1; i++) 
+            for (size_t i = 0; i < display_get_columbs() - (size_len + name_len) - 1; i++) 
                 print(" ");
             
             print_int(file_size);
         }
+        print("\n");
     }
 }

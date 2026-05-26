@@ -1,4 +1,4 @@
-#include <string.h>
+#include <kernel/util/string.h>
 #include <stdint.h>
 #include <stddef.h>
 

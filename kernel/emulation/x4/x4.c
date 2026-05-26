@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <kernel/delay.h>
+#include <kernel/util/delay.h>
 #include <kernel/kernel.h>
 
 #include <kernel/emulation/x4/x4.h>

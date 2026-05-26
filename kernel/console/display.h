@@ -8,6 +8,9 @@ void display_init(void);
 uint16_t display_get_width(void);
 uint16_t display_get_height(void);
 
+uint16_t display_get_rows(void);
+uint16_t display_get_columbs(void);
+
 void display_putc(const char ch);
 void display_newline(void);
 

@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include <kernel/bus/bus.h>
-#include <kernel/delay.h>
+#include <kernel/util/delay.h>
 
 // NOTE: Address and data buses are multiplexed requiring external logic
 #define _BUS_LOWER_PORT_A__     // Define port A as the lower address bus

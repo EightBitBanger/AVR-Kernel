@@ -1,0 +1,93 @@
+section .multiboot
+align 4
+    ; FLAGS: 
+    ; Bit 0 (0x01): Align all boot modules on i386 page boundaries
+    ; Bit 1 (0x02): Must provide memory information 
+    ; Bit 2 (0x04): Must request a video mode configuration
+    %define MULTIBOOT_FLAGS 0x00000007 
+    
+    dd 0x1BADB002                               ; MAGIC
+    dd MULTIBOOT_FLAGS                          ; FLAGS
+    dd -(0x1BADB002 + MULTIBOOT_FLAGS)          ; CHECKSUM
+    
+    ; --- MULTIBOOT HEADER ADDRESS FIELDS ---
+    ; Required layout placeholders when Bit 2 of FLAGS is set.
+    dd 0                                        ; header_addr
+    dd 0                                        ; load_addr
+    dd 0                                        ; load_end_addr
+    dd 0                                        ; bss_end_addr
+    dd 0                                        ; entry_addr
+    
+    ; --- GRAPHIC FIELDS ---
+    dd 00000000                                 ; Mode type: 0 = Linear Graphics Mode
+    dd 1600                                     ; Requested Width (Highly compatible)
+    dd 900                                      ; Requested Height (Highly compatible)
+    dd 32                                       ; Requested Depth (Bits Per Pixel)
+    
+section .bss nobits
+align 16
+stack_bottom:
+    resb 16384                                  ; 16 KiB
+stack_top:
+    
+section .text
+global _start
+    
+_start:
+    ; 1. Set up the stack safely
+    mov esp, stack_top    
+    and esp, 0xFFFFFFF0    
+    
+    ; Push the arguments onto the stack for our C function (cdecl convention)
+    ; GRUB leaves the Multiboot Info structure pointer in EBX and Magic in EAX.
+    push ebx                                    ; Argument 2: Multiboot info pointer
+    push eax                                    ; Argument 1: Multiboot magic number
+    
+    ; -------------------------------------------------------------------------
+    ; FLOATING POINT & SSE INITIALIZATION
+    ; -------------------------------------------------------------------------
+    mov eax, cr0
+    and eax, ~(1 << 2)                          ; Clear EM (Bit 2)
+    or eax, (1 << 1) | (1 << 5)                 ; Set MP (Bit 1) & NE (Bit 5)
+    mov cr0, eax
+    finit                                       ; Initialize FPU
+    
+    mov eax, 0x1
+    cpuid
+    test edx, (1 << 25)                         ; Check for SSE
+    jz .skip_sse                 
+    
+    mov eax, cr4
+    or eax, (1 << 9) | (1 << 10)                ; Set OSFXSR & OSXMMEXCPT
+    mov cr4, eax
+    
+.skip_sse:
+    
+    ; 2. --- JUMP TO C KERNEL ---
+    extern kmain
+    call kmain                                  ; Arguments (eax, ebx) are already pushed
+    
+.hang:
+    hlt                
+    jmp .hang
+    
+    
+global gdt_flush
+gdt_flush:
+    mov eax, [esp + 4]  ; Get the pointer to the gdt_ptr passed from C
+    lgdt [eax]          ; Load the new GDT structure
+    
+    ; Reload all data segment registers to point to our Kernel Data Descriptor (0x10)
+    mov ax, 0x10      
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    
+    ; Far jump to reload the Code Segment Register (CS) to our Kernel Code Descriptor (0x08)
+    jmp 0x08:.reload_cs
+    
+.reload_cs:
+    ret
+    

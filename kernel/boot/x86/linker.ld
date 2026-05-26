@@ -2,8 +2,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Start at 1MB */
-    . = 1M;
+    . = 1M; /* Start at 1MB */
 
     .text : AT(ADDR(.text))
     {
@@ -16,5 +15,5 @@ SECTIONS
     .data   : { *(.data) }
     .bss    : { *(COMMON) *(.bss) }
     
-    _kernel_end = .;
+    _kernel_memory_end = .;
 }

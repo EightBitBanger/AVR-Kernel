@@ -80,7 +80,7 @@ void kb_event_handler(void) {
             position--;
         } else if (line > 0) {
             line--;
-            position = display_get_width() - 1;
+            position = display_get_rows() - 1;
         } else {
             return;
         }
@@ -124,7 +124,10 @@ void kb_event_handler(void) {
 }
 
 void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
-    if (inb(0x64) & 0x01) {
+    uint8_t status = inb(0x64);
+    
+    // 1. Check if data is present (bit 0) AND ensure it is NOT mouse data (bit 5)
+    if ((status & 0x01) && !(status & 0x20)) {
         uint8_t raw_code = inb(0x60);
         
         if (raw_code & 0x80) {
@@ -154,8 +157,8 @@ char kb_getc(void) {
     
     kb_vkey_set(scancode, !is_break);
     
-    if (scancode < sizeof(scancode_to_ascii_set1) && !is_break) {
+    if (scancode < sizeof(scancode_to_ascii_set1) && !is_break) 
         return scancode_to_ascii_set1[scancode];
-    }
+    
     return 0;
 }

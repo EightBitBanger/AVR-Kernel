@@ -7,7 +7,7 @@
 #include <kernel/boot/avr/interrupt.h>
 
 #include <kernel/kernel.h>
-#include <kernel/string.h>
+#include <kernel/util/string.h>
 
 #define SCHEDULER_TRIGGER_COUNTER_MAX    32
 

@@ -1,5 +1,5 @@
 #include <kernel/console/virtual_key.h>
-#include <kernel/string.h>
+#include <kernel/util/string.h>
 
 volatile uint8_t* VirtualKeyMap = (void*)0;
 

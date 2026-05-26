@@ -1,27 +1,12 @@
-#include <kernel/boot/avr/interrupt.h>
-
-#include <kernel/kernel.h>
-#include <kernel/bus/bus.h>
-#include <kernel/arch/avr/io.h>
-
-#include <kernel/console/virtual_key.h>
 #include <kernel/console/display.h>
 #include <kernel/console/print.h>
 
-#include <kernel/string.h>
-#include <ctype.h>
-#include <string.h>
+#include <kernel/util/string.h>
 
 extern uint8_t cursor_position;
 extern uint8_t cursor_line;
 
 void print(const char* str) {
-    display_busy_wait();
-    
-    struct Bus bus;
-    bus.write_waitstate = 20;
-    bus.read_waitstate  = 20;
-    
     while (*str) {
         uint8_t ch = (uint8_t)*str++;
         
@@ -29,43 +14,32 @@ void print(const char* str) {
         if (ch == '\n') {
             cursor_position = 0;
             
-            if (cursor_line < (display_get_height() - 1)) {
+            if (cursor_line < (display_get_columbs() - 1)) {
                 cursor_line++;
             } else {
-                uint8_t one = 1;
-                mmio_writeb(&bus, display_get_device_address() + 0x00005, &one);
-                display_busy_wait();
+                display_newline();
             }
             
             continue;
         } else {
-            
-            if (display_cursor_get_position() >= display_get_width() - 1) {
-                
-                display_cursor_set_position(cursor_position);
-                display_cursor_set_line(cursor_line);
-                
+            // Check if text needs to wrap around to next line
+            if (cursor_position >= display_get_rows() - 1) {
                 display_putc(ch);
-                
                 cursor_position = 0;
                 
-                if (display_cursor_get_line() < (display_get_height() - 1)) {
+                if (cursor_line < (display_get_columbs() - 1)) {
                     cursor_line++;
                 } else {
-                    // New line / shift up
-                    uint8_t one = 1;
-                    mmio_writeb(&bus, display_get_device_address() + 0x00005, &one);
-                    display_busy_wait();
+                    display_newline();
                 }
-                
                 continue;
             }
         }
         
         display_cursor_set_position(cursor_position);
         display_cursor_set_line(cursor_line);
-        display_putc(ch);
         
+        display_putc(ch);
         cursor_position++;
     }
     
