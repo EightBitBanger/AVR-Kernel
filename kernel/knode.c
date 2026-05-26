@@ -1,6 +1,6 @@
 #include <kernel/knode.h>
 #include <kernel/kernel.h>
-#include <kernel/string.h>
+#include <kernel/util/string.h>
 
 uint32_t knode_root = KNODE_NULL;
 

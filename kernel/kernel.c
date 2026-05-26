@@ -1,4 +1,3 @@
-#include <string.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -6,6 +5,7 @@
 
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
+#include <kernel/util/string.h>
 
 struct KernelSystemObject {
     
