@@ -1,23 +1,33 @@
 #ifndef WINDOW_MANAGER_H
 #define WINDOW_MANAGER_H
 
-#include <kernel/arch/x86/drivers/draw.h>
-#include <kernel/console/mouse.h>
-#include <kernel/console/display.h>
+#include <stdbool.h>
 
 #include <kernel/dwm/icons.h>
+#include <kernel/dwm/icon_object.h>
+
 #include <kernel/dwm/window_context.h>
+#include <kernel/dwm/window_object.h>
 #include <kernel/dwm/window_handle.h>
 #include <kernel/dwm/rendering/sprite.h>
 
 #define WINDOW_FLAG_REDRAW  0x01
 
-struct WindowHandle* create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t height);
-void destroy_window(struct WindowHandle* window_handle);
+WindowHandle create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t height, void(*event_callback)(WindowHandle, wEvent));
+void destroy_window(WindowHandle window_handle);
+
+struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t* sprite);
+void destroy_icon(struct IconObject* target_icon);
 
 void dwm_initiate(void);
 void dwm_update(void);
 
-void dwm_set_focus(struct WindowHandle* target);
+void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color, bool filled);
+void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
+void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
+
+void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height);
+
+void dwm_window_set_focus(WindowHandle handle);
 
 #endif
