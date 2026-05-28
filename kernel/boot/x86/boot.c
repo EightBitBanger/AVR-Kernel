@@ -26,12 +26,21 @@ extern char _kernel_memory_end[];
 extern uint32_t display_width;
 extern uint32_t display_height;
 
-void callback_handler(struct WindowHandle* window) {
+
+void callback_handler(WindowHandle handle, wEvent event) {
     
-    draw_rect_filled(window->surface_x, window->surface_y, window->surface_w, window->surface_h, 0xFF000A0A);
-    draw_rect_filled(window->surface_x + 10, window->surface_y + 10, 32, 32, 0xFF5A3A2F);
-    
-    draw_circle(window->surface_x + 10, window->surface_y + 10, 10, 0xFFFE3A2E);
+    switch (event) {
+    case EVENT_REDRAW:
+        
+        //dwm_draw_rect(0, 0, 640, 480, 0xFF090909, true);
+        char number[16];
+        itos(timer_get_ms(), number);
+        
+        dwm_draw_text(10, 10, number, 0xFF0A0A0A);
+        
+        break;
+        
+    }
     
 }
 
@@ -47,6 +56,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     // Set the table for the kernel
     gdt_initiate();
     idt_initiate();
+    
+    // Millisecond timer
+    timer_init();
     
     char keyboard_string[255];
     char prompt_string[255];
@@ -75,7 +87,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     // Your original heap config
     uint32_t heap_sz  = ((uint32_t)1024 * (uint32_t)1024 * (uint32_t)10241);
-    uint32_t block_sz = 64;
+    uint32_t block_sz = 16;
     
     heap_set_base_address(heap_start);
     heap_init(block_sz, heap_sz);
@@ -111,25 +123,31 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     bool activate_console = false;
     draw_flush_region(0, 0, display_width, display_height);
     
+    /*
     for (int i = 0; i < 70; i++) {
         delay_ms(10);
         
-        // Check if data is waiting in the PS/2 controller
-        if (!(inb(0x64) & 0x01)) 
-            continue;
-        
-        // Ensure it's keyboard data, not mouse data
-        if (inb(0x64) & 0x20) 
-            continue;
-        
-        if (kb_getc() == 'c') {
-            activate_console = true;
-            
-            console_prompt_print();
-            draw_flush_region(0, 0, display_width, display_height);
-            break;
+        uint8_t status = inb(0x64);
+        if (status & 0x01) {
+            // If bit 5 is 1 this is a mouse byte
+            if (status & 0x20) {
+                mouse_event_handler();
+            } else {
+                //kb_event_handler();
+                
+                if (kb_getc() == 'c') {
+                    activate_console = true;
+                    
+                    console_prompt_print();
+                    draw_flush_region(0, 0, display_width, display_height);
+                    break;
+                }
+                draw_flush_region(0, 0, display_width, display_height);
+            }
         }
+        
     }
+    */
     
     while(activate_console) {
         uint8_t status = inb(0x64);
@@ -144,20 +162,55 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         }
     }
     
+    //
+    // Initiate desktop environment
+    
     dwm_initiate();
     
-    print("\n\n");
+    uint32_t* cursor_sprite = malloc(sizeof(uint32_t) * rc_cursor_pointer.width * rc_cursor_pointer.height);
+    sprite_create_bitmap(cursor_sprite, &rc_cursor_pointer);
     
-    for (unsigned int i=1 ; i < 4; i++) 
-        create_window(75 * i, 75 * i, 420, 340);
+    dwm_set_cursor(cursor_sprite, rc_cursor_pointer.width, rc_cursor_pointer.height);
     
-    struct WindowHandle* handle = create_window(500, 200, 640, 480);
-    handle->event_callback = callback_handler;
     
+    WindowHandle handle = create_window(500, 200, 640, 480, callback_handler);
+    
+    
+    uint32_t* file_sprite = malloc(sizeof(uint32_t) * rc_icon_file.width * rc_icon_file.height);
+    sprite_create_bitmap(file_sprite, &rc_icon_file);
+    
+    uint32_t* sprite_file_system = malloc(sizeof(uint32_t) * rc_icon_system.width * rc_icon_system.height);
+    sprite_create_bitmap(sprite_file_system, &rc_icon_system);
+    
+    uint32_t* sprite_file_document = malloc(sizeof(uint32_t) * rc_icon_document.width * rc_icon_document.height);
+    sprite_create_bitmap(sprite_file_document, &rc_icon_document);
+    
+    uint32_t* folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
+    sprite_create_bitmap(folder_sprite, &rc_icon_folder);
+    
+    struct IconObject* file = create_icon(150, 100, rc_icon_file.width, rc_icon_file.height, file_sprite);
+    struct IconObject* system = create_icon(200, 100, rc_icon_system.width, rc_icon_system.height, sprite_file_system);
+    struct IconObject* document = create_icon(250, 100, rc_icon_document.width, rc_icon_document.height, sprite_file_document);
+    struct IconObject* folder = create_icon(300, 100, rc_icon_folder.width, rc_icon_folder.height, folder_sprite);
+    
+    // Check desktop mouse clicks
+    // Icons & dragging
+    // Menus
+    
+    // Event system
+    //  wEvent GetMessage();
+    //  int16_t DispatchEvent()
+    
+    // Context menus
+    
+    // Scalable vector font
+    
+    // Buttons
     
     while(1) {
         
         dwm_update();
+        
         
         // Handle mouse and keyboard input
         uint8_t status = inb(0x64);

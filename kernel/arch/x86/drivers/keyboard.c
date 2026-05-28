@@ -126,7 +126,6 @@ void kb_event_handler(void) {
 void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
     uint8_t status = inb(0x64);
     
-    // 1. Check if data is present (bit 0) AND ensure it is NOT mouse data (bit 5)
     if ((status & 0x01) && !(status & 0x20)) {
         uint8_t raw_code = inb(0x60);
         

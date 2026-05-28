@@ -1,11 +1,11 @@
-extern c_dummy_handler
+extern isr_callback_timer_handler
 
-global isr_dummy
+global isr_timer
     
-isr_dummy:
+isr_timer:
     pusha          ; Save all general-purpose registers
     
-    call c_dummy_handler
+    call isr_callback_timer_handler
     
     popa           ; Restore registers
     iret           ; Interrupt return (clears flags, restores CS/EIP)

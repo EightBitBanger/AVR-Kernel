@@ -2,14 +2,12 @@
 #include <stdbool.h>
 #include <kernel/arch/x86/io.h>
 #include <kernel/boot/x86/interrupt.h>
-#include <kernel/console/display.h>
-#include <kernel/console/keyboard.h>
-#include <kernel/console/mouse.h>
 
 extern void isr_dummy(void);
 extern void isr_div_zero(void);
 extern void isr_mouse(void);
 extern void isr_keyboard(void);
+extern void isr_timer(void);
 
 void pic_remap(void);
 
@@ -34,19 +32,28 @@ void idt_initiate(void) {
         idt_set_gate(i, (uint32_t)isr_dummy, 0x08, 0x8E);
     
     idt_set_gate(0,    (uint32_t)isr_div_zero,  0x08, 0x8E);
+    idt_set_gate(0x20, (uint32_t)isr_timer,     0x08, 0x8E);
     //idt_set_gate(0x21, (uint32_t)isr_keyboard,    0x08, 0x8E);
     //idt_set_gate(0x2C, (uint32_t)isr_mouse,       0x08, 0x8E);
     
     __asm__ __volatile__("lidt (%0)" : : "r" (&idtp));
     
-    // Remap vector 8 to prevent crash on hardware timer
     pic_remap();
     
-    //outb(0x21, inb(0x21) & ~(1 << 1));
+    // Unmask IRQ 0 (Timer) and IRQ 1 (Keyboard) on the PIC
+    // Bit 0 = Timer, Bit 1 = Keyboard. 0 means UNMASKED (enabled)
+    outb(0x21, 0xFC);
     
     __asm__ __volatile__("sti");
 }
 
-void c_interrupt_handler(void) {
+
+void isr_callback_div_zero_handler(void) {
     
+    outb(0x20, 0x20); // End of Interrupt
+}
+
+void c_dummy_handler() {
+    
+    outb(0x20, 0x20); // End of Interrupt
 }

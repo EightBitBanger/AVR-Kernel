@@ -27,10 +27,32 @@ uint32_t transparent_color;
 
 struct ClippingPlane clipping_plain;
 
+// Inline blending helper function for alpha sprite rendering
+static inline uint32_t blend_pixels(uint32_t src, uint32_t dest) {
+    uint8_t alpha = (src >> 24) & 0xFF;
+
+    if (alpha == 0)   return dest;
+    if (alpha == 255) return src;
+
+    uint32_t src_r = (src >> 16) & 0xFF;
+    uint32_t src_g = (src >> 8)  & 0xFF;
+    uint32_t src_b = src         & 0xFF;
+
+    uint32_t dest_r = (dest >> 16) & 0xFF;
+    uint32_t dest_g = (dest >> 8)  & 0xFF;
+    uint32_t dest_b = dest         & 0xFF;
+
+    uint32_t out_r = dest_r + ((src_r - dest_r) * alpha) / 255;
+    uint32_t out_g = dest_g + ((src_g - dest_g) * alpha) / 255;
+    uint32_t out_b = dest_b + ((src_b - dest_b) * alpha) / 255;
+
+    return (0xFF000000) | (out_r << 16) | (out_g << 8) | out_b;
+}
+
 void draw_set_glyph_scheme(uint32_t foreground, uint32_t background, uint32_t transparent) {
-    foreground  = foreground_color;
-    background  = background_color;
-    transparent = transparent_color;
+    foreground_color  = foreground;
+    background_color  = background;
+    transparent_color = transparent;
 }
 
 void draw_set_base_offset(int32_t x, int32_t y) {
@@ -111,7 +133,6 @@ static inline void render_circle_pixel(int sx, int sy, uint32_t c) {
 }
 
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
-    // Apply window offsets
     x0 += display_base_x;
     y0 += display_base_y;
     x1 += display_base_x;
@@ -173,7 +194,6 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
 }
 
 void draw_rect(int x, int y, int width, int height, uint32_t color) {
-    // Apply window offsets
     x += display_base_x;
     y += display_base_y;
     
@@ -205,8 +225,8 @@ void draw_rect(int x, int y, int width, int height, uint32_t color) {
     }
 }
 
+/* OPTIMIZED: Direct back_buffer pointer arithmetic instead of draw_pixel loop */
 void draw_rect_filled(int x, int y, int width, int height, uint32_t color) {
-    // Apply window offsets
     x += display_base_x;
     y += display_base_y;
     
@@ -217,13 +237,18 @@ void draw_rect_filled(int x, int y, int width, int height, uint32_t color) {
     
     if (x_start >= x_end || y_start >= y_end) return; 
     
+    uint32_t stride = vinfo->framebuffer_pitch / 4;
+    int width_to_draw = x_end - x_start;
+
     for (int curr_y = y_start; curr_y < y_end; curr_y++) {
-        for (int curr_x = x_start; curr_x < x_end; curr_x++) {
-            draw_pixel(curr_x, curr_y, color);
+        uint32_t* dest = &back_buffer[(curr_y * stride) + x_start];
+        for (int i = 0; i < width_to_draw; i++) {
+            *dest++ = color;
         }
     }
 }
 
+/* OPTIMIZED: Direct pointer writes for vertical gradient */
 void draw_rect_gradient_vertical(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to) {
     int screen_y_start = y + display_base_y;
     x += display_base_x;
@@ -236,32 +261,26 @@ void draw_rect_gradient_vertical(int x, int y, int width, int height, uint32_t c
     
     if (x_start >= x_end || y_start >= y_end || height <= 1) return;
     
-    // Extract starting channels
     int a1 = (color_from >> 24) & 0xFF, r1 = (color_from >> 16) & 0xFF, g1 = (color_from >> 8) & 0xFF, b1 = color_from & 0xFF;
     int a2 = (color_to >> 24)   & 0xFF, r2 = (color_to >> 16)   & 0xFF, g2 = (color_to >> 8)   & 0xFF, b2 = color_to   & 0xFF;
     
-    // Calculate the total distance changes
     int delta_a = a2 - a1;
     int delta_r = r2 - r1;
     int delta_g = g2 - g1;
     int delta_b = b2 - b1;
     
     int div = height - 1;
+    uint32_t stride = vinfo->framebuffer_pitch / 4;
+    int width_to_draw = x_end - x_start;
     
-    // Render strictly within the visible (clipped) screen bounds
     for (int curr_y = y_start; curr_y < y_end; curr_y++) {
-        
-        // Calculate exactly which logical row of the rectangle we are on (0 to height-1)
         int logical_row = curr_y - screen_y_start;
         
-        // Fixed-point scale: Calculate the exact color for this specific row.
-        // We multiply the delta by logical_row first (scaled up by 16 bits), then divide by total height.
         int cur_a = (a1 << 16) + ((delta_a * logical_row) << 16) / div;
         int cur_r = (r1 << 16) + ((delta_r * logical_row) << 16) / div;
         int cur_g = (g1 << 16) + ((delta_g * logical_row) << 16) / div;
         int cur_b = (b1 << 16) + ((delta_b * logical_row) << 16) / div;
         
-        // Shift right by 16 to get our true 0-255 color channels
         uint8_t a = (uint8_t)(cur_a >> 16);
         uint8_t r = (uint8_t)(cur_r >> 16);
         uint8_t g = (uint8_t)(cur_g >> 16);
@@ -269,14 +288,15 @@ void draw_rect_gradient_vertical(int x, int y, int width, int height, uint32_t c
         
         uint32_t final_color = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
         
-        for (int curr_x = x_start; curr_x < x_end; curr_x++) {
-            draw_pixel(curr_x, curr_y, final_color);
+        uint32_t* dest = &back_buffer[(curr_y * stride) + x_start];
+        for (int i = 0; i < width_to_draw; i++) {
+            *dest++ = final_color;
         }
     }
 }
 
+/* OPTIMIZED: Direct pointer writes with fixed-point calculations */
 void draw_rect_gradient_vertical_offset(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to, int gradient_offset) {
-    // 1. Calculate standard screen coordinates and clipping bounds
     int screen_y_start = y + display_base_y;
     x += display_base_x;
     y += display_base_y;
@@ -288,30 +308,27 @@ void draw_rect_gradient_vertical_offset(int x, int y, int width, int height, uin
     
     if (x_start >= x_end || y_start >= y_end || height <= 1) return;
 
-    // 2. Extract starting channels
     int a1 = (color_from >> 24) & 0xFF, r1 = (color_from >> 16) & 0xFF, g1 = (color_from >> 8) & 0xFF, b1 = color_from & 0xFF;
     int a2 = (color_to >> 24)   & 0xFF, r2 = (color_to >> 16)   & 0xFF, g2 = (color_to >> 8)   & 0xFF, b2 = color_to   & 0xFF;
     
-    // 3. Calculate fixed-point step deltas
     int div = height - 1;
     int a_step = ((a2 - a1) << 16) / div;
     int r_step = ((r2 - r1) << 16) / div;
     int g_step = ((g2 - g1) << 16) / div;
     int b_step = ((b2 - b1) << 16) / div;
     
-    // 4. Initialize color positions, applying the offset to the starting color point
     int cur_a = (a1 << 16) + (a_step * gradient_offset);
     int cur_r = (r1 << 16) + (r_step * gradient_offset);
     int cur_g = (g1 << 16) + (g_step * gradient_offset);
     int cur_b = (b1 << 16) + (b_step * gradient_offset);
 
-    // 5. Render loop
+    uint32_t stride = vinfo->framebuffer_pitch / 4;
+    int width_to_draw = x_end - x_start;
+
     for (int i = 0; i < height; i++) {
         int curr_y = screen_y_start + i;
         
         if (curr_y >= y_start && curr_y < y_end) {
-            // Safety clamping: Ensure fixed-point values don't overflow past 0 or 255 
-            // due to the offset pushing them out of bounds.
             int final_a = cur_a >> 16;
             int final_r = cur_r >> 16;
             int final_g = cur_g >> 16;
@@ -324,8 +341,9 @@ void draw_rect_gradient_vertical_offset(int x, int y, int width, int height, uin
             
             uint32_t final_color = ((uint32_t)final_a << 24) | ((uint32_t)final_r << 16) | ((uint32_t)final_g << 8) | final_b;
             
-            for (int curr_x = x_start; curr_x < x_end; curr_x++) {
-                draw_pixel(curr_x, curr_y, final_color);
+            uint32_t* dest = &back_buffer[(curr_y * stride) + x_start];
+            for (int k = 0; i < width_to_draw; k++) {
+                dest[k] = final_color;
             }
         }
         
@@ -338,8 +356,8 @@ void draw_rect_gradient_vertical_offset(int x, int y, int width, int height, uin
     }
 }
 
+/* OPTIMIZED: Horizontal sweeps handled directly on destination rows */
 void draw_rect_gradient_horizontal(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to) {
-    // Apply window offsets before caching original window 'x'
     int orig_x = x + display_base_x;
     x += display_base_x;
     y += display_base_y;
@@ -354,8 +372,10 @@ void draw_rect_gradient_horizontal(int x, int y, int width, int height, uint32_t
     uint8_t a1 = (color_from >> 24) & 0xFF, r1 = (color_from >> 16) & 0xFF, g1 = (color_from >> 8) & 0xFF, b1 = color_from & 0xFF;
     uint8_t a2 = (color_to >> 24)   & 0xFF, r2 = (color_to >> 16)   & 0xFF, g2 = (color_to >> 8)   & 0xFF, b2 = color_to   & 0xFF;
     
+    uint32_t stride = vinfo->framebuffer_pitch / 4;
+    int total_rows = y_end - y_start;
+
     for (int curr_x = x_start; curr_x < x_end; curr_x++) {
-        // Calculate factor based on absolute screen space delta relative to offset original window x
         float t = (float)(curr_x - orig_x) / (float)(width - 1);
         
         uint8_t a = (uint8_t)(a1 + t * (a2 - a1));
@@ -365,14 +385,14 @@ void draw_rect_gradient_horizontal(int x, int y, int width, int height, uint32_t
         
         uint32_t final_color = ((uint32_t)a << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
         
+        // Write the calculated column down the height bounds directly
         for (int curr_y = y_start; curr_y < y_end; curr_y++) {
-            draw_pixel(curr_x, curr_y, final_color);
+            back_buffer[(curr_y * stride) + curr_x] = final_color;
         }
     }
 }
 
 void draw_circle(int xc, int yc, int r, uint32_t color) {
-    // Apply window offsets
     xc += display_base_x;
     yc += display_base_y;
     
@@ -396,7 +416,6 @@ void draw_circle(int xc, int yc, int r, uint32_t color) {
 }
 
 void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg) {
-    // Apply window offsets
     x += display_base_x;
     y += display_base_y;
     
@@ -424,8 +443,8 @@ void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_
     }
 }
 
+/* OPTIMIZED & ADDED BLENDING: Complete sprite loop bypassing draw_pixel */
 void draw_sprite(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x, int y, uint32_t colorkey) {
-    // Apply window offsets
     x += display_base_x;
     y += display_base_y;
     
@@ -436,11 +455,25 @@ void draw_sprite(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x,
     
     if (src_x_start >= src_x_end || src_y_start >= src_y_end) return;
     
+    uint32_t stride = vinfo->framebuffer_pitch / 4;
+    int width_to_copy = src_x_end - src_x_start;
+    int screen_x_start = x + src_x_start;
+
     for (int src_y = src_y_start; src_y < src_y_end; src_y++) {
-        for (int src_x = src_x_start; src_x < src_x_end; src_x++) {
-            uint32_t color = sprite_data[src_y * sprite_w + src_x];
+        int screen_y = y + src_y;
+        
+        // Calculate pointers for the target rows in the buffers
+        uint32_t* dest_row = &back_buffer[(screen_y * stride) + screen_x_start];
+        const uint32_t* src_row = &sprite_data[(src_y * sprite_w) + src_x_start];
+        
+        for (int i = 0; i < width_to_copy; i++) {
+            uint32_t color = src_row[i];
+            
+            // Colorkey check (full transparency override)
             if (color == colorkey) continue;
-            draw_pixel(x + src_x, y + src_y, color);
+            
+            // Mix alpha channel with whatever background pixel sits in the back_buffer row
+            dest_row[i] = blend_pixels(color, dest_row[i]);
         }
     }
 }
