@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include <kernel/dwm/rendering/image.h>
+
 #include <kernel/dwm/icons.h>
 #include <kernel/dwm/icon_object.h>
 
@@ -10,14 +12,16 @@
 #include <kernel/dwm/window_object.h>
 #include <kernel/dwm/window_handle.h>
 #include <kernel/dwm/rendering/sprite.h>
+#include <kernel/dwm/context_menu.h>
 
-#define WINDOW_FLAG_REDRAW  0x01
+#define WINDOW_FLAG_REDRAW   0x01
+#define WINDOW_FLAG_REFRESH  0x02
 
 WindowHandle create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t height, void(*event_callback)(WindowHandle, wEvent));
 void destroy_window(WindowHandle window_handle);
 
 struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t* sprite);
-void destroy_icon(struct IconObject* target_icon);
+void destroy_icon(struct IconObject* icon);
 
 void dwm_initiate(void);
 void dwm_update(void);

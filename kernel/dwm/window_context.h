@@ -3,7 +3,7 @@
 
 #include <kernel/console/mouse.h>
 
-struct window_context {
+struct WindowContext {
     Point mouse;
     
     bool left_button_pressed;
@@ -11,6 +11,7 @@ struct window_context {
     
     bool window_moved;
     bool icon_moved;
+    bool menu_moved;
     
     int old_win_min_x;
     int old_win_min_y;
@@ -21,6 +22,11 @@ struct window_context {
     int old_icon_min_y;
     int old_icon_max_x;
     int old_icon_max_y;
+    
+    int old_menu_min_x;
+    int old_menu_min_y;
+    int old_menu_max_x;
+    int old_menu_max_y;
     
     int min_x;
     int min_y;

@@ -26,6 +26,12 @@ struct WindowObject {
     uint16_t surface_w;
     uint16_t surface_h;
     
+    // Client frame buffer
+    
+    uint32_t* frame_buffer;
+    uint16_t buffer_w;
+    uint16_t buffer_h;
+    
     // Layout
     
     uint8_t border_width;

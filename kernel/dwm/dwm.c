@@ -9,58 +9,65 @@
 
 extern const uint8_t char_rom[];
 
-uint32_t bg_color = 0x000E0E1A;
-
-// Cursor
-uint16_t cursor_width;
-uint16_t cursor_height;
-uint32_t* cursor_sprite = NULL;
-Point old_point;
+uint32_t bg_color = 0xFF0E0E1A;
 
 // Images
-uint32_t* button_x = NULL;
+
+struct Image cursor;
+struct Image button_x;
 
 // Window linked list
+
 struct list_node* window_head = NULL;
 struct list_node* window_tail = NULL;
 
-struct WindowObject* dragged_window = NULL;
-struct WindowObject* event_window = NULL;
+struct list_node* icon_head = NULL;
+struct list_node* icon_tail = NULL;
 
-struct window_context window_context;
+struct WindowContext window_context;
 
 // Dragging
+
+struct WindowObject* dragged_window = NULL;
 int drag_offset_x = 0;
 int drag_offset_y = 0;
 bool old_left_button_pressed = false;
 bool old_right_button_pressed = false;
 
-uint32_t next_window_id;
-void dwm_resources_initiate(void);
+struct WindowObject* event_window = NULL;
 
-// Icon linked list
-uint16_t icon_width; 
-uint16_t icon_height;
-struct list_node* icon_head = NULL;
-struct list_node* icon_tail = NULL;
+// Window creation ID counter
+uint32_t next_window_id;
 
 // Icon dragging state
+
 struct IconObject* dragged_icon = NULL;
 int icon_drag_offset_x = 0;
 int icon_drag_offset_y = 0;
 
-// Click state tracking
+// Mouse tracking and click state
+
 struct IconObject* last_clicked_icon = NULL;
 uint32_t last_icon_click_time = 0;
 
+Point mouse_old;
+
+// Context menu
+struct ContextMenu context_menu;
+
+// Taskbar
+
+uint16_t taskbar_height = 28;
+
 
 void dwm_initiate(void) {
-    window_context.cursor_width   = 11;
-    window_context.cursor_height  = 11;
+    window_context.cursor_width   = 0;
+    window_context.cursor_height  = 0;
     window_context.mouse = mouse_get_position();
     
     window_context.window_moved = false;
     window_context.icon_moved = false;
+    window_context.menu_moved = false;
     
     window_context.old_win_min_x = 0;
     window_context.old_win_min_y = 0;
@@ -72,27 +79,54 @@ void dwm_initiate(void) {
     window_context.old_icon_max_x = 0;
     window_context.old_icon_max_y = 0;
     
+    window_context.old_menu_min_x = 0;
+    window_context.old_menu_min_y = 0;
+    window_context.old_menu_max_x = 0;
+    window_context.old_menu_max_y = 0;
+    
+    context_menu.visible = false;
+    context_menu.x = 0;
+    context_menu.y = 0;
+    context_menu.w = 0;
+    context_menu.h = 0;
+    
+    context_menu.color_bg         = 0x8F222222;
+    context_menu.color_border     = 0x8F444444;
+    context_menu.color_separator  = 0x8F111111;
+    context_menu.color_highlight  = 0x8F777777;
+    context_menu.color_text       = 0x8FE0E0E0;
+    
+    context_menu.hovered_item = -1;
+    
+    context_menu.item_height = 0;
+    context_menu.item_count = 0;
+    
+    
     next_window_id = 0;
     
     window_head = NULL;
     window_tail = NULL;
+    
+    // Center mouse
     
     Point display_center;
     display_center.x = display_get_width() / 2;
     display_center.y = display_get_height() / 2;
     
     mouse_set_position(display_center.x, display_center.y);
-    old_point = (Point){display_get_width(), display_get_height()};
+    mouse_old = (Point){display_get_width(), display_get_height()};
     
-    dwm_resources_initiate();
+    // Load theme
+    
+    button_x.data = malloc(sizeof(uint32_t) * rc_button_x.width * rc_button_x.height);
+    sprite_get_bitmap(button_x.data, &rc_button_x);
+    button_x.width = rc_button_x.width;
+    button_x.height = rc_button_x.height;
+    
+    // Blank the screen in preparation for window management
     
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), bg_color);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
-}
-
-void dwm_resources_initiate(void) {
-    button_x = malloc(sizeof(uint32_t) * rc_button_x.width * rc_button_x.height);
-    sprite_create_bitmap(button_x, &rc_button_x);
 }
 
 WindowHandle create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t height, void(*event_callback)(WindowHandle, wEvent)) {
@@ -103,6 +137,17 @@ WindowHandle create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t heig
         return handle;
     
     memset(window_object, 0x00, sizeof(struct WindowObject));
+    
+    // Allocate frame buffer
+    uint32_t frame_buffer_sz = width * height * sizeof(uint32_t);
+    window_object->frame_buffer = (uint32_t*)malloc( frame_buffer_sz );
+    
+    if (window_object->frame_buffer == NULL) {
+        free(window_object);
+        return handle;
+    }
+    
+    memset(window_object->frame_buffer, 0x11, frame_buffer_sz);
     
     uint32_t candidate_id = next_window_id++;
     if (candidate_id == 0) candidate_id = next_window_id++;
@@ -134,13 +179,16 @@ WindowHandle create_window(uint32_t x, uint32_t y, uint32_t width, uint32_t heig
     window_object->surface_w = window_object->w;
     window_object->surface_h = window_object->h - window_object->titlebar_height;
     
-    window_object->border_color         = 0x002A2A2A;
-    window_object->background_color     = 0x006F6F6F;
-    window_object->title_color_low      = 0x00008000;
-    window_object->title_color_high     = 0x00001900;
-    window_object->inactive_color_low   = 0x00505050;
-    window_object->inactive_color_high  = 0x00101010;
-    window_object->flags = WINDOW_FLAG_REDRAW;
+    window_object->buffer_w = width;
+    window_object->buffer_h = height;
+    
+    window_object->border_color         = 0xFF2A2A2A;
+    window_object->background_color     = 0xFF6F6F6F;
+    window_object->title_color_low      = 0xFF008000;
+    window_object->title_color_high     = 0xFF001900;
+    window_object->inactive_color_low   = 0xFF505050;
+    window_object->inactive_color_high  = 0xFF101010;
+    window_object->flags = WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH;
     window_object->event_callback = event_callback;
     
     if (!list_append(&window_head, &window_tail, window_object)) {
@@ -186,6 +234,10 @@ void destroy_window(WindowHandle handle) {
     if (window_tail != NULL) {
         struct WindowObject* tail_win = (struct WindowObject*)window_tail->data;
         tail_win->flags |= WINDOW_FLAG_REDRAW;
+    }
+    
+    if (window_handle->frame_buffer != NULL) {
+        free(window_handle->frame_buffer);
     }
     
     free(window_handle);
@@ -234,21 +286,37 @@ struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t 
     return icon;
 }
 
-void destroy_icon(struct IconObject* target_icon) {
-    if (target_icon == NULL) return;
+void destroy_icon(struct IconObject* icon) {
+    if (icon == NULL) return;
+    
+    size_t length = strlen(icon->name);
+    uint16_t string_width = length * 6;
+    
+    int16_t min_x = icon->x + ((icon->width - string_width) / 2);
+    int16_t max_x = min_x + string_width;
+    
+    // Prevent redraw below the icon asset size
+    if (min_x > icon->x) min_x = icon->x;
+    if (max_x < icon->x + icon->width) max_x = icon->x + icon->width;
+    
+    window_context.old_icon_min_x = min_x;
+    window_context.old_icon_min_y = icon->y;
+    window_context.old_icon_max_x = max_x;
+    window_context.old_icon_max_y = icon->y + icon->height + 40;
+    window_context.icon_moved = true;
     
     bool explicitly_found = false;
     for (struct list_node* node = icon_head; node != NULL; node = node->next) {
-        if (node->data == target_icon) {
+        if (node->data == icon) {
             explicitly_found = true;
             break;
         }
     }
     if (!explicitly_found) return;
     
-    dwm_draw_redraw(target_icon->x, target_icon->y, target_icon->width, target_icon->height);
-    list_remove(&icon_head, &icon_tail, target_icon);
-    free(target_icon);
+    dwm_draw_redraw(icon->x, icon->y, icon->width, icon->height);
+    list_remove(&icon_head, &icon_tail, icon);
+    free(icon);
 }
 
 struct WindowObject* dwm_get_window_by_id(uint32_t id) {
@@ -295,9 +363,9 @@ void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color, b
 }
 
 void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {
-    cursor_sprite = sprite;
-    cursor_width = width;
-    cursor_height = height;
+    cursor.data = sprite;
+    cursor.width = width;
+    cursor.height = height;
 }
 
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
@@ -318,7 +386,7 @@ void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
         bool overlaps   = !(separate_x || separate_y);
         
         if (overlaps) 
-            window->flags |= WINDOW_FLAG_REDRAW;
+            window->flags |= WINDOW_FLAG_REFRESH;
     }
     
     window_context.old_win_min_x = target_min_x;
@@ -329,16 +397,74 @@ void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
 }
 
 void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h) {
+    int16_t max_x_target = x + w;
+    int16_t max_y_target = y + h;
+
     if (window_context.window_moved) {
-        if (x < window_context.old_win_min_x) window_context.old_win_min_x = x;
-        if (y < window_context.old_win_min_y) window_context.old_win_min_y = y;
-        if ((x + w) > window_context.old_win_max_x) window_context.old_win_max_x = x + w;
-        if ((y + h) > window_context.old_win_max_y) window_context.old_win_max_y = y + h;
+        if (x < window_context.min_x) window_context.min_x = x;
+        if (y < window_context.min_y) window_context.min_y = y;
+        if (max_x_target > window_context.max_x) window_context.max_x = max_x_target;
+        if (max_y_target > window_context.max_y) window_context.max_y = max_y_target;
     } else {
-        window_context.old_win_min_x = x;
-        window_context.old_win_min_y = y;
-        window_context.old_win_max_x = x + w;
-        window_context.old_win_max_y = y + h;
+        window_context.min_x = x;
+        window_context.min_y = y;
+        window_context.max_x = max_x_target;
+        window_context.max_y = max_y_target;
         window_context.window_moved = true;
+    }
+}
+
+void dwm_calculate_icon_bounds(struct IconObject* icon) {
+    size_t length = strlen(icon->name);
+    int16_t text_width = length * 6;
+    int16_t text_height = 8;        // Assuming standard 8px tall font glyphs
+    int16_t icon_text_height = 45;  // Matches your current_icon->y + 35 offset
+    
+    if (text_width > icon->width) {
+        // Text is wider than the sprite: bounds start to the left of icon->x
+        icon->bounds_x = (icon->width - text_width) / 2;
+        icon->bounds_w = text_width;
+    } else {
+        // Sprite is wider than or equal to text: bounds match the sprite
+        icon->bounds_x = 0;
+        icon->bounds_w = icon->width;
+    }
+    
+    icon->bounds_y = 0;
+    icon->bounds_h = icon_text_height + text_height;
+}
+
+void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_t* frame_buffer, uint32_t screen_stride,
+                                            int clip_x, int clip_y, int clip_w, int clip_h) {
+    int client_start_x = window->x;
+    int client_start_y = window->y + window->titlebar_height;
+    
+    int local_start_x = clip_x - client_start_x;
+    int local_start_y = clip_y - client_start_y;
+    
+    if (local_start_x < 0) { clip_w += local_start_x; local_start_x = 0; }
+    if (local_start_y < 0) { clip_h += local_start_y; local_start_y = 0; }
+    
+    if (local_start_x + clip_w > (int)window->buffer_w) clip_w = (int)window->buffer_w - local_start_x;
+    if (local_start_y + clip_h > (int)window->buffer_h) clip_h = (int)window->buffer_h - local_start_y;
+    
+    if (clip_w <= 0 || clip_h <= 0) return;
+    
+    for (int i = 0; i < clip_h; i++) {
+        int current_local_y  = local_start_y + i;
+        int current_screen_y = clip_y + i;
+        
+        // Offset src by the local X position, and dest by the screen clip_x position
+        uint32_t* src  = &window->frame_buffer[(current_local_y * window->buffer_w) + local_start_x];
+        uint32_t* dest = &frame_buffer[(current_screen_y * screen_stride) + clip_x];
+        int count = clip_w;
+        
+        asm volatile (
+            "cld;\n\t"
+            "rep movsd;\n\t"
+            : "+S"(src), "+D"(dest), "+c"(count)
+            :
+            : "memory"
+        );
     }
 }

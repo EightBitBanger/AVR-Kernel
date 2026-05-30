@@ -2,7 +2,8 @@
 
 #include <stddef.h>
 
-void sprite_create_bitmap(uint32_t* bitmap, const struct Sprite* sprite) {
+
+void sprite_get_bitmap(uint32_t* bitmap, const struct Sprite* sprite) {
     if (!bitmap || !sprite) return;
     const uint32_t* palette = (const uint32_t*)sprite->data;
     

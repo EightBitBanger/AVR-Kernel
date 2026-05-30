@@ -6,6 +6,8 @@
 struct IconObject {
     uint8_t flags;
     
+    char name[16];
+    
     // Position and size
     
     uint16_t x;
