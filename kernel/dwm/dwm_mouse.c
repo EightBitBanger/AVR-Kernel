@@ -118,7 +118,8 @@ void handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool 
             if (clicked_icon == last_clicked_icon && 
                 (current_time - last_icon_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
                 
-                destroy_icon(clicked_icon);
+                //destroy_icon(clicked_icon);
+                
                 last_clicked_icon = NULL;
                 last_icon_click_time = 0;
                 

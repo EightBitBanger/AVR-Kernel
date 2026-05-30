@@ -60,14 +60,17 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         bool in_refresh_zone = !(separate_x || separate_y);
         
         if (in_refresh_zone || ctx->window_moved || ctx->icon_moved || ctx->menu_moved) {
-            // Draw the icon sprite image
+            
+            // Draw icon sprite image
+            
             if (current_icon->icon_sprite != NULL) {
-                draw_sprite(current_icon->icon_sprite, current_icon->width, current_icon->height, current_icon->x, current_icon->y, 0xFF000000);
+                draw_sprite_blend(current_icon->icon_sprite, current_icon->width, current_icon->height, current_icon->x, current_icon->y, 0xFF000000);
             } else {
                 draw_rect_filled(current_icon->x, current_icon->y, current_icon->width, current_icon->height, 0xFFFFFFFF);
             }
             
-            // Compute text baseline positions
+            // Draw name text
+            
             uint16_t text_y = current_icon->y + 45; 
             size_t length = strlen(current_icon->name);
             uint16_t string_width = length * 6;
@@ -135,7 +138,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
             int clip_w = win_max_x - win_min_x - 2;
             int clip_h = win_max_y - win_min_y - window->titlebar_height - 2;
             
-            //dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+            dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
             
             dwm_draw_window(window);
             
@@ -195,7 +198,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     }
     
     // Redraw the cursor on the top layer
-    draw_sprite(cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
+    draw_sprite_blend(cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
 }
 
 void dwm_draw_window(struct WindowObject* window_handle) {
