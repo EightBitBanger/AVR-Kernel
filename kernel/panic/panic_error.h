@@ -14,6 +14,6 @@
 #define PF_RESERVED (1 << 3) // 1: Overwrote a reserved bit in the page table
 #define PF_INSTRUCT (1 << 4) // 1: Fault occurred during an instruction fetch
 
-void kernel_panic_screen(uint32_t error_code, uint32_t faulting_address);
+void kernel_panic_screen(uint32_t error_code, uint32_t faulting_address, uint8_t type);
 
 #endif

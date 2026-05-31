@@ -14,8 +14,8 @@
 #define FONT_WIDTH  5
 #define FONT_HEIGHT 8
 
-uint8_t cursor_position;
-uint8_t cursor_line;
+uint16_t cursor_position; 
+uint16_t cursor_line;
 
 uint32_t display_width;
 uint32_t display_height;
@@ -24,6 +24,7 @@ uint32_t console_width;
 uint32_t console_height;
 
 uint8_t console_glyph_width = 6;
+uint8_t console_glyph_height = 9;
 
 extern struct MultibootInfo* vinfo;
 
@@ -40,8 +41,9 @@ void display_init(void) {
     display_width  = vinfo->framebuffer_width;
     display_height = vinfo->framebuffer_height;
     
-    console_width  = (display_width / 5) - 16;
-    console_height = (display_height / 8) - 12;
+    // Fixed calculation to determine max character columns and rows
+    console_width  = display_width / console_glyph_width;
+    console_height = display_height / console_glyph_height;
     
     foreground_color = 0xFFCACACA;
     background_color = 0xFF0A0A0A;
@@ -61,21 +63,29 @@ uint16_t display_get_width(void) {
     return display_width;
 }
 
+uint8_t display_get_glyph_width(void) {
+    return console_glyph_width;
+}
+
+uint8_t display_get_glyph_height(void) {
+    return console_glyph_height;
+}
+
 uint16_t display_get_height(void) {
     return display_height;
 }
 
-uint16_t display_get_rows(void) {
+uint16_t display_get_columns(void) {
     return console_width;
 }
 
-uint16_t display_get_columbs(void) {
+uint16_t display_get_rows(void) {
     return console_height;
 }
 
 void display_putc(const char ch) {
-    draw_rect_filled(cursor_position * 6, cursor_line * 9, 6, 8, background_color);
-    draw_glyph(char_rom, ch, cursor_position * 6, cursor_line * 9, foreground_color, background_color, transparent_color);
+    draw_rect_filled(cursor_position * console_glyph_width, cursor_line * console_glyph_height, 6, 8, background_color);
+    draw_glyph(char_rom, ch, cursor_position * console_glyph_width, cursor_line * console_glyph_height, foreground_color, background_color, transparent_color);
 }
 
 void display_newline(void) {
@@ -98,12 +108,17 @@ void display_newline(void) {
 }
 
 void display_cursor_set_position(uint16_t position) {
-    cursor_position = (uint8_t)position;
+    if (position >= console_width) {
+        position = console_width - 1;
+    }
+    cursor_position = position;
 }
 
 void display_cursor_set_line(uint16_t line) {
-    if (line >= (console_width * console_glyph_width)) line = (console_width * console_glyph_width) - 1;
-    cursor_line = (uint8_t)line;
+    if (line >= console_height) {
+        line = console_height - 1;
+    }
+    cursor_line = line;
 }
 
 uint16_t display_cursor_get_position(void) {

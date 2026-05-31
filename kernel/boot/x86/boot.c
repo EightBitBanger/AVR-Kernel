@@ -32,7 +32,7 @@ extern uint32_t display_width;
 extern uint32_t display_height;
 
 uint32_t counterA=0;
-void callback_handlerA(WindowHandle handle, wEvent event) {
+void callback_handler(WindowHandle handle, wEvent event) {
     counterA++;
     
     switch (event) {
@@ -52,26 +52,75 @@ void callback_handlerA(WindowHandle handle, wEvent event) {
     }
 }
 
-uint32_t counterB=0;
-void callback_handlerB(WindowHandle handle, wEvent event) {
-    counterB++;
+void callback_button_handler(WindowHandle handle, wEvent event) {
     
     switch (event) {
     case EVENT_REDRAW:
         
-        dwm_draw_rect(  0, 100, 1024,   32, 0xFFFF0000, true);
-        dwm_draw_rect(100,   0,   32, 1024, 0xFF00FF00, true);
-        dwm_draw_rect(100, 100, 1024,   32, 0xFF0000FF, true);
+        dwm_draw_rect(  0, 0, 1024, 1024, 0xFF222222, true);
         
-        char number[16];
-        itos(counterB, number);
-        
-        dwm_draw_rect(10, 10, 100,  40, 0xFF000000, true);
-        dwm_draw_text(10, 10, number, 0xFF0AEA0A);
+        dwm_draw_text(10, 10, "ok", 0xFF0AEA0A);
         
         break;
     }
 }
+
+void desktop_environment_init(void) {
+    
+    struct WindowClass wclass;
+    wclass.x = 200;
+    wclass.y = 100;
+    wclass.width = 250;
+    wclass.height = 250;
+    wclass.event_handler = callback_handler;
+    
+    WindowHandle window = create_window(wclass, 0);
+    
+    
+    
+    struct WindowClass wclassbutton;
+    wclassbutton.x = 100;
+    wclassbutton.y = 300;
+    wclassbutton.width = 80;
+    wclassbutton.height = 30;
+    wclassbutton.event_handler = callback_button_handler;
+    
+    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_TOPMOST);
+    
+    
+    //dwm_window_set_parent(button, window);
+    
+    
+}
+
+
+void init_sse(void) {
+    uint32_t cr0;
+    uint32_t cr4;
+    
+    // 1. Read current CR0
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    
+    // Clear the EM (Emulation) bit (bit 2) -> We have a real FPU, don't emulate it
+    cr0 &= ~(1 << 2);
+    // Set the MP (Monitor Coprocessor) bit (bit 1) -> Controls interaction with TS bit
+    cr0 |= (1 << 1);
+    
+    // Write back to CR0
+    asm volatile("mov %0, %%cr0" :: "r"(cr0));
+    
+    // 2. Read current CR4
+    asm volatile("mov %%cr4, %0" : "=r"(cr4));
+    
+    // Set OSFXSR (bit 9) -> Tells the OS that it supports FXSAVE/FXRSTOR for SSE state
+    cr4 |= (1 << 9);
+    // Set OSXMMEXCPT (bit 10) -> Tells the CPU to use unmasked SIMD floating-point exceptions (#XM)
+    cr4 |= (1 << 10);
+    
+    // Write back to CR4
+    asm volatile("mov %0, %%cr4" :: "r"(cr4));
+}
+
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -84,6 +133,8 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     // Set the table for the kernel
     gdt_initiate();
     idt_initiate();
+    
+    //init_sse();
     
     // Millisecond timer
     timer_init();
@@ -107,13 +158,12 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     uint32_t fb_size_bytes = fb_pixels * sizeof(uint32_t);
     
     // Lock the Graphics back buffer at the 8MB mark
-    // (This is well within our 64MB static safety net)
+    // This is well within our 64MB chunk
     uint32_t* forced_back_buffer = (uint32_t*)0x00800000;
     
     extern void draw_set_frame_buffer(uint32_t* buffer_ptr);
     draw_set_frame_buffer(forced_back_buffer);
     
-    // 2. Lock the Heap memory allocator to start safely at the 24MB mark
     uint32_t forced_heap_start = 0x01800000; 
     heap_set_base_address(forced_heap_start);
     
@@ -201,43 +251,14 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     dwm_set_cursor(cursor_sprite, rc_cursor_pointer.width, rc_cursor_pointer.height);
     
+    desktop_environment_init();
     
-    WindowHandle handleA = create_window(200, 100, 640, 480, callback_handlerA);
-    WindowHandle handleB = create_window(500, 200, 200, 200, callback_handlerB);
-    
-    
-    uint32_t* file_sprite = malloc(sizeof(uint32_t) * rc_icon_file.width * rc_icon_file.height);
-    sprite_get_bitmap(file_sprite, &rc_icon_file);
-    
-    uint32_t* sprite_file_system = malloc(sizeof(uint32_t) * rc_icon_system.width * rc_icon_system.height);
-    sprite_get_bitmap(sprite_file_system, &rc_icon_system);
-    
-    uint32_t* sprite_file_document = malloc(sizeof(uint32_t) * rc_icon_document.width * rc_icon_document.height);
-    sprite_get_bitmap(sprite_file_document, &rc_icon_document);
-    
-    uint32_t* folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
-    sprite_get_bitmap(folder_sprite, &rc_icon_folder);
-    
-    struct IconObject* file = create_icon(150, 100, rc_icon_file.width, rc_icon_file.height, file_sprite);
-    struct IconObject* system = create_icon(200, 100, rc_icon_system.width, rc_icon_system.height, sprite_file_system);
-    struct IconObject* document = create_icon(250, 100, rc_icon_document.width, rc_icon_document.height, sprite_file_document);
-    struct IconObject* folder = create_icon(300, 100, rc_icon_folder.width, rc_icon_folder.height, folder_sprite);
-    
-    
-    extern void dwm_calculate_icon_bounds(struct IconObject* icon);
-    
-    strcpy(folder->name, "new folder");
-    dwm_calculate_icon_bounds(folder);
-    
-    // TODO add an internal icon renaming function
-    
+    create_folder(30, 30, "new folder");
     
     
     // Event system
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
-    
-    // Context menus
     
     // Scalable vector font
     
@@ -247,6 +268,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         
         dwm_update();
         
+        __asm__ volatile ("hlt");
         
         // Handle mouse and keyboard input
         // TODO move to interrupt handlers later on

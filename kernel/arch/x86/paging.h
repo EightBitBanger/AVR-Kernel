@@ -9,8 +9,10 @@
 #define VM_PRESENT    0x1
 #define VM_READWRITE  0x2
 
+// Allocate a blank page table dynamically
 void paging_initiate(struct MultibootInfo* mbi);
 
+// Maps a physical page to a virtual page dynamically
 void map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags);
 
 #endif

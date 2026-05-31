@@ -1,8 +1,8 @@
 extern isr_callback_fault_handler
 
-global isr_page_fault
+global isr_general_fault
 
-isr_page_fault:
+isr_general_fault:
     
     ; The CPU has already pushed EFLAGS, CS, EIP, and the Error Code.
     ; Stack currently looks like: [EFLAGS] -> [CS] -> [EIP] -> [Error Code] <- ESP
@@ -18,7 +18,7 @@ isr_page_fault:
     
     fxsave [eax]           ; Save the entire FPU/MMX/SSE/XMM state
     
-    push 0x01    ; Third argument to C function: fault type
+    push 0x00    ; Third argument to C function: fault type
     
     ; Read the faulting address from CR2
     mov eax, cr2

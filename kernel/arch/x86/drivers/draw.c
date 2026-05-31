@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <kernel/util/string.h>
+#include <emmintrin.h> // Required for SSE2 SIMD Intrinsics
 
 #define CLIP_INSIDE  0
 #define CLIP_LEFT    1
@@ -33,6 +34,11 @@ uint32_t background_color  = 0xFF555555;
 uint32_t transparent_color = 0xFF555555;
 
 struct ClippingPlane clipping_plain;
+
+// Inline helper to bypass function call overhead for pixel plotting in loops
+static inline void internal_plot_pixel(uint32_t* buf, uint32_t stride, int x, int y, uint32_t color) {
+    buf[y * stride + x] = color;
+}
 
 void draw_set_glyph_scheme(uint32_t foreground, uint32_t background, uint32_t transparent) {
     foreground_color  = foreground;
@@ -83,6 +89,60 @@ void draw_set_info(uint32_t mb_info) {
 void draw_set_frame_buffer(uint32_t* buffer_ptr) {
     back_buffer = buffer_ptr;
 }
+
+void draw_flush_region_simd(int x, int y, int width, int height) {
+    if (x >= (int)display_width || y >= (int)display_height || (x + width) <= 0 || (y + height) <= 0) 
+        return;
+    if (!back_buffer || !front_buffer) 
+        return;
+    
+    int x_start = (x < 0) ? 0 : x;
+    int y_start = (y < 0) ? 0 : y;
+    int x_end = (x + width > (int)display_width) ? (int)display_width : (x + width);
+    int y_end = (y + height > (int)display_height) ? (int)display_height : (y + height);
+    
+    uint32_t hw_stride = vinfo->framebuffer_pitch / 4;
+    uint32_t back_stride = display_width; 
+    int pixels_to_copy = (x_end - x_start);
+    
+    if (pixels_to_copy <= 0) return;
+    
+    for (int curr_y = y_start; curr_y < y_end; curr_y++) {
+        size_t src_offset = (curr_y * back_stride) + x_start;
+        size_t dest_offset = (curr_y * hw_stride) + x_start;
+        
+        uint32_t* dst = &front_buffer[dest_offset];
+        const uint32_t* src = &back_buffer[src_offset];
+        int rem_pixels = pixels_to_copy;
+        
+        // 16 pixels * 4 bytes = 64 bytes (Exactly one CPU cache line)
+        // Highly optimized pure integer unrolling. Safe on all bare hardware.
+        while (rem_pixels >= 16) {
+            dst[0]  = src[0];  dst[1]  = src[1];  dst[2]  = src[2];  dst[3]  = src[3];
+            dst[4]  = src[4];  dst[5]  = src[5];  dst[6]  = src[6];  dst[7]  = src[7];
+            dst[8]  = src[8];  dst[9]  = src[9];  dst[10] = src[10]; dst[11] = src[11];
+            dst[12] = src[12]; dst[13] = src[13]; dst[14] = src[14]; dst[15] = src[15];
+            
+            dst += 16;
+            src += 16;
+            rem_pixels -= 16;
+        }
+        
+        // Clean up remaining trailing pixels (0 to 15)
+        while (rem_pixels > 0) {
+            *dst = *src;
+            dst++;
+            src++;
+            rem_pixels--;
+        }
+    }
+    
+    // Explicitly flush the Write-Combining buffers via assembly fence.
+    // This forces the CPU out-of-order execution engine to dump the pixels 
+    // to the physical screen immediately without relying on SIMD extensions.
+    asm volatile("sfence" ::: "memory");
+}
+
 
 void draw_flush_region(int x, int y, int width, int height) {
     if (x >= (int)display_width || y >= (int)display_height || (x + width) <= 0 || (y + height) <= 0) 
@@ -144,6 +204,8 @@ void draw_flush_region(int x, int y, int width, int height) {
     }
 }
 
+
+
 static inline int render_clip_compute_outcode(int x, int y) {
     int code = CLIP_INSIDE;
          if (x < clipping_plain.min_x)  code |= CLIP_LEFT;
@@ -156,10 +218,9 @@ static inline int render_clip_compute_outcode(int x, int y) {
 static inline void render_circle_pixel(int sx, int sy, uint32_t c) {
     if (sx >= clipping_plain.min_x && sx < clipping_plain.max_x &&
         sy >= clipping_plain.min_y && sy < clipping_plain.max_y) {
-        draw_pixel(sx, sy, c);
+        frame_buffer[sy * buffer_stride + sx] = c;
     }
 }
-
 
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
     x0 += display_base_x; y0 += display_base_y;
@@ -207,14 +268,13 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
     int err = dx - dy;
     
     while (1) {
-        draw_pixel(x0, y0, color);
+        frame_buffer[y0 * buffer_stride + x0] = color;
         if (x0 == x1 && y0 == y1) break;
         int e2 = 2 * err;
         if (e2 > -dy) { err -= dy; x0 += sx; }
         if (e2 < dx) { err += dx; y0 += sy; }
     }
 }
-
 
 void draw_rect(int x, int y, int width, int height, uint32_t color) {
     x += display_base_x; y += display_base_y;
@@ -226,21 +286,27 @@ void draw_rect(int x, int y, int width, int height, uint32_t color) {
     
     if (x_start >= x_end || y_start >= y_end) return;
     
-    // Top & Bottom horizontal line optimizations
+    // Top line
     if (y >= clipping_plain.min_y && y < clipping_plain.max_y) {
-        for (int cx = x_start; cx < x_end; cx++) draw_pixel(cx, y, color);
+        uint32_t* line = &frame_buffer[y * buffer_stride];
+        for (int cx = x_start; cx < x_end; cx++) line[cx] = color;
     }
+    // Bottom line
     int bottom_y = y + height - 1;
     if (bottom_y >= clipping_plain.min_y && bottom_y < clipping_plain.max_y) {
-        for (int cx = x_start; cx < x_end; cx++) draw_pixel(cx, bottom_y, color);
+        uint32_t* line = &frame_buffer[bottom_y * buffer_stride];
+        for (int cx = x_start; cx < x_end; cx++) line[cx] = color;
     }
-    // Left & Right vertical lines
-    if (x >= clipping_plain.min_x && x < clipping_plain.max_x) {
-        for (int cy = y_start; cy < y_end; cy++) draw_pixel(x, cy, color);
-    }
-    int right_x = x + width - 1;
-    if (right_x >= clipping_plain.min_x && right_x < clipping_plain.max_x) {
-        for (int cy = y_start; cy < y_end; cy++) draw_pixel(right_x, cy, color);
+    // Left & Right lines
+    for (int cy = y_start; cy < y_end; cy++) {
+        uint32_t* line = &frame_buffer[cy * buffer_stride];
+        if (x >= clipping_plain.min_x && x < clipping_plain.max_x) {
+            line[x] = color;
+        }
+        int right_x = x + width - 1;
+        if (right_x >= clipping_plain.min_x && right_x < clipping_plain.max_x) {
+            line[right_x] = color;
+        }
     }
 }
 
@@ -259,12 +325,7 @@ void draw_rect_filled_blend(int x, int y, int width, int height, uint32_t color)
     int width_to_draw = x_end - x_start;
     
     if (alpha == 255) {
-        for (int curr_y = y_start; curr_y < y_end; curr_y++) {
-            uint32_t* dest = &frame_buffer[(curr_y * buffer_stride) + x_start];
-            for (int i = 0; i < width_to_draw; i++) {
-                dest[i] = color;
-            }
-        }
+        draw_rect_filled(x_start - display_base_x, y_start - display_base_y, width_to_draw, y_end - y_start, color);
     } else {
         for (int curr_y = y_start; curr_y < y_end; curr_y++) {
             uint32_t* dest = &frame_buffer[(curr_y * buffer_stride) + x_start];
@@ -288,8 +349,9 @@ void draw_rect_filled(int x, int y, int width, int height, uint32_t color) {
     
     for (int curr_y = y_start; curr_y < y_end; curr_y++) {
         uint32_t* dest = &frame_buffer[(curr_y * buffer_stride) + x_start];
-        size_t count = dwords_to_write; // Copy bounds locally so it isn't cleared to 0
+        size_t count = dwords_to_write; 
         
+        // This is highly optimal inside system RAM cache (WB)
         asm volatile(
             "cld\n\t"
             "rep stosl"
@@ -366,13 +428,13 @@ void draw_circle(int xc, int yc, int r, uint32_t color) {
         else { d = d + 4 * x + 6; }
     }
 }
-extern const uint8_t char_rom[];
 
+extern const uint8_t char_rom[];
 
 void draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
     size_t length = strlen(text);
     for (unsigned int i=0; i < length; i++) 
-        draw_glyph(char_rom, text[i], x + (i * 6), y, color, 0xFF000000, 0xFF000000);
+        draw_glyph(char_rom, text[i], x + (i * 6), y, color, 0xFF000000, 1); // Set background transparency parameter to 1
 }
 
 void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg) {
@@ -392,11 +454,14 @@ void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_
     for (int src_x = src_x_start; src_x < src_x_end; src_x++) {
         uint8_t column_byte = glyph_data[src_x];
         int dest_x = x + src_x;
+        uint32_t* frame_ptr = &frame_buffer[dest_x];
+        
         for (int src_y = src_y_start; src_y < src_y_end; src_y++) {
+            int dest_y = y + src_y;
             if ((column_byte >> src_y) & 1) {
-                draw_pixel(dest_x, y + src_y, fg_color);
+                frame_ptr[dest_y * buffer_stride] = fg_color;
             } else if (!transparent_bg) {
-                draw_pixel(dest_x, y + src_y, bg_color);
+                frame_ptr[dest_y * buffer_stride] = bg_color;
             }
         }
     }
@@ -421,15 +486,26 @@ void draw_sprite(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x,
         
         uint32_t* dest_row = &frame_buffer[(screen_y * buffer_stride) + screen_x_start];
         const uint32_t* src_row = &sprite_data[(src_y * sprite_w) + src_x_start];
-        size_t count = dwords_to_copy;
         
-        asm volatile(
-            "cld\n\t"
-            "rep movsl"
-            : "+D"(dest_row), "+S"(src_row), "+c"(count)
-            :
-            : "memory"
-        );
+        if (colorkey == 0xFFFFFFFF) { 
+            // Opaque Sprite: Fast path copying directly via block loops
+            size_t count = dwords_to_copy;
+            asm volatile(
+                "cld\n\t"
+                "rep movsl"
+                : "+D"(dest_row), "+S"(src_row), "+c"(count)
+                :
+                : "memory"
+            );
+        } else {
+            // Transparent Sprite: Key comparison per pixel
+            for (int i = 0; i < width_to_copy; i++) {
+                uint32_t color = src_row[i];
+                if (color != colorkey) {
+                    dest_row[i] = color;
+                }
+            }
+        }
     }
 }
 
