@@ -3,6 +3,8 @@
 
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
+#include <kernel/arch/x86/paging.h>
+
 #include <kernel/arch/x86/drivers/multiboot_info.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/boot/x86/gdt.h>
@@ -36,9 +38,9 @@ void callback_handlerA(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_REDRAW:
         
-        dwm_draw_rect(  0, 100, 200,  32, 0xFFFF0000, true);
-        dwm_draw_rect(100,   0,  32, 200, 0xFF00FF00, true);
-        dwm_draw_rect(100, 100, 200,  32, 0xFF0000FF, true);
+        dwm_draw_rect(  0, 100, 1024,   32, 0xFFFF0000, true);
+        dwm_draw_rect(100,   0,   32, 1024, 0xFF00FF00, true);
+        dwm_draw_rect(100, 100, 1024,   32, 0xFF0000FF, true);
         
         char number[16];
         itos(counterA, number);
@@ -57,9 +59,9 @@ void callback_handlerB(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_REDRAW:
         
-        dwm_draw_rect(  0, 100, 200,  32, 0xFFFF0000, true);
-        dwm_draw_rect(100,   0,  32, 200, 0xFF00FF00, true);
-        dwm_draw_rect(100, 100, 200,  32, 0xFF0000FF, true);
+        dwm_draw_rect(  0, 100, 1024,   32, 0xFFFF0000, true);
+        dwm_draw_rect(100,   0,   32, 1024, 0xFF00FF00, true);
+        dwm_draw_rect(100, 100, 1024,   32, 0xFF0000FF, true);
         
         char number[16];
         itos(counterB, number);
@@ -70,7 +72,6 @@ void callback_handlerB(WindowHandle handle, wEvent event) {
         break;
     }
 }
-
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -99,47 +100,29 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     display_init();
     draw_set_clip_rect(0, 0, display_width, display_height);
     
-    // Calculate the raw size of your framebuffer in bytes
-    uint32_t fb_pixels = (uint32_t)display_get_width() * (uint32_t)display_get_height();
+    paging_initiate(mbi_info);
+    
+    // Calculate dimensions exactly like you used to
+    uint32_t fb_pixels = mbi_info->framebuffer_width * mbi_info->framebuffer_height;
     uint32_t fb_size_bytes = fb_pixels * sizeof(uint32_t);
     
-    uint32_t frame_buffer_back_start = ((uint32_t)_kernel_memory_end + 4095) & ~4095;
-    uint32_t* frame_buffer_back = (uint32_t*)frame_buffer_back_start;
+    // Lock the Graphics back buffer at the 8MB mark
+    // (This is well within our 64MB static safety net)
+    uint32_t* forced_back_buffer = (uint32_t*)0x00800000;
     
-    draw_set_frame_buffer(frame_buffer_back);
-    draw_set_buffer_default();
+    extern void draw_set_frame_buffer(uint32_t* buffer_ptr);
+    draw_set_frame_buffer(forced_back_buffer);
     
+    // 2. Lock the Heap memory allocator to start safely at the 24MB mark
+    uint32_t forced_heap_start = 0x01800000; 
+    heap_set_base_address(forced_heap_start);
     
-    
-    //
-    // Heap allocator
-    
-    // Move the heap start to after the framebuffer, and align it again
-    uint32_t heap_start = (frame_buffer_back_start + fb_size_bytes + 4095) & ~4095;
-    
-    // Your original heap config
-    uint32_t heap_sz  = (((uint32_t)1024 * (uint32_t)1024 * (uint32_t)1024) * 2);
+    // Initialize an 8 MB heap block (spans from 24MB to 32MB)
+    uint32_t heap_sz  = (1024 * 1024 * 8); 
     uint32_t block_sz = 16;
-    
-    heap_set_base_address(heap_start);
     heap_init(block_sz, heap_sz);
     
-    //
-    // Display and keyboard for the console
-    
-    display_clear();
-    /*
-    
-    while(1) {
-        
-        draw_rect_filled(0, 0, display_width, display_height, 0xFF0000C0);
-        draw_flush_region(0, 0, display_width, display_height);
-        
-        draw_rect_filled(0, 0, display_width, display_height, 0xFF00C000);
-        draw_flush_region(0, 0, display_width, display_height);
-        
-    }
-    */
+    draw_set_buffer_default();
     
     display_cursor_set_line(0);
     display_cursor_set_position(0);

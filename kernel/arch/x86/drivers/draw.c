@@ -28,9 +28,9 @@ uint32_t buffer_height = 0;
 uint32_t buffer_stride = 0;
 
 // Console text colors
-uint32_t foreground_color;
-uint32_t background_color;
-uint32_t transparent_color;
+uint32_t foreground_color  = 0xFF555555;
+uint32_t background_color  = 0xFF555555;
+uint32_t transparent_color = 0xFF555555;
 
 struct ClippingPlane clipping_plain;
 
@@ -100,7 +100,7 @@ void draw_flush_region(int x, int y, int width, int height) {
     int pixels_to_copy = (x_end - x_start);
     
     if (pixels_to_copy <= 0) return;
-
+    
     for (int curr_y = y_start; curr_y < y_end; curr_y++) {
         size_t src_offset = (curr_y * back_stride) + x_start;
         size_t dest_offset = (curr_y * hw_stride) + x_start;
@@ -108,12 +108,12 @@ void draw_flush_region(int x, int y, int width, int height) {
         uint32_t* dst = &front_buffer[dest_offset];
         uint32_t* src = &back_buffer[src_offset];
         int rem_pixels = pixels_to_copy;
-
+        
         // Safe Unrolled Burst Loop: Works perfectly with Write-Combining
         // Reads 16 bytes straight from cached RAM registers, then dumps them sequentially into VRAM
         while (rem_pixels >= 4) {
             uint32_t r0, r1, r2, r3;
-
+            
             asm volatile(
                 "movl 0(%4), %0\n\t"
                 "movl 4(%4), %1\n\t"
@@ -128,13 +128,13 @@ void draw_flush_region(int x, int y, int width, int height) {
                 : "r"(src), "r"(dst)
                 : "memory"
             );
-
+            
             dst += 4;
             src += 4;
             rem_pixels -= 4;
         }
-
-        // Clean up remaining trailing pixels (1-3 pixels)
+        
+        // Sweep up remaining trailing pixels
         while (rem_pixels > 0) {
             *dst = *src;
             dst++;
@@ -365,6 +365,14 @@ void draw_circle(int xc, int yc, int r, uint32_t color) {
         if (d > 0) { y--; d = d + 4 * (x - y) + 10; }
         else { d = d + 4 * x + 6; }
     }
+}
+extern const uint8_t char_rom[];
+
+
+void draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
+    size_t length = strlen(text);
+    for (unsigned int i=0; i < length; i++) 
+        draw_glyph(char_rom, text[i], x + (i * 6), y, color, 0xFF000000, 0xFF000000);
 }
 
 void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg) {

@@ -2,12 +2,14 @@
 #include <stdbool.h>
 #include <kernel/arch/x86/io.h>
 #include <kernel/boot/x86/interrupt.h>
+#include <kernel/panic/panic_error.h>
 
 extern void isr_dummy(void);
 extern void isr_div_zero(void);
 extern void isr_mouse(void);
 extern void isr_keyboard(void);
 extern void isr_timer(void);
+extern void isr_page_fault();
 
 void pic_remap(void);
 
@@ -31,8 +33,10 @@ void idt_initiate(void) {
     for (int i = 0; i < 256; i++) 
         idt_set_gate(i, (uint32_t)isr_dummy, 0x08, 0x8E);
     
-    idt_set_gate(0,    (uint32_t)isr_div_zero,  0x08, 0x8E);
-    idt_set_gate(0x20, (uint32_t)isr_timer,     0x08, 0x8E);
+    idt_set_gate(0,    (uint32_t)isr_div_zero,    0x08, 0x8E);
+    idt_set_gate(0x20, (uint32_t)isr_timer,       0x08, 0x8E);
+    idt_set_gate(0x0E, (uint32_t)isr_page_fault,  0x08, 0x8E);
+    
     //idt_set_gate(0x21, (uint32_t)isr_keyboard,    0x08, 0x8E);
     //idt_set_gate(0x2C, (uint32_t)isr_mouse,       0x08, 0x8E);
     
@@ -53,7 +57,25 @@ void isr_callback_div_zero_handler(void) {
     outb(0x20, 0x20); // End of Interrupt
 }
 
-void c_dummy_handler() {
+void c_dummy_handler(void) {
     
     outb(0x20, 0x20); // End of Interrupt
+}
+
+#include <kernel/arch/x86/drivers/draw.h>
+#include <kernel/console/display.h>
+#include <kernel/console/print.h>
+
+// Define the structure of the page fault error code bits
+#define PF_PRESENT  (1 << 0) // 0: Super non-present page, 1: Page-protection violation
+#define PF_WRITE    (1 << 1) // 0: Read access, 1: Write access
+#define PF_USER     (1 << 2) // 0: Kernel-mode fault, 1: User-mode fault
+#define PF_RESERVED (1 << 3) // 1: Overwrote a reserved bit in the page table
+#define PF_INSTRUCT (1 << 4) // 1: Fault occurred during an instruction fetch
+
+void isr_callback_page_fault_handler(uint32_t error_code, uint32_t faulting_address) {
+    
+    kernel_panic_screen(error_code, faulting_address);
+    
+    while(1);
 }

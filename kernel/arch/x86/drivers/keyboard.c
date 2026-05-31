@@ -9,10 +9,14 @@
 #include <kernel/console/keyboard.h>
 #include <kernel/console/console.h>
 #include <kernel/console/print.h>
+#include <kernel/util/system.h>
 
 static volatile char current_character  = 0x00;
 static volatile char last_character     = 0x00;
 static volatile uint8_t isr_key_ready   = 0;
+
+static bool is_ctrl_pressed = false;
+static bool is_alt_pressed  = false;
 
 // Architecture Native Lookup Tables
 // Native PS/2 Scan Code Set 1 Table
@@ -146,13 +150,26 @@ char kb_getc(void) {
     uint8_t low_byte, high_byte;
     kb_get_raw(&low_byte, &high_byte);
     
-    uint32_t scancode = 0;
-    bool is_break = true;
-    
     if (low_byte == 0 && high_byte == 0) return 0;
     
-    scancode = low_byte;
-    is_break = (high_byte == 0x80);
+    uint32_t scancode = low_byte;
+    bool is_break = (high_byte == 0x80);
+    
+    // Track Left Ctrl (0x1D) and Left Alt (0x38)
+    
+    // Note: Right Ctrl/Alt usually send an 0xE0 prefix which you may need to catch in kb_get_raw later
+    if (scancode == 0x1D) {
+        is_ctrl_pressed = !is_break;
+    } else if (scancode == 0x38) {
+        is_alt_pressed = !is_break;
+    }
+    
+    // Check for Delete key (0x53) while Ctrl and Alt are held down
+    if (scancode == 0x53 && !is_break) {
+        if (is_ctrl_pressed && is_alt_pressed) {
+            system_restart();
+        }
+    }
     
     kb_vkey_set(scancode, !is_break);
     

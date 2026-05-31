@@ -23,6 +23,8 @@ uint32_t display_height;
 uint32_t console_width;
 uint32_t console_height;
 
+uint8_t console_glyph_width = 6;
+
 extern struct MultibootInfo* vinfo;
 
 extern uint32_t foreground_color;
@@ -96,12 +98,11 @@ void display_newline(void) {
 }
 
 void display_cursor_set_position(uint16_t position) {
-    if (position >= console_width) position = console_width - 1;
     cursor_position = (uint8_t)position;
 }
 
 void display_cursor_set_line(uint16_t line) {
-    if (line >= console_height) line = console_height - 1; 
+    if (line >= (console_width * console_glyph_width)) line = (console_width * console_glyph_width) - 1;
     cursor_line = (uint8_t)line;
 }
 
