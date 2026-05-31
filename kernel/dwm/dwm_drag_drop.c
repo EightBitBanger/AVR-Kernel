@@ -1,11 +1,9 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/icons.h>
-
 #include <kernel/console/display.h>
 #include <kernel/dwm/icon_object.h>
 #include <kernel/util/list.h>
 #include <kernel/util/timer.h>
-
 #include <kernel/util/string.h>
 
 #define DOUBLE_CLICK_THRESHOLD_MS   500
@@ -21,39 +19,21 @@ void dwm_update_icon_dragging(struct WindowContext* ctx) {
         int display_w = display_get_width();
         int display_h = display_get_height();
         
-        if (new_x + dragged_icon->bounds_x < 0)   
-            new_x = -dragged_icon->bounds_x;
-        if (new_x + dragged_icon->bounds_x + dragged_icon->bounds_w > display_w) 
-            new_x = display_w - dragged_icon->bounds_x - dragged_icon->bounds_w;
-        if (new_y + dragged_icon->bounds_y < 0) 
-            new_y = -dragged_icon->bounds_y;
-        if (new_y + dragged_icon->bounds_y + dragged_icon->bounds_h > display_h) 
-            new_y = display_h - dragged_icon->bounds_y - dragged_icon->bounds_h;
+        if (new_x + dragged_icon->bounds_x < 0) new_x = -dragged_icon->bounds_x;
+        if (new_x + dragged_icon->bounds_x + dragged_icon->bounds_w > display_w) new_x = display_w - dragged_icon->bounds_x - dragged_icon->bounds_w;
+        if (new_y + dragged_icon->bounds_y < 0) new_y = -dragged_icon->bounds_y;
+        if (new_y + dragged_icon->bounds_y + dragged_icon->bounds_h > display_h) new_y = display_h - dragged_icon->bounds_y - dragged_icon->bounds_h;
         
         if (dragged_icon->x != new_x || dragged_icon->y != new_y) {
-            ctx->old_icon_min_x = dragged_icon->x + dragged_icon->bounds_x;
-            ctx->old_icon_min_y = dragged_icon->y + dragged_icon->bounds_y;
-            ctx->old_icon_max_x = dragged_icon->x + dragged_icon->bounds_x + dragged_icon->bounds_w;
-            ctx->old_icon_max_y = dragged_icon->y + dragged_icon->bounds_y + dragged_icon->bounds_h;
-            ctx->icon_moved = true;
+            
+            dwm_invalidate_region(dragged_icon->x + dragged_icon->bounds_x, dragged_icon->y + dragged_icon->bounds_y, dragged_icon->bounds_w, dragged_icon->bounds_h);
             
             dragged_icon->x = new_x;
             dragged_icon->y = new_y;
             
-            dwm_draw_redraw(
-                dragged_icon->x + dragged_icon->bounds_x, 
-                dragged_icon->y + dragged_icon->bounds_y, 
-                dragged_icon->bounds_w, 
-                dragged_icon->bounds_h
-            );
+            dwm_invalidate_region(dragged_icon->x + dragged_icon->bounds_x, dragged_icon->y + dragged_icon->bounds_y, dragged_icon->bounds_w, dragged_icon->bounds_h);
         }
     } else {
-        ctx->old_icon_min_x = dragged_icon->x + dragged_icon->bounds_x;
-        ctx->old_icon_min_y = dragged_icon->y + dragged_icon->bounds_y;
-        ctx->old_icon_max_x = dragged_icon->x + dragged_icon->bounds_x + dragged_icon->bounds_w;
-        ctx->old_icon_max_y = dragged_icon->y + dragged_icon->bounds_y + dragged_icon->bounds_h;
-        ctx->icon_moved = true;
-        
         dragged_icon = NULL;
     }
 }
@@ -68,23 +48,14 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
         int display_w = display_get_width();
         int display_h = display_get_height();
         
-        // Edge boundaries
-        if (new_x - (int)dragged_window->border_width < 0)   
-            new_x = dragged_window->border_width;
-        if (new_x + (int)dragged_window->w + (int)dragged_window->border_width > display_w) 
-            new_x = display_w - dragged_window->w - dragged_window->border_width;
-            
-        if (new_y - (int)dragged_window->border_width < 0) 
-            new_y = dragged_window->border_width;
-        if (new_y + (int)dragged_window->h + (int)dragged_window->border_width > display_h) 
-            new_y = display_h - dragged_window->h - dragged_window->border_width;
+        if (new_x - (int)dragged_window->border_width < 0) new_x = dragged_window->border_width;
+        if (new_x + (int)dragged_window->w + (int)dragged_window->border_width > display_w) new_x = display_w - dragged_window->w - dragged_window->border_width;
+        if (new_y - (int)dragged_window->border_width < 0) new_y = dragged_window->border_width;
+        if (new_y + (int)dragged_window->h + (int)dragged_window->border_width > display_h) new_y = display_h - dragged_window->h - dragged_window->border_width;
         
         if (dragged_window->x != new_x || dragged_window->y != new_y) {
             
-            int16_t old_min_x = dragged_window->x - dragged_window->border_width;
-            int16_t old_min_y = dragged_window->y - dragged_window->border_width;
-            int16_t old_w     = dragged_window->w + (dragged_window->border_width * 2);
-            int16_t old_h     = dragged_window->h + (dragged_window->border_width * 2);
+            dwm_invalidate_region(dragged_window->x - dragged_window->border_width, dragged_window->y - dragged_window->border_width, dragged_window->w + (dragged_window->border_width * 2), dragged_window->h + (dragged_window->border_width * 2));
             
             dragged_window->x = new_x;
             dragged_window->y = new_y;
@@ -94,14 +65,7 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
             dragged_window->surface_w = dragged_window->w;
             dragged_window->surface_h = dragged_window->h - dragged_window->titlebar_height;
             
-            dwm_draw_redraw(old_min_x, old_min_y, old_w, old_h);
-            
-            dwm_invalidate_region(
-                dragged_window->x - dragged_window->border_width,
-                dragged_window->y - dragged_window->border_width,
-                dragged_window->w + (dragged_window->border_width * 2),
-                dragged_window->h + (dragged_window->border_width * 2)
-            );
+            dwm_invalidate_region(dragged_window->x - dragged_window->border_width, dragged_window->y - dragged_window->border_width, dragged_window->w + (dragged_window->border_width * 2), dragged_window->h + (dragged_window->border_width * 2));
             
             dragged_window->flags |= WINDOW_FLAG_REFRESH;
         }

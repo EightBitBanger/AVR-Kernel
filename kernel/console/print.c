@@ -14,7 +14,7 @@ void print(const char* str) {
         if (ch == '\n') {
             cursor_position = 0;
             
-            if (cursor_line < (display_get_columbs() - 1)) {
+            if (cursor_line < (display_get_columns() - 1)) {
                 cursor_line++;
             } else {
                 display_newline();
@@ -27,7 +27,7 @@ void print(const char* str) {
                 display_putc(ch);
                 cursor_position = 0;
                 
-                if (cursor_line < (display_get_columbs() - 1)) {
+                if (cursor_line < (display_get_columns() - 1)) {
                     cursor_line++;
                 } else {
                     display_newline();

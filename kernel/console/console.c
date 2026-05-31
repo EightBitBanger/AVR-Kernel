@@ -248,7 +248,7 @@ void console_print_reference_entry(uint32_t address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(kdir.name);
         
-        for (size_t i = 0; i < display_get_columbs() - (attr_len + name_len) - attr_len - 1; i++) 
+        for (size_t i = 0; i < display_get_columns() - (attr_len + name_len) - attr_len - 1; i++) 
             print(" ");
         
         print(msg_dir_sym);
@@ -285,7 +285,7 @@ void console_print_fs_entry(uint32_t directory_address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(header.block.name);
         if (header.block.attributes & FS_ATTRIBUTE_DIRECTORY) {
-            for (size_t i = 0; i < display_get_columbs() - (attr_len + name_len) - attr_len - 1; i++) 
+            for (size_t i = 0; i < display_get_columns() - (attr_len + name_len) - attr_len - 1; i++) 
                 print(" ");
             
             print(msg_dir_sym);
@@ -296,7 +296,7 @@ void console_print_fs_entry(uint32_t directory_address) {
             if (file_size > 99) size_len = 6;
             if (file_size > 999) size_len = 7;
             
-            for (size_t i = 0; i < display_get_columbs() - (size_len + name_len) - 1; i++) 
+            for (size_t i = 0; i < display_get_columns() - (size_len + name_len) - 1; i++) 
                 print(" ");
             
             print_int(file_size);

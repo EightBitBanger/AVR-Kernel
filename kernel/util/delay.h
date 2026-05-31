@@ -11,7 +11,6 @@
 
 #ifdef KERNEL_PLATFORM_X86
     
-    // PIT timer
     void delay_ms(uint32_t ms);
     
 #endif

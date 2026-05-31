@@ -9,7 +9,10 @@ uint16_t display_get_width(void);
 uint16_t display_get_height(void);
 
 uint16_t display_get_rows(void);
-uint16_t display_get_columbs(void);
+uint16_t display_get_columns(void);
+
+uint8_t display_get_glyph_width(void);
+uint8_t display_get_glyph_height(void);
 
 void display_putc(const char ch);
 void display_newline(void);

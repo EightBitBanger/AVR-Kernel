@@ -3,35 +3,20 @@
 
 #include <kernel/console/mouse.h>
 
+#define MAX_DIRTY_RECTS  32
+
+struct Rect {
+    int x, y, w, h;
+};
+
 struct WindowContext {
     Point mouse;
     
+    struct Rect dirty_regions[MAX_DIRTY_RECTS];
+    int dirty_count;
+    
     bool left_button_pressed;
     bool right_button_pressed;
-    
-    bool window_moved;
-    bool icon_moved;
-    bool menu_moved;
-    
-    int old_win_min_x;
-    int old_win_min_y;
-    int old_win_max_x;
-    int old_win_max_y;
-    
-    int old_icon_min_x;
-    int old_icon_min_y;
-    int old_icon_max_x;
-    int old_icon_max_y;
-    
-    int old_menu_min_x;
-    int old_menu_min_y;
-    int old_menu_max_x;
-    int old_menu_max_y;
-    
-    int min_x;
-    int min_y;
-    int max_x;
-    int max_y;
     
     uint32_t cursor_width;
     uint32_t cursor_height;

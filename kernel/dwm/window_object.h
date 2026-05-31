@@ -8,7 +8,12 @@
 struct WindowObject {
     WindowHandle id;
     
-    uint8_t flags;
+    uint16_t flags;
+    uint16_t style;
+    
+    struct WindowObject* parent;
+    struct list_node* children_head;
+    struct list_node* children_tail;
     
     void(*event_callback)(WindowHandle, wEvent);
     
