@@ -38,7 +38,7 @@ void dwm_update(void) {
             }
         }
         
-        // If the hovered item changed, we must trigger a redraw of the menu area
+        // Trigger a redraw of the menu area if the mouse is hovering
         if (context_menu.hovered_item != old_hover) {
             window_context.menu_moved = true;
             window_context.old_menu_min_x = context_menu.x;
@@ -56,7 +56,6 @@ void dwm_update(void) {
         dwm_update_mouse(&window_context);
     }
     
-    // Recalculates screen bounds, looping through generic window nodes internally
     dwm_calculate_flush_region(&window_context);
     dwm_draw_desktop(&window_context);
     

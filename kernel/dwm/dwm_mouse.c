@@ -60,13 +60,35 @@ bool handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, boo
     
     struct WindowObject* old_focused = (window_tail != NULL) ? (struct WindowObject*)window_tail->data : NULL;
     
-    dwm_set_focus(clicked_win);
-    clicked_win->flags |= WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW;
-    
-    if (old_focused && old_focused != clicked_win) {
-        old_focused->flags |= WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW;
+    if (old_focused != clicked_win) {
+        dwm_set_focus(clicked_win);
+        
         clicked_win->flags |= WINDOW_FLAG_REFRESH;
+        if (old_focused) {
+            old_focused->flags |= WINDOW_FLAG_REFRESH;
+            
+            dwm_draw_redraw(
+                old_focused->x - old_focused->border_width,
+                old_focused->y - old_focused->border_width,
+                old_focused->w + (old_focused->border_width * 2),
+                old_focused->h + (old_focused->border_width * 2)
+            );
+        }
+        
+        dwm_draw_redraw(
+            clicked_win->x - clicked_win->border_width,
+            clicked_win->y - clicked_win->border_width,
+            clicked_win->w + (clicked_win->border_width * 2),
+            clicked_win->h + (clicked_win->border_width * 2)
+        );
     }
+    
+    dwm_set_focus(clicked_win);
+    
+    clicked_win->flags |= WINDOW_FLAG_REFRESH;
+    
+    if (old_focused && old_focused != clicked_win) 
+        old_focused->flags |= WINDOW_FLAG_REFRESH;
     
     int title_min_x = clicked_win->x;
     int title_max_x = clicked_win->x + clicked_win->w;
@@ -76,17 +98,16 @@ bool handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, boo
     if (ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x &&
         ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
         
+        drag_offset_x = ctx->mouse.x - clicked_win->x;
+        drag_offset_y = ctx->mouse.y - clicked_win->y;
+        
         if (is_new_left_click) {
             dragged_window = clicked_win;
-            drag_offset_x = ctx->mouse.x - clicked_win->x;
-            drag_offset_y = ctx->mouse.y - clicked_win->y;
-        } 
-        else if (is_new_right_click) {
             
-            // Right click on title bar
+        } else if (is_new_right_click) {
+            old_focused->flags |= WINDOW_FLAG_REFRESH;
             
             //destroy_window((WindowHandle)clicked_win->id);
-            
         }
     }
     
