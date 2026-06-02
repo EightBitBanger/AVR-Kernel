@@ -31,35 +31,42 @@ extern char _kernel_memory_end[];
 extern uint32_t display_width;
 extern uint32_t display_height;
 
-uint32_t counterA=0;
-void callback_handler(WindowHandle handle, wEvent event) {
-    counterA++;
+
+void trigger_test_page_fault(void) {
+    // 0x40000000 is 1 GB, which is well above your 64 MB (0x04000000) mapped region.
+    // The page directory entry for this address will have the Present bit (VM_PRESENT) set to 0.
+    volatile uint32_t* unmapped_address = (volatile uint32_t*)0x40000000;
     
+    // Attempting to read from or write to this unmapped address will force an architectural Page Fault (#PF)
+    uint32_t crash_trigger = *unmapped_address;
+    
+    // Prevent the compiler from optimizing away the read operation
+    (void)crash_trigger; 
+}
+
+
+uint32_t counter=0;
+void callback_handler(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_REDRAW:
+        //dwm_draw_rect_filled(0, 0, 100, 100, 0xFFEFEFEF);
         
-        dwm_draw_rect(  0, 100, 1024,   32, 0xFFFF0000, true);
-        dwm_draw_rect(100,   0,   32, 1024, 0xFF00FF00, true);
-        dwm_draw_rect(100, 100, 1024,   32, 0xFF0000FF, true);
-        
-        char number[16];
-        itos(counterA, number);
-        
-        dwm_draw_rect(10, 10, 100,  40, 0xFF000000, true);
-        dwm_draw_text(10, 10, number, 0xFF0AEA0A);
-        
+        dwm_draw_text(5, 10, "Hey what the fuck", 0xFFFFFFFF);
         break;
     }
 }
 
 void callback_button_handler(WindowHandle handle, wEvent event) {
-    
     switch (event) {
+    case EVENT_MOUSE:
+        trigger_test_page_fault();
+        break;
+        
     case EVENT_REDRAW:
+        dwm_draw_rect_filled(0, 0, 65, 27, 0xFF555555);
+        dwm_draw_rect_filled(1, 1, 63, 25, 0xFF222282);
         
-        dwm_draw_rect(  0, 0, 1024, 1024, 0xFF222222, true);
-        
-        dwm_draw_text(10, 10, "ok", 0xFF0AEA0A);
+        dwm_draw_text(25, 9, "ok", 0xFF0AEA0A);
         
         break;
     }
@@ -67,29 +74,21 @@ void callback_button_handler(WindowHandle handle, wEvent event) {
 
 void desktop_environment_init(void) {
     
-    struct WindowClass wclass;
-    wclass.x = 200;
-    wclass.y = 100;
-    wclass.width = 250;
-    wclass.height = 250;
-    wclass.event_handler = callback_handler;
+    WindowClass wclass;
+    wclass.x = 200 + 30;
+    wclass.y = 100 + 40;
+    wclass.width = 200;
+    wclass.height = 100;
+    WindowHandle window = create_window(wclass, 0, callback_handler);
     
-    WindowHandle window = create_window(wclass, 0);
+    WindowClass wclassbutton;
+    wclassbutton.x = 67;
+    wclassbutton.y = 56;
+    wclassbutton.width = 65;
+    wclassbutton.height = 27;
+    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
     
-    
-    
-    struct WindowClass wclassbutton;
-    wclassbutton.x = 100;
-    wclassbutton.y = 300;
-    wclassbutton.width = 80;
-    wclassbutton.height = 30;
-    wclassbutton.event_handler = callback_button_handler;
-    
-    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_TOPMOST);
-    
-    
-    //dwm_window_set_parent(button, window);
-    
+    dwm_window_set_parent(button, window);
     
 }
 
@@ -98,7 +97,7 @@ void init_sse(void) {
     uint32_t cr0;
     uint32_t cr4;
     
-    // 1. Read current CR0
+    // Read current CR0
     asm volatile("mov %%cr0, %0" : "=r"(cr0));
     
     // Clear the EM (Emulation) bit (bit 2) -> We have a real FPU, don't emulate it
@@ -109,12 +108,12 @@ void init_sse(void) {
     // Write back to CR0
     asm volatile("mov %0, %%cr0" :: "r"(cr0));
     
-    // 2. Read current CR4
+    // Read current CR4
     asm volatile("mov %%cr4, %0" : "=r"(cr4));
     
-    // Set OSFXSR (bit 9) -> Tells the OS that it supports FXSAVE/FXRSTOR for SSE state
+    // Set OSFXSR (bit 9) -> FXSAVE/FXRSTOR support for SSE state
     cr4 |= (1 << 9);
-    // Set OSXMMEXCPT (bit 10) -> Tells the CPU to use unmasked SIMD floating-point exceptions (#XM)
+    // Set OSXMMEXCPT (bit 10) -> Use unmasked SIMD floating-point exceptions (#XM)
     cr4 |= (1 << 10);
     
     // Write back to CR4
@@ -126,24 +125,20 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
         return;
     
-    // Verify GRUB successfully gave us a Linear Framebuffer (Bit 11 check)
     if ((mbi_info->flags & (1 << 11)) == 0) 
         return;
     
-    // Set the table for the kernel
     gdt_initiate();
     idt_initiate();
     
     //init_sse();
     
-    // Millisecond timer
     timer_init();
     
     char keyboard_string[255];
     char prompt_string[255];
     char virtual_key_map[255];
     
-    //
     // Frame buffer
     
     draw_set_info((uint32_t)mbi_info);
@@ -153,7 +148,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     paging_initiate(mbi_info);
     
-    // Calculate dimensions exactly like you used to
     uint32_t fb_pixels = mbi_info->framebuffer_width * mbi_info->framebuffer_height;
     uint32_t fb_size_bytes = fb_pixels * sizeof(uint32_t);
     
@@ -181,7 +175,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     kb_map_init(virtual_key_map, sizeof(virtual_key_map));
     
     mouse_initiate();
-    mouse_set_cursor_speed(12, 12);
+    mouse_set_cursor_speed(14, 14);
     mouse_set_cursor_acceleration(2);
     
     console_init(keyboard_string, prompt_string, sizeof(keyboard_string), sizeof(prompt_string));
@@ -246,27 +240,62 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     dwm_initiate();
     
+    // Set a mouse cursor
     uint32_t* cursor_sprite = malloc(sizeof(uint32_t) * rc_cursor_pointer.width * rc_cursor_pointer.height);
     sprite_get_bitmap(cursor_sprite, &rc_cursor_pointer);
-    
     dwm_set_cursor(cursor_sprite, rc_cursor_pointer.width, rc_cursor_pointer.height);
+    
     
     desktop_environment_init();
     
+    
     create_folder(30, 30, "new folder");
+    
+    
     
     
     // Event system
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
     
+    // Event system should forward a data byte value to the event handler
+    // example (EVENT_MOUSE & BUTTON_INFO)
+    
+    // Window position style WINDOW_STYLE_START_CENTERED  or something similar
+    
     // Scalable vector font
+    
     
     // Buttons
     
     while(1) {
         
         dwm_update();
+        
+        
+        
+        //
+        // Testing - rapid creation / deletion
+        //
+        
+        /*
+        
+        WindowClass wclass;
+        wclass.x = 0;
+        wclass.y = 0;
+        wclass.width = 65;
+        wclass.height = 27;
+        wclass.event_handler = NULL;
+        
+        WindowHandle window = create_window(wclass, WINDOW_STYLE_NOBORDERS);
+        
+        
+        
+        destroy_window(window);
+        
+        */
+        
+        
         
         __asm__ volatile ("hlt");
         

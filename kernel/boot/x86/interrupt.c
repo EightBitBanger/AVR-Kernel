@@ -66,7 +66,7 @@ void c_dummy_handler(void) {
 
 void isr_callback_fault_handler(uint32_t error_code, uint32_t faulting_address, uint8_t type) {
     
-    kernel_panic_screen(error_code, faulting_address, type);
+    kernel_crashout(error_code, faulting_address, type);
     
     while(1);
 }
