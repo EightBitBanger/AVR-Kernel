@@ -15,6 +15,8 @@ struct WindowObject {
     struct list_node* children_head;
     struct list_node* children_tail;
     
+    uint16_t events;
+    
     void(*event_callback)(WindowHandle, wEvent);
     
     // Position and size
@@ -23,6 +25,9 @@ struct WindowObject {
     uint16_t y;
     uint16_t w;
     uint16_t h;
+    
+    uint16_t local_x;
+    uint16_t local_y;
     
     // Drawing area
     

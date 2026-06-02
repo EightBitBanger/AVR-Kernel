@@ -10,8 +10,8 @@
 
 #include <kernel/dwm/dwm_core_internal.h>
 
-bool handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click);
-void handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click);
+bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click);
+void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click);
 
 void dwm_update_mouse(struct WindowContext* ctx) {
     bool is_new_left_click = ctx->left_button_pressed && !old_left_button_pressed;
@@ -24,82 +24,110 @@ void dwm_update_mouse(struct WindowContext* ctx) {
         dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
     }
     
-    if (handle_window_clicks(ctx, is_new_left_click, is_new_right_click)) return;
-    handle_icon_clicks(ctx, is_new_left_click, is_new_right_click);
+    if (dwm_handle_window_clicks(ctx, is_new_left_click, is_new_right_click)) 
+        return;
+    
+    dwm_handle_icon_clicks(ctx, is_new_left_click, is_new_right_click);
 }
 
-bool handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
-    struct WindowObject* clicked_win = NULL;
-    
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mouse_x, int mouse_y) {
+    // Traverse backwards through the current z-order level (top-most first)
+    for (struct list_node* node = tail_node; node != NULL; node = node->prev) {
         struct WindowObject* window = (struct WindowObject*)node->data;
-        int full_min_x = window->x - window->border_width;
-        int full_max_x = window->x + window->w + window->border_width;
-        int full_min_y = window->y - window->border_width;
-        int full_max_y = window->y + window->h + window->border_width;
         
-        if (ctx->mouse.x >= full_min_x && ctx->mouse.x <= full_max_x &&
-            ctx->mouse.y >= full_min_y && ctx->mouse.y <= full_max_y) {
-            clicked_win = window; 
+        int abs_x, abs_y;
+        dwm_get_absolute_position(window, &abs_x, &abs_y);
+        
+        int full_min_x = abs_x - window->border_width;
+        int full_max_x = abs_x + window->w + window->border_width;
+        int full_min_y = abs_y - window->border_width - window->titlebar_height;
+        int full_max_y = abs_y + window->h + window->border_width;
+        
+        if (mouse_x >= full_min_x && mouse_x <= full_max_x &&
+            mouse_y >= full_min_y && mouse_y <= full_max_y) {
+            
+            // Check child window clicks
+            if (window->children_tail != NULL) {
+                struct WindowObject* clicked_child = dwm_find_clicked_window(window->children_tail, mouse_x, mouse_y);
+                if (clicked_child != NULL) {
+                    return clicked_child; // A child intercepted the click!
+                }
+            }
+            
+            // No children where selected, this window itself is the target
+            return window;
         }
     }
+    return NULL;
+}
+
+bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
+    // Kick off the recursive search starting from the top-most desktop window
+    struct WindowObject* clicked_win = dwm_find_clicked_window(window_tail, ctx->mouse.x, ctx->mouse.y);
     
-    if (clicked_win == NULL) return false; 
+    if (clicked_win == NULL) return false;
+    
+    // Assign the mouse event to the specific window or child button that was clicked
+    clicked_win->events |= EVENT_MOUSE;
+    
+    // If it's a child window, we want to shift focus/z-order tracking to its top-level root parent
+    struct WindowObject* root_win = clicked_win;
+    while (root_win->parent != NULL) {
+        root_win = root_win->parent;
+    }
     
     struct WindowObject* old_focused = (window_tail != NULL) ? (struct WindowObject*)window_tail->data : NULL;
     
-    if (old_focused != clicked_win) {
-        dwm_set_focus(clicked_win);
-        clicked_win->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE); 
+    if (old_focused != root_win) {
+        dwm_set_focus(root_win);
+        root_win->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE); 
+        
         if (old_focused) {
             old_focused->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
-            dwm_invalidate_region(old_focused->x - old_focused->border_width, old_focused->y - old_focused->border_width, old_focused->w + (old_focused->border_width * 2), old_focused->h + (old_focused->border_width * 2));
+            
+            int old_abs_x, old_abs_y;
+            dwm_get_absolute_position(old_focused, &old_abs_x, &old_abs_y);
+            dwm_invalidate_region(old_abs_x - old_focused->border_width, 
+                                  old_abs_y - old_focused->border_width, 
+                                  old_focused->w + (old_focused->border_width * 2), 
+                                  old_focused->h + (old_focused->border_width * 2));
         }
         
-        dwm_invalidate_region(clicked_win->x - clicked_win->border_width, clicked_win->y - clicked_win->border_width, clicked_win->w + (clicked_win->border_width * 2), clicked_win->h + (clicked_win->border_width * 2));
-        
-        int title_min_x = clicked_win->x;
-        int title_max_x = clicked_win->x + clicked_win->w;
-        int title_min_y = clicked_win->y;
-        int title_max_y = clicked_win->y + clicked_win->titlebar_height - 1;
-        
-        if ((!(clicked_win->style & WINDOW_STYLE_NOBORDERS)) && ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
-            drag_offset_x = ctx->mouse.x - clicked_win->x;
-            drag_offset_y = ctx->mouse.y - clicked_win->y;
-            
-            if (is_new_left_click) {
-                
-                dragged_window = clicked_win;
-            }
-            
-            if (is_new_right_click) {
-                
-                destroy_window((WindowHandle)clicked_win->id);
-            }
-        }
-        return true;
+        int root_abs_x, root_abs_y;
+        dwm_get_absolute_position(root_win, &root_abs_x, &root_abs_y);
+        dwm_invalidate_region(root_abs_x - root_win->border_width, 
+                              root_abs_y - root_win->border_width, 
+                              root_win->w + (root_win->border_width * 2), 
+                              root_win->h + (root_win->border_width * 2));
     }
     
-    dwm_set_focus(clicked_win);
-    clicked_win->flags |= WINDOW_FLAG_REFRESH;
+    int clicked_abs_x, clicked_abs_y;
+    dwm_get_absolute_position(clicked_win, &clicked_abs_x, &clicked_abs_y);
     
-    int title_min_x = clicked_win->x;
-    int title_max_x = clicked_win->x + clicked_win->w;
-    int title_min_y = clicked_win->y;
-    int title_max_y = clicked_win->y + clicked_win->titlebar_height - 1;
+    int title_min_x = clicked_abs_x;
+    int title_max_x = clicked_abs_x + clicked_win->w;
+    int title_min_y = clicked_abs_y;
+    int title_max_y = clicked_abs_y + clicked_win->titlebar_height - 1;
     
-    if ((!(clicked_win->style & WINDOW_STYLE_NOBORDERS)) && ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
+    if ((!(clicked_win->style & WINDOW_STYLE_NOBORDERS)) && 
+        ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && 
+        ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
+        
         drag_offset_x = ctx->mouse.x - clicked_win->x;
         drag_offset_y = ctx->mouse.y - clicked_win->y;
-        if (is_new_left_click) dragged_window = clicked_win;
-        else if (is_new_right_click) destroy_window((WindowHandle)clicked_win->id);
+        
+        if (is_new_left_click) {
+            dragged_window = clicked_win;
+        }
     }
     
     return true; 
 }
 
-void handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
+void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
     struct IconObject* clicked_icon = NULL;
+    
+    // Get a clicked icon
     
     for (struct list_node* node = icon_head; node != NULL; node = node->next) {
         struct IconObject* icon = (struct IconObject*)node->data;
@@ -121,14 +149,26 @@ void handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool 
             if (clicked_icon == last_clicked_icon && (current_time - last_icon_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
                 last_clicked_icon = NULL;
                 last_icon_click_time = 0;
+                
+                // Left mouse double click
+                
+                WindowClass wclass;
+                wclass.x = 200;
+                wclass.y = 100;
+                wclass.width = 250;
+                wclass.height = 250;
+                
+                WindowHandle window = create_window(wclass, 0, NULL);
+                
             } else {
                 dragged_icon = clicked_icon;
+                
                 icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
                 icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
                 last_clicked_icon = clicked_icon;
                 last_icon_click_time = current_time;
             }
-        } 
+        }
         else if (is_new_right_click) {
             context_menu.visible = true;
             context_menu.x = ctx->mouse.x;
@@ -151,7 +191,11 @@ void handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool 
             dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
         }
     } else {
+        
+        // Desktop click
+        
         if (is_new_left_click) {
+            
             last_clicked_icon = NULL;
         }
         else if (is_new_right_click) {

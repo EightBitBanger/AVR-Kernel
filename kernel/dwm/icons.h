@@ -13,6 +13,8 @@ extern const struct Sprite rc_button_plus;
 
 extern const struct Sprite rc_button_arrow_down;
 extern const struct Sprite rc_button_arrow_up;
+extern const struct Sprite rc_minimize;
+extern const struct Sprite rc_close;
 
 extern const struct Sprite rc_icon_file;
 extern const struct Sprite rc_icon_document;

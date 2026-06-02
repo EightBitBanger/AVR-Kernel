@@ -15,6 +15,7 @@
 struct list_node {
     void* data;
     struct list_node* next;
+    struct list_node* prev;
 };
 
 static inline bool list_append(struct list_node** head, struct list_node** tail, void* data) {
@@ -23,11 +24,13 @@ static inline bool list_append(struct list_node** head, struct list_node** tail,
     
     new_node->data = data;
     new_node->next = NULL;
+    new_node->prev = NULL;
     
     if (*head == NULL) {
         *head = new_node;
         *tail = new_node;
     } else {
+        new_node->prev = *tail;
         (*tail)->next = new_node;
         *tail = new_node;
     }
@@ -37,24 +40,24 @@ static inline bool list_append(struct list_node** head, struct list_node** tail,
 static inline bool list_remove(struct list_node** head, struct list_node** tail, void* target_data) {
     if (*head == NULL) return false;
     
-    struct list_node* prev = NULL;
     struct list_node* current = *head;
     
     while (current != NULL && current->data != target_data) {
-        prev = current;
         current = current->next;
     }
     
     if (current == NULL) return false;
     
-    if (prev != NULL) {
-        prev->next = current->next;
+    if (current->prev != NULL) {
+        current->prev->next = current->next;
     } else {
         *head = current->next;
     }
     
-    if (current == *tail) {
-        *tail = prev;
+    if (current->next != NULL) {
+        current->next->prev = current->prev;
+    } else {
+        *tail = current->prev;
     }
     
     free(current);

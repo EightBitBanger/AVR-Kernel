@@ -12,6 +12,101 @@ bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int
     return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
 }
 
+void dwm_sync_child_positions(struct WindowObject* parent) {
+    if (parent == NULL) return;
+    
+    struct list_node* current = parent->children_head;
+    while (current != NULL) {
+        struct WindowObject* child = (struct WindowObject*)current->data;
+        
+        // Update child's absolute positions using its local offsets and parent surface bounds
+        child->x = parent->surface_x + child->local_x;
+        child->y = parent->surface_y + child->local_y;
+        
+        // Re-calculate the child's client surface bounds based on its new absolute position
+        child->surface_x = child->x;
+        child->surface_y = child->y + child->titlebar_height + (child->border_width ? 1 : 0);
+        
+        // Propagate updates further down the layout tree if this child has children
+        dwm_sync_child_positions(child);
+        
+        current = current->next;
+    }
+}
+
+void dwm_render_window_recursive(struct WindowObject* window, const struct WindowContext* ctx, uint32_t* frame_buffer, uint32_t screen_stride) {
+    if (window == NULL) return;
+
+    int win_min_x = window->x - window->border_width;
+    int win_min_y = window->y - window->border_width;
+    int win_w = window->w + (window->border_width * 2);
+    int win_h = window->h + (window->border_width * 2);
+    
+    // Check intersection with dirty regions
+    bool dirty_intersection = false;
+    for (int i = 0; i < ctx->dirty_count; i++) {
+        struct Rect r = ctx->dirty_regions[i];
+        if (rects_intersect(r.x, r.y, r.w, r.h, win_min_x, win_min_y, win_w, win_h)) {
+            dirty_intersection = true;
+            break;
+        }
+    }
+    
+    int do_redraw = dirty_intersection || (window->flags & (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE));
+    
+    // Process window events
+    
+    dwm_process_events( window );
+    
+    if (do_redraw) {
+        // Handle application-level redraw request
+        if (window->flags & WINDOW_FLAG_REDRAW) { 
+            window->flags &= ~WINDOW_FLAG_REDRAW;
+            
+            draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
+            draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
+            
+            event_window = window;
+            if (window->event_callback != NULL) {
+                window->event_callback(window->id, EVENT_REDRAW);
+            }
+            event_window = NULL;
+            
+            draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
+            draw_set_buffer_default();
+        }
+        
+        // Render decorations and upload client buffer
+        if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
+            int clip_x, clip_y, clip_w, clip_h;
+            
+            if (window->style & WINDOW_STYLE_NOBORDERS) {
+                clip_x = window->x; clip_y = window->y; clip_w = window->w; clip_h = window->h;
+            } else {
+                clip_x = win_min_x + 1;
+                clip_y = win_min_y + window->titlebar_height + 1;
+                clip_w = window->w;
+                clip_h = window->h - window->titlebar_height;
+            }
+            
+            dwm_draw_window(window);
+            dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+            
+            window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
+        }
+    }
+    
+    // Draw the children immediately after drawing the base window
+    
+    struct list_node* current = window->children_head;
+    while (current != NULL) {
+        struct WindowObject* child = (struct WindowObject*)current->data;
+        dwm_render_window_recursive(child, ctx, frame_buffer, screen_stride);
+        current = current->next;
+    }
+}
+
+
 void dwm_draw_desktop(const struct WindowContext* ctx) {
     
     // Clear out background pixels for all localized dirty regions
@@ -33,7 +128,8 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         }
     }
     
-    // Draw Desktop Icons
+    // Draw desktop icons
+    
     struct list_node* current_node = icon_head;
     while (current_node != NULL) {
         struct IconObject* current_icon = (struct IconObject*)current_node->data;
@@ -76,170 +172,40 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     extern uint32_t* frame_buffer;
     const uint32_t screen_stride = vinfo->framebuffer_pitch / 4;
     
-    // Draw Windows
+    // Sync positions before drawing
     for (struct list_node* node = window_head; node != NULL; node = node->next) {
         struct WindowObject* window = (struct WindowObject*)node->data;
-        
-        int win_min_x = window->x - window->border_width;
-        int win_min_y = window->y - window->border_width;
-        int win_w = window->w + (window->border_width * 2);
-        int win_h = window->h + (window->border_width * 2);
-        
-        bool dirty_intersection = false;
-        for (int i = 0; i < ctx->dirty_count; i++) {
-            struct Rect r = ctx->dirty_regions[i];
-            if (rects_intersect(r.x, r.y, r.w, r.h, win_min_x, win_min_y, win_w, win_h)) {
-                dirty_intersection = true;
-                break;
-            }
-        }
-        
-        int do_redraw = dirty_intersection || (window->flags & (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE));
-        if (!do_redraw) continue;
-        
-        for (struct list_node* node = window_head; node != NULL; node = node->next) {
-            struct WindowObject* window = (struct WindowObject*)node->data;
-            
-            // Skip topmost windows on the first pass
-            if (window->style & WINDOW_STYLE_TOPMOST) {
-                continue;
-            }
-            
-            int win_min_x = window->x - window->border_width;
-            int win_min_y = window->y - window->border_width;
-            int win_w = window->w + (window->border_width * 2);
-            int win_h = window->h + (window->border_width * 2);
-            
-            bool dirty_intersection = false;
-            for (int i = 0; i < ctx->dirty_count; i++) {
-                struct Rect r = ctx->dirty_regions[i];
-                if (rects_intersect(r.x, r.y, r.w, r.h, win_min_x, win_min_y, win_w, win_h)) {
-                    dirty_intersection = true;
-                    break;
-                }
-            }
-            
-            int do_redraw = dirty_intersection || (window->flags & (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE));
-            if (!do_redraw) continue;
-            
-            if (window->flags & WINDOW_FLAG_REDRAW) { 
-                window->flags &= ~WINDOW_FLAG_REDRAW;
-                
-                draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
-                draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
-                
-                event_window = window;
-                if (window->event_callback != NULL) {
-                    window->event_callback(window->id, EVENT_REDRAW);
-                }
-                event_window = NULL;
-                
-                draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
-                draw_set_buffer_default();
-            }
-            
-            if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
-                int clip_x, clip_y, clip_w, clip_h;
-                
-                if (window->style & WINDOW_STYLE_NOBORDERS) {
-                    clip_x = window->x;
-                    clip_y = window->y;
-                    clip_w = window->w;
-                    clip_h = window->h;
-                } else {
-                    clip_x = win_min_x + 1;
-                    clip_y = win_min_y + window->titlebar_height + 1;
-                    clip_w = window->w;
-                    clip_h = window->h - window->titlebar_height;
-                }
-                
-                dwm_draw_window(window);
-                dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
-                
-                window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
-            }
-        }
-        
-        // Draw topmost windows
-        
-        for (struct list_node* node = window_head; node != NULL; node = node->next) {
-            struct WindowObject* window = (struct WindowObject*)node->data;
-            
-            // Skip regular windows on this pass
-            if (!(window->style & WINDOW_STYLE_TOPMOST)) {
-                continue;
-            }
-            
-            int win_min_x = window->x - window->border_width;
-            int win_min_y = window->y - window->border_width;
-            int win_w = window->w + (window->border_width * 2);
-            int win_h = window->h + (window->border_width * 2);
-            
-            bool dirty_intersection = false;
-            for (int i = 0; i < ctx->dirty_count; i++) {
-                struct Rect r = ctx->dirty_regions[i];
-                if (rects_intersect(r.x, r.y, r.w, r.h, win_min_x, win_min_y, win_w, win_h)) {
-                    dirty_intersection = true;
-                    break;
-                }
-            }
-            
-            int do_redraw = dirty_intersection || (window->flags & (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE));
-            if (!do_redraw) continue;
-            
-            if (window->flags & WINDOW_FLAG_REDRAW) { 
-                window->flags &= ~WINDOW_FLAG_REDRAW;
-                
-                draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
-                draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
-                
-                event_window = window;
-                if (window->event_callback != NULL) {
-                    window->event_callback(window->id, EVENT_REDRAW);
-                }
-                event_window = NULL;
-                
-                draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
-                draw_set_buffer_default();
-            }
-            
-            if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
-                int clip_x, clip_y, clip_w, clip_h;
-                
-                if (window->style & WINDOW_STYLE_NOBORDERS) {
-                    clip_x = window->x;
-                    clip_y = window->y;
-                    clip_w = window->w;
-                    clip_h = window->h;
-                } else {
-                    clip_x = win_min_x + 1;
-                    clip_y = win_min_y + window->titlebar_height + 1;
-                    clip_w = window->w;
-                    clip_h = window->h - window->titlebar_height;
-                }
-                
-                dwm_draw_window(window);
-                dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
-                
-                window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
-            }
+        if (window->parent == NULL) {
+            dwm_sync_child_positions(window);
         }
     }
     
-    //
-    // Draw Taskbar mock up
-    // This will likely be a 'window' with special styling..
+    // Draw windows
     
-    //uint32_t bar_color_low  = 0x7F008000;
-    //uint32_t bar_color_high = 0x7F001000;
+    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+        struct WindowObject* window = (struct WindowObject*)node->data;
+        
+        // Only process root windows that are NOT topmost and NOT children
+        if ((window->style & WINDOW_STYLE_TOPMOST) || (window->parent != NULL) || (window->style & WINDOW_STYLE_CHILD)) 
+            continue;
+        
+        dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
+    }
     
-    //draw_rect_filled_blend(bar_x, bar_y, bar_w, bar_h, bar_color_low);
-    //dwm_invalidate_region(bar_x, bar_y, bar_w, bar_h);
+    // Draw top most windows
     
+    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+        struct WindowObject* window = (struct WindowObject*)node->data;
+        
+        // Only process root windows that ARE topmost and NOT children
+        if (!(window->style & WINDOW_STYLE_TOPMOST) || (window->parent != NULL) || (window->style & WINDOW_STYLE_CHILD)) {
+            continue;
+        }
+        
+        dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
+    }
     
-    //
-    // Draw context menu
-    
+    // Context Menu Rendering
     if (context_menu.visible) {
         uint16_t menu_height = context_menu.item_height * context_menu.item_count;
         context_menu.h = menu_height;
