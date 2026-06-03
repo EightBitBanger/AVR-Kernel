@@ -22,12 +22,12 @@ void gdt_initiate(void) {
     gdt_ptr.limit = (sizeof(gdt_entry_t) * 5) - 1;
     gdt_ptr.base  = (uint32_t)&gdt_entries;
     
-    // 1. Null descriptor
+    // Null the descriptor
     gdt_set_gate(0, 0, 0, 0, 0);                
-    gdt_set_gate(1, 0, 0xFFFFF, 0x9A, 0xCF);  // 2. Kernel Code: Base 0, Limit 4GB, Ring 0, Executable
-    gdt_set_gate(2, 0, 0xFFFFF, 0x92, 0xCF);  // 3. Kernel Data: Base 0, Limit 4GB, Ring 0, Writable
-    gdt_set_gate(3, 0, 0xFFFFF, 0xFA, 0xCF);  // 4. User Code:   Base 0, Limit 4GB, Ring 3, Executable
-    gdt_set_gate(4, 0, 0xFFFFF, 0xF2, 0xCF);  // 5. User Data:   Base 0, Limit 4GB, Ring 3, Writable
+    gdt_set_gate(1, 0, 0xFFFFF, 0x9A, 0xCF);  // Kernel Code: Base 0, Limit 4GB, Ring 0, Executable
+    gdt_set_gate(2, 0, 0xFFFFF, 0x92, 0xCF);  // Kernel Data: Base 0, Limit 4GB, Ring 0, Writable
+    gdt_set_gate(3, 0, 0xFFFFF, 0xFA, 0xCF);  // User Code:   Base 0, Limit 4GB, Ring 3, Executable
+    gdt_set_gate(4, 0, 0xFFFFF, 0xF2, 0xCF);  // User Data:   Base 0, Limit 4GB, Ring 3, Writable
     
     // Inform the CPU via assembly
     gdt_flush((uint32_t)&gdt_ptr);

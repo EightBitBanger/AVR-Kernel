@@ -34,7 +34,7 @@ section .text
 global _start
     
 _start:
-    ; 1. Set up the stack safely
+    ; Set up the stack safely
     mov esp, stack_top    
     and esp, 0xFFFFFFF0    
     
@@ -63,9 +63,8 @@ _start:
     
 .skip_sse:
     
-    ; 2. --- JUMP TO C KERNEL ---
     extern kmain
-    call kmain                                  ; Arguments (eax, ebx) are already pushed
+    call kmain                                  ;
     
 .hang:
     hlt                
@@ -77,7 +76,7 @@ gdt_flush:
     mov eax, [esp + 4]  ; Get the pointer to the gdt_ptr passed from C
     lgdt [eax]          ; Load the new GDT structure
     
-    ; Reload all data segment registers to point to our Kernel Data Descriptor (0x10)
+    ; Reload all data segment registers to point to the kernel data descriptor (0x10)
     mov ax, 0x10      
     mov ds, ax
     mov es, ax
@@ -85,7 +84,7 @@ gdt_flush:
     mov gs, ax
     mov ss, ax
     
-    ; Far jump to reload the Code Segment Register (CS) to our Kernel Code Descriptor (0x08)
+    ; Far jump to reload the Code Segment Register (CS) to the kernel code descriptor (0x08)
     jmp 0x08:.reload_cs
     
 .reload_cs:

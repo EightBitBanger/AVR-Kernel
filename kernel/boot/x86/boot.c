@@ -45,13 +45,12 @@ void trigger_test_page_fault(void) {
 }
 
 
-uint32_t counter=0;
 void callback_handler(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_REDRAW:
         //dwm_draw_rect_filled(0, 0, 100, 100, 0xFFEFEFEF);
         
-        dwm_draw_text(5, 10, "Hey what the fuck", 0xFFFFFFFF);
+        dwm_draw_text(5, 10, "Fancy message box...", 0xFFFFFFFF);
         break;
     }
 }
@@ -240,16 +239,12 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     dwm_initiate();
     
-    // Set a mouse cursor
-    uint32_t* cursor_sprite = malloc(sizeof(uint32_t) * rc_cursor_pointer.width * rc_cursor_pointer.height);
-    sprite_get_bitmap(cursor_sprite, &rc_cursor_pointer);
-    dwm_set_cursor(cursor_sprite, rc_cursor_pointer.width, rc_cursor_pointer.height);
-    
-    
     desktop_environment_init();
     
     
-    create_folder(30, 30, "new folder");
+    create_folder(30, 30, "system");
+    create_folder(30, 130, "new folder");
+    
     
     
     
@@ -258,15 +253,10 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
     
-    // Event system should forward a data byte value to the event handler
-    // example (EVENT_MOUSE & BUTTON_INFO)
-    
-    // Window position style WINDOW_STYLE_START_CENTERED  or something similar
+    // Make context menus instantiable for sub menuing
     
     // Scalable vector font
     
-    
-    // Buttons
     
     while(1) {
         
@@ -277,23 +267,33 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         //
         // Testing - rapid creation / deletion
         //
-        
         /*
+        WindowHandle parent;
         
+        {
         WindowClass wclass;
         wclass.x = 0;
         wclass.y = 0;
         wclass.width = 65;
         wclass.height = 27;
-        wclass.event_handler = NULL;
+        parent = create_window(wclass, WINDOW_STYLE_NOBORDERS, NULL);
+        }
         
-        WindowHandle window = create_window(wclass, WINDOW_STYLE_NOBORDERS);
+        {
+        for (unsigned int i=0; i < 8; i++) {
+            WindowClass wclass;
+            wclass.x = 0;
+            wclass.y = 0;
+            wclass.width = 65;
+            wclass.height = 27;
+            WindowHandle child = create_window(wclass, WINDOW_STYLE_NOBORDERS, NULL);
+            dwm_window_set_parent(child, parent);
+        }
+        }
         
-        
-        
-        destroy_window(window);
-        
+        destroy_window(parent);
         */
+        
         
         
         
