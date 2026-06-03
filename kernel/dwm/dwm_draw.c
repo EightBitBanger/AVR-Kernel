@@ -1,12 +1,8 @@
 #include <kernel/dwm/dwm.h>
-#include <kernel/dwm/icons.h>
-#include <kernel/console/display.h>
-#include <kernel/dwm/icon_object.h>
-#include <kernel/util/list.h>
-#include <kernel/util/timer.h>
-#include <kernel/util/string.h>
-
 #include <kernel/dwm/dwm_core_internal.h>
+#include <kernel/console/display.h>
+#include <kernel/util/list.h>
+#include <kernel/util/string.h>
 
 bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2) {
     return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
@@ -56,7 +52,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
     
     // Process window events
     
-    dwm_process_events( window );
+    dwm_process_window_events( window );
     
     if (do_redraw) {
         // Handle application-level redraw request
@@ -238,7 +234,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     }
     
     // Redraw cursor sprite
-    draw_sprite_blend(cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
+    draw_sprite_blend(current_cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
 }
 
 void dwm_draw_window(struct WindowObject* window_handle) {
@@ -260,11 +256,21 @@ void dwm_draw_window(struct WindowObject* window_handle) {
         draw_rect_filled(wx, wy, ww, window_handle->titlebar_height, current_title_color_low);
     }
     
+    // Draw the window outer borders
     for (uint8_t b = 1; b <= window_handle->border_width; b++) {
         draw_rect(window_handle->x - b, window_handle->y - b, window_handle->w + (b * 2), window_handle->h + (b * 2), window_handle->border_color);
     }
     
-    for (uint8_t b = 0; b < window_handle->border_width; b++) {
-        draw_line(window_handle->x, window_handle->y + window_handle->titlebar_height + b - 1, window_handle->x + window_handle->w, window_handle->y + window_handle->titlebar_height + b - 1, window_handle->border_color);
+    // Draw window button
+    for (struct list_node* node = window_handle->buttons_head; node != NULL; node = node->next) {
+        struct WindowButton* btn = (struct WindowButton*)node->data;
+        
+        if (btn->img.data == NULL) 
+            continue;
+        
+        int32_t btn_abs_x = wx + btn->x;
+        int32_t btn_abs_y = wy + btn->y;
+        
+        draw_sprite_blend(btn->img.data, btn->img.width, btn->img.height, btn_abs_x, btn_abs_y, 0xFF000000);
     }
 }

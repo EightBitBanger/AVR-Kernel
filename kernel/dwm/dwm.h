@@ -5,17 +5,22 @@
 
 #include <kernel/dwm/rendering/image.h>
 
-#include <kernel/dwm/icons.h>
-#include <kernel/dwm/icon_object.h>
+#include <kernel/dwm/images/icon.h>
+#include <kernel/dwm/images/ui.h>
+#include <kernel/dwm/images/cursor.h>
 
-#include <kernel/dwm/window_context.h>
-#include <kernel/dwm/window_object.h>
-#include <kernel/dwm/window_handle.h>
+#include <kernel/dwm/objects/icon_object.h>
+
+#include <kernel/dwm/objects/window_context.h>
+#include <kernel/dwm/objects/window_object.h>
+#include <kernel/dwm/objects/window_handle.h>
+#include <kernel/dwm/objects/context_menu.h>
 #include <kernel/dwm/rendering/sprite.h>
-#include <kernel/dwm/context_menu.h>
 
 #include <kernel/dwm/flags.h>
 #include <kernel/dwm/style_flags.h>
+
+#define DOUBLE_CLICK_THRESHOLD_MS   500
 
 typedef void(*WindowProcedure)(WindowHandle, wEvent);
 
@@ -29,10 +34,10 @@ typedef struct {
 void dwm_initiate(void);
 void dwm_update(void);
 
-WindowHandle create_window(WindowClass w_class, uint16_t w_style, WindowProcedure proc);
+WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure proc);
 void destroy_window(WindowHandle window_handle);
 
-void create_folder(uint16_t x, uint16_t y, const char* name);
+int8_t create_folder(uint16_t x, uint16_t y, const char* name);
 
 void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
 WindowHandle dwm_window_get_parent(WindowHandle window);

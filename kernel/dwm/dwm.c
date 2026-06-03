@@ -8,19 +8,22 @@
 #include <kernel/console/display.h>
 
 #include <kernel/util/list.h>
+#include <kernel/util/map.h>
 
 extern const uint8_t char_rom[];
 uint32_t bg_color = 0xFF0E0E1A;
 
-struct Image cursor;
-struct Image button_close;
+struct Image current_cursor;
 
 struct list_node* window_head = NULL;
 struct list_node* window_tail = NULL;
+
 struct list_node* icon_head = NULL;
 struct list_node* icon_tail = NULL;
 
-struct WindowContext window_context;
+struct map_node* resource_head = NULL;
+struct map_node* resource_tail = NULL;
+
 struct WindowObject* dragged_window = NULL;
 int drag_offset_x = 0;
 int drag_offset_y = 0;
@@ -39,11 +42,12 @@ uint32_t last_icon_click_time = 0;
 
 Point mouse_old;
 struct ContextMenu context_menu;
+uint16_t context_menu_directive = 0;
+
+struct WindowContext window_context;
 
 WindowHandle w_taskbar;
 uint16_t taskbar_height = 28;
-
-uint32_t* spr_folder_sprite = NULL;
 
 
 void dwm_initiate(void) {
@@ -78,14 +82,52 @@ void dwm_initiate(void) {
     
     //
     // Load resources
+    uint32_t* folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
+    sprite_get_bitmap(folder_sprite, &rc_icon_folder);
     
-    spr_folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
-    sprite_get_bitmap(spr_folder_sprite, &rc_icon_folder);
+    // Icons
     
-    button_close.data = malloc(sizeof(uint32_t) * rc_close.width * rc_close.height);
-    sprite_get_bitmap(button_close.data, &rc_close);
-    button_close.width = rc_close.width;
-    button_close.height = rc_close.height;
+    dwm_resource_load("icon_folder", folder_sprite);
+    
+    // UI
+    
+    struct Image* button_close = malloc(sizeof(struct Image));
+    button_close->data = malloc(sizeof(uint32_t) * rc_button_close.width * rc_button_close.height);
+    sprite_get_bitmap(button_close->data, &rc_button_close);
+    button_close->width = rc_button_close.width;
+    button_close->height = rc_button_close.height;
+    dwm_resource_load("ui_close", button_close);
+    
+    struct Image* button_minimize = malloc(sizeof(struct Image));
+    button_minimize->data = malloc(sizeof(uint32_t) * rc_button_close.width * rc_button_close.height);
+    sprite_get_bitmap(button_minimize->data, &rc_button_minimize);
+    button_minimize->width = rc_button_close.width;
+    button_minimize->height = rc_button_close.height;
+    dwm_resource_load("ui_minimize", button_minimize);
+    
+    // Mouse cursors
+    
+    struct Image* cursor_edge = malloc(sizeof(struct Image));
+    cursor_edge->data = malloc(sizeof(uint32_t) * rc_cursor_edge.width * rc_cursor_edge.height);
+    sprite_get_bitmap(cursor_edge->data, &rc_cursor_edge);
+    cursor_edge->width  = rc_cursor_edge.width;
+    cursor_edge->height = rc_cursor_edge.height;
+    dwm_resource_load("cur_edge", cursor_edge);
+    
+    struct Image* cursor_pointer = malloc(sizeof(struct Image));
+    cursor_pointer->data = malloc(sizeof(uint32_t) * rc_cursor_pointer.width * rc_cursor_pointer.height);
+    sprite_get_bitmap(cursor_pointer->data, &rc_cursor_pointer);
+    cursor_pointer->width  = rc_cursor_pointer.width;
+    cursor_pointer->height = rc_cursor_pointer.height;
+    dwm_resource_load("cur_pointer", cursor_pointer);
+    
+    struct Image* cursor_angle = malloc(sizeof(struct Image));
+    cursor_angle->data = malloc(sizeof(uint32_t) * rc_cursor_angle.width * rc_cursor_angle.height);
+    sprite_get_bitmap(cursor_angle->data, &rc_cursor_angle);
+    cursor_angle->width  = rc_cursor_angle.width;
+    cursor_angle->height = rc_cursor_angle.height;
+    dwm_resource_load("cur_angle", cursor_angle);
+    
     
     // Taskbar
     
@@ -97,24 +139,28 @@ void dwm_initiate(void) {
     
     w_taskbar = create_window(wclass_taskbar, WINDOW_STYLE_TOPMOST | WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, NULL);
     
+    // Default mouse cursor
+    
+    dwm_set_cursor(cursor_pointer->data, cursor_pointer->width, cursor_pointer->height);
+    
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), bg_color);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
 }
 
-WindowHandle create_window(WindowClass w_class, uint16_t w_style, WindowProcedure proc) {
-    struct WindowObject* window = dwm_window_create(w_class, w_style, proc);
+WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure proc) {
+    struct WindowObject* window = dwm_window_create(wclass, wstyle, proc);
     
-    if (!(w_style & WINDOW_STYLE_NOCLOSEBOX)) {
-        WindowClass w_button_class;
-        w_button_class.x = w_class.width - button_close.width - 2;
-        w_button_class.y = 10;//-button_close.height - 4;
-        w_button_class.width = button_close.width;
-        w_button_class.height = button_close.height;
+    if (!(wstyle & WINDOW_STYLE_NOCLOSEBOX)) {
+        struct Image* button_close = dwm_resource_find("ui_close");
+        struct Image* button_minimize  = dwm_resource_find("ui_minimize");
         
-        struct WindowObject* close = dwm_window_create(w_button_class, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_CHILD, callback_button_close_handler);
-        
-        dwm_window_set_parent(close->id, window->id);
+        int16_t close_x = wclass.width - button_close->width;
+        int16_t close_min = wclass.width - button_close->width - button_minimize->width;
+        int16_t vertical = window->titlebar_height / button_close->height;
+        if (button_close != NULL) window_add_button(window, close_x, vertical, button_close->width, button_close->height, EVENT_CLOSE, *button_close);
+        if (button_minimize != NULL) window_add_button(window, close_min, vertical, button_close->width, button_close->height, EVENT_MINIMIZE, *button_minimize);
     }
+    
     return window->id;
 }
 
@@ -149,6 +195,15 @@ void destroy_window(WindowHandle handle) {
                     &window_handle->parent->children_tail, 
                     window_handle);
         window_handle->parent = NULL;
+    }
+    
+    // Kill all window buttons
+    while (window_handle->buttons_head != NULL) {
+        struct list_node* btn_node = window_handle->buttons_head;
+        struct WindowButton* btn = (struct WindowButton*)btn_node->data;
+        
+        list_remove(&window_handle->buttons_head, &window_handle->buttons_tail, btn);
+        free(btn);
     }
     
     // Kill all children
@@ -271,7 +326,7 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     }
     
     window_object->id = candidate_id;
-    window_object->style = w_style; // <-- FIX: Assigned BEFORE checking styles and layout dimensions
+    window_object->style = w_style;
     
     // Check if the no-borders style is applied
     if (window_object->style & WINDOW_STYLE_NOBORDERS) {
@@ -279,7 +334,7 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
         window_object->titlebar_height = 0;
     } else {
         window_object->border_width = 1;
-        window_object->titlebar_height = 28;
+        window_object->titlebar_height = 20;
     }
     
     window_object->parent = NULL;
@@ -310,8 +365,21 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     window_object->flags = WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH;
     
     window_object->events = 0;
-    
     window_object->event_callback = proc;
+    
+    if (window_tail != NULL) {
+        struct WindowObject* old_active = (struct WindowObject*)window_tail->data;
+        
+        // Force the old window to redraw its borders/titlebar in an inactive state
+        old_active->flags |= WINDOW_FLAG_REDECORATE;
+        
+        int old_abs_x, old_abs_y;
+        dwm_get_absolute_position(old_active, &old_abs_x, &old_abs_y);
+        dwm_invalidate_region(old_abs_x - old_active->border_width, 
+                              old_abs_y - old_active->border_width, 
+                              old_active->w + (old_active->border_width * 2), 
+                              old_active->h + (old_active->border_width * 2));
+    }
     
     if (!list_append(&window_head, &window_tail, window_object)) {
         free(window_object->frame_buffer); // Clean up buffer on failure
@@ -330,13 +398,18 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     return window_object;
 }
 
-void create_folder(uint16_t x, uint16_t y, const char* name) {
-    struct IconObject* folder = create_icon(x, y, rc_icon_folder.width, rc_icon_folder.height, spr_folder_sprite);
+int8_t create_folder(uint16_t x, uint16_t y, const char* name) {
+    uint32_t* folder_sprite = dwm_resource_find("icon_folder");
+    if (folder_sprite == NULL) 
+        return -1;
     
-    strcpy(folder->name, name);
+    struct IconObject* folder = create_icon(x, y, rc_icon_folder.width, rc_icon_folder.height, folder_sprite);
+    
+    strncpy(folder->name, name, sizeof(folder->name) - 1);
     dwm_calculate_icon_bounds(folder);
     
     dwm_invalidate_region(x + folder->bounds_x, y + folder->bounds_y, folder->bounds_w, folder->bounds_h);
+    return 0;
 }
 
 struct WindowObject* dwm_get_window_by_id(uint32_t id) {
@@ -387,9 +460,9 @@ void dwm_draw_sprite(int16_t x, int16_t y, struct Image* sprite_image) {
 }
 
 void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {
-    cursor.data = sprite;
-    cursor.width = width;
-    cursor.height = height;
+    current_cursor.data = sprite;
+    current_cursor.width = width;
+    current_cursor.height = height;
 }
 
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
@@ -465,7 +538,6 @@ void dwm_get_absolute_position(struct WindowObject* window, int* out_x, int* out
     
     struct WindowObject* p = window->parent;
     while (p != NULL) {
-        // Shift relative positions by the parent's client drawing surface area
         abs_x += p->surface_x; 
         abs_y += p->surface_y;
         p = p->parent;
@@ -595,4 +667,21 @@ uint32_t dwm_window_get_count(void) {
     }
     
     return count;
+}
+
+void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t event, struct Image sprite) {
+    if (window == NULL) return;
+    
+    struct WindowButton* button = malloc(sizeof(struct WindowButton));
+    if (button == NULL) return;
+    
+    button->x = x;
+    button->y = y;
+    button->width = width;
+    button->height = height;
+    
+    button->event = event;
+    button->img = sprite;
+    
+    list_append(&window->buttons_head, &window->buttons_tail, button);
 }

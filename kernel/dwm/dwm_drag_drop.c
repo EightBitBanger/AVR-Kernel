@@ -1,14 +1,7 @@
 #include <kernel/dwm/dwm.h>
-#include <kernel/dwm/icons.h>
-#include <kernel/console/display.h>
-#include <kernel/dwm/icon_object.h>
-#include <kernel/util/list.h>
-#include <kernel/util/timer.h>
-#include <kernel/util/string.h>
-
-#define DOUBLE_CLICK_THRESHOLD_MS   500
-
 #include <kernel/dwm/dwm_core_internal.h>
+#include <kernel/console/display.h>
+#include <kernel/util/list.h>
 
 void dwm_update_icon_dragging(struct WindowContext* ctx) {
     if (dragged_icon == NULL) return;
@@ -84,7 +77,6 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
         dragged_window = NULL;
     }
 }
-
 
 void dwm_cascade_child_positions(struct WindowObject* parent) {
     if (parent == NULL) return;

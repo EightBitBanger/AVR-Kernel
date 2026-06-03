@@ -1,14 +1,11 @@
 #include <kernel/dwm/dwm.h>
-#include <kernel/dwm/icons.h>
+#include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/console/display.h>
-#include <kernel/dwm/icon_object.h>
 #include <kernel/util/list.h>
 #include <kernel/util/timer.h>
 #include <kernel/util/string.h>
 
 #define DOUBLE_CLICK_THRESHOLD_MS   500
-
-#include <kernel/dwm/dwm_core_internal.h>
 
 void dwm_update(void) {
     window_context.left_button_pressed  = mouse_get_button(MOUSE_BUTTON_LEFT);
@@ -60,7 +57,7 @@ void dwm_update(void) {
     mouse_old = window_context.mouse;
     old_left_button_pressed = window_context.left_button_pressed;
     old_right_button_pressed = window_context.right_button_pressed;
-    window_context.cursor_width   = cursor.width;
-    window_context.cursor_height  = cursor.height;
+    window_context.cursor_width   = current_cursor.width;
+    window_context.cursor_height  = current_cursor.height;
     window_context.dirty_count = 0;
 }

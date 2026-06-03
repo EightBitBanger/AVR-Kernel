@@ -9,7 +9,7 @@ void callback_button_close_handler(WindowHandle handle, wEvent event) {
         break;
         
     case EVENT_REDRAW:
-        dwm_draw_sprite(0, 0, &button_close);
+        dwm_draw_sprite(0, 0, dwm_resource_find("button_close"));
         break;
     }
 }
