@@ -4,6 +4,7 @@
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/paging.h>
+#include <kernel/arch/x86/page_alloc.h>
 
 #include <kernel/arch/x86/drivers/multiboot_info.h>
 #include <kernel/boot/x86/interrupt.h>
@@ -22,6 +23,7 @@
 #include <kernel/console/virtual_key.h>
 
 #include <kernel/dwm/dwm.h>
+#include <kernel/panic/panic_error.h>
 
 #define BOOT_DELAY_MS  1000
 
@@ -32,23 +34,14 @@ extern uint32_t display_width;
 extern uint32_t display_height;
 
 
-void trigger_test_page_fault(void) {
-    // 0x40000000 is 1 GB, which is well above your 64 MB (0x04000000) mapped region.
-    // The page directory entry for this address will have the Present bit (VM_PRESENT) set to 0.
-    volatile uint32_t* unmapped_address = (volatile uint32_t*)0x40000000;
-    
-    // Attempting to read from or write to this unmapped address will force an architectural Page Fault (#PF)
-    uint32_t crash_trigger = *unmapped_address;
-    
-    // Prevent the compiler from optimizing away the read operation
-    (void)crash_trigger; 
-}
+
+
 
 
 void callback_handler(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_REDRAW:
-        //dwm_draw_rect_filled(0, 0, 100, 100, 0xFFEFEFEF);
+        dwm_draw_rect_filled(0, 0, 1024, 1024, 0xFF080808);
         
         dwm_draw_text(5, 10, "Fancy message box...", 0xFFFFFFFF);
         break;
@@ -58,7 +51,7 @@ void callback_handler(WindowHandle handle, wEvent event) {
 void callback_button_handler(WindowHandle handle, wEvent event) {
     switch (event) {
     case EVENT_MOUSE:
-        trigger_test_page_fault();
+        dwm_window_send_event(dwm_window_get_parent(handle), EVENT_CLOSE);
         break;
         
     case EVENT_REDRAW:
@@ -145,10 +138,13 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     display_init();
     draw_set_clip_rect(0, 0, display_width, display_height);
     
-    paging_initiate(mbi_info);
-    
     uint32_t fb_pixels = mbi_info->framebuffer_width * mbi_info->framebuffer_height;
     uint32_t fb_size_bytes = fb_pixels * sizeof(uint32_t);
+    
+    // Paging
+    
+    paging_initiate(mbi_info);
+    page_allocator_init(mbi_info);
     
     // Lock the Graphics back buffer at the 8MB mark
     // This is well within our 64MB chunk
@@ -157,8 +153,8 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     extern void draw_set_frame_buffer(uint32_t* buffer_ptr);
     draw_set_frame_buffer(forced_back_buffer);
     
-    uint32_t forced_heap_start = 0x01800000; 
-    heap_set_base_address(forced_heap_start);
+    uint32_t heap_start = 0x01800000; 
+    heap_set_base_address(heap_start);
     
     // Initialize an 8 MB heap block (spans from 24MB to 32MB)
     uint32_t heap_sz  = (1024 * 1024 * 8); 
@@ -269,7 +265,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         //
         /*
         WindowHandle parent;
-        
         {
         WindowClass wclass;
         wclass.x = 0;
@@ -279,8 +274,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         parent = create_window(wclass, WINDOW_STYLE_NOBORDERS, NULL);
         }
         
+        if (parent == 0) 
+            trigger_test_page_fault();
         {
-        for (unsigned int i=0; i < 8; i++) {
+        
+        for (unsigned int i=0; i < 3; i++) {
             WindowClass wclass;
             wclass.x = 0;
             wclass.y = 0;
@@ -293,7 +291,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
         
         destroy_window(parent);
         */
-        
         
         
         

@@ -32,8 +32,6 @@ isr_general_fault:
     
     call isr_callback_fault_handler
     
-    ; (Optional) If your handler ever returned, you'd clean up the stack here,
-    ; but since it loops infinitely, execution stops here.
     cli
     hlt
     

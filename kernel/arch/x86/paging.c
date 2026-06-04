@@ -14,13 +14,13 @@ uint32_t static_page_tables[16][1024] __attribute__((aligned(4096)));
 
 // Dynamic page table allocator tracking pointer.
 // Any new page tables requested at runtime will be allocated starting right after the 64MB mark.
-static uint32_t dynamic_table_watermark = 0x04000000; // 64 MB in hex
+static uint32_t dynamic_table_watermark = 0x04000000;
 
 static uint32_t* allocate_dynamic_table(void) {
     uint32_t* table_ptr = (uint32_t*)dynamic_table_watermark;
     dynamic_table_watermark += PAGE_SIZE; // Move watermark to next 4KB page block
     
-    // Zero out the new page table entries so it doesn't contain trash addresses
+    // Zero out the new page table entries
     for (int i = 0; i < 1024; i++) {
         table_ptr[i] = 0;
     }
@@ -35,11 +35,11 @@ void map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags) {
     
     // Check if a page table already exists for this virtual address region
     if ((page_directory[pd_index] & VM_PRESENT) == 0) {
-        // If it doesn't exist, allocate a new page table page on the fly!
+        // Allocate a new page table page
         page_table = allocate_dynamic_table();
         page_directory[pd_index] = ((uint32_t)page_table) | VM_PRESENT | VM_READWRITE;
     } else {
-        // If it does exist, extract the physical address of the page table (clear lower 12 bits)
+        // Extract the physical address of the page table (clear lower 12 bits)
         page_table = (uint32_t*)(page_directory[pd_index] & ~0xFFF);
     }
     
@@ -51,12 +51,11 @@ void map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags) {
 }
 
 void paging_initiate(struct MultibootInfo* mbi) {
-    // Clean out the main page directory
     for (int i = 0; i < 1024; i++) {
         page_directory[i] = 0;
     }
     
-    // Blanket map the first 64MB of physical memory.
+    // Map the first 64MB of physical memory as kernel memory
     for (uint32_t t = 0; t < 16; t++) {
         page_directory[t] = ((uint32_t)&static_page_tables[t]) | VM_PRESENT | VM_READWRITE;
         
@@ -66,12 +65,12 @@ void paging_initiate(struct MultibootInfo* mbi) {
         }
     }
     
-    // Map VRAM memory block
+    // Map VRAM memory block into virtual memory
     uint32_t vram_start = mbi->framebuffer_addr;
     uint32_t vram_size  = mbi->framebuffer_pitch * mbi->framebuffer_height;
     uint32_t vram_end   = (vram_start + vram_size + 4095) & ~4095;
     
-    // Loop through every single page frame of VRAM and map it dynamically
+    // Assign all VRAM pages and map it dynamically
     for (uint32_t addr = vram_start; addr < vram_end; addr += PAGE_SIZE) {
         map_page(addr, addr, VM_PRESENT | VM_READWRITE);
     }
