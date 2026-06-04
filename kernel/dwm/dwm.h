@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include <kernel/dwm/dwm_platform.h>
+
 #include <kernel/dwm/rendering/image.h>
 
 #include <kernel/dwm/images/icon.h>
@@ -49,6 +51,7 @@ void destroy_icon(struct IconObject* icon);
 
 void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color);
 void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color);
+void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high);
 
 void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);

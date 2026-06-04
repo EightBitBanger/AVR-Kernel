@@ -19,7 +19,7 @@ void dwm_process_context_menu_events(uint16_t index) {
     switch (context_menu_directive) {
     case CONTEXT_MENU_DESKTOP:
         extern void trigger_test_page_fault(void);
-        if (index == 0) trigger_test_page_fault();
+        //if (index == 0) 
         
         break;
         

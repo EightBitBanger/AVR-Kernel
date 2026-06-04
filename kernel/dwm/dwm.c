@@ -1,12 +1,10 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/dwm_core_internal.h>
-#include <kernel/util/string.h>
-#include <kernel/arch/x86/heap.h>
-#include <kernel/arch/x86/drivers/draw.h>
 
 #include <kernel/console/mouse.h>
 #include <kernel/console/display.h>
 
+#include <kernel/util/string.h>
 #include <kernel/util/list.h>
 #include <kernel/util/map.h>
 
@@ -41,8 +39,12 @@ struct IconObject* last_clicked_icon = NULL;
 uint32_t last_icon_click_time = 0;
 
 Point mouse_old;
-struct ContextMenu context_menu;
+
+#define MAX_CONTEXT_MENUS 8
+struct ContextMenu context_menus[MAX_CONTEXT_MENUS];
+uint8_t context_menu_count = 0;
 uint16_t context_menu_directive = 0;
+
 
 struct WindowContext window_context;
 
@@ -56,18 +58,26 @@ void dwm_initiate(void) {
     window_context.mouse = mouse_get_position();
     window_context.dirty_count = 0;
     
-    context_menu.visible = false;
-    context_menu.x = 0; context_menu.y = 0;
-    context_menu.w = 0; context_menu.h = 0;
+    context_menu_count = 0;
     
-    context_menu.color_bg         = 0x8F222222;
-    context_menu.color_border     = 0x8F444444;
-    context_menu.color_separator  = 0x8F111111;
-    context_menu.color_highlight  = 0x8F777777;
-    context_menu.color_text       = 0x8FE0E0E0;
-    context_menu.hovered_item = -1;
-    context_menu.item_height = 0;
-    context_menu.item_count = 0;
+    // Setup global default look for the root menu container slot
+    for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
+        context_menus[i].visible = false;
+        
+        context_menus[i].x = 0;
+        context_menus[i].y = 0;
+        context_menus[i].w = 0;
+        context_menus[i].h = 0;
+        
+        context_menus[i].color_bg         = 0x8F222222;
+        context_menus[i].color_border     = 0x8F444444;
+        context_menus[i].color_separator  = 0x8F111111;
+        context_menus[i].color_highlight  = 0x8F777777;
+        context_menus[i].color_text       = 0x8FE0E0E0;
+        context_menus[i].hovered_item     = -1;
+        context_menus[i].item_height      = 0;
+        context_menus[i].item_count       = 0;
+    }
     
     next_window_id = 0;
     window_head = NULL;
@@ -80,8 +90,8 @@ void dwm_initiate(void) {
     mouse_set_position(display_center.x, display_center.y);
     mouse_old = (Point){display_get_width(), display_get_height()};
     
-    //
     // Load resources
+    
     uint32_t* folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
     sprite_get_bitmap(folder_sprite, &rc_icon_folder);
     
@@ -128,16 +138,15 @@ void dwm_initiate(void) {
     cursor_angle->height = rc_cursor_angle.height;
     dwm_resource_load("cur_angle", cursor_angle);
     
-    
     // Taskbar
     
     WindowClass wclass_taskbar;
     wclass_taskbar.x = 0;
     wclass_taskbar.y = display_get_height() - taskbar_height;
-    wclass_taskbar.width  = display_get_width() - 10;
-    wclass_taskbar.height = taskbar_height - 5;
+    wclass_taskbar.width  = display_get_width();
+    wclass_taskbar.height = taskbar_height;
     
-    w_taskbar = create_window(wclass_taskbar, WINDOW_STYLE_TOPMOST | WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, NULL);
+    w_taskbar = create_window(wclass_taskbar, WINDOW_STYLE_TOPMOST | WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_taskbar_handler);
     
     // Default mouse cursor
     
@@ -149,6 +158,9 @@ void dwm_initiate(void) {
 
 WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure proc) {
     struct WindowObject* window = dwm_window_create(wclass, wstyle, proc);
+    
+    if (window == NULL) 
+        return 0;
     
     if (!(wstyle & WINDOW_STYLE_NOCLOSEBOX)) {
         struct Image* button_close = dwm_resource_find("ui_close");
@@ -452,6 +464,11 @@ void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
 void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
     if (event_window == NULL) return;
     draw_rect_filled(x, y, w, h, color);
+}
+
+void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
+    if (event_window == NULL) return;
+    draw_rect_gradient_vertical_blend(x, y, w, h, color_high, color_low);
 }
 
 void dwm_draw_sprite(int16_t x, int16_t y, struct Image* sprite_image) {

@@ -201,34 +201,38 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
     }
     
-    // Context Menu Rendering
-    if (context_menu.visible) {
-        uint16_t menu_height = context_menu.item_height * context_menu.item_count;
-        context_menu.h = menu_height;
+    // Context menus
+    
+    for (uint8_t m = 0; m < context_menu_count; m++) {
+        struct ContextMenu* menu = &context_menus[m];
+        if (!menu->visible) continue;
         
-        draw_rect_filled(context_menu.x, context_menu.y, context_menu.w, menu_height, context_menu.color_bg);
-        draw_rect(context_menu.x, context_menu.y, context_menu.w, menu_height, context_menu.color_border);
+        uint16_t menu_height = menu->item_height * menu->item_count;
+        menu->h = menu_height;
         
-        for (unsigned int i=0; i < context_menu.item_count; i++) {
-            uint16_t intersector_height = context_menu.item_height * i;
-            uint16_t menu_x = context_menu.x + 1;
-            uint16_t menu_y = context_menu.y + intersector_height;
-            uint16_t menu_w = context_menu.w - 2;
-            uint16_t menu_h = context_menu.item_height;
+        draw_rect_filled(menu->x, menu->y, menu->w, menu_height, menu->color_bg);
+        draw_rect(menu->x, menu->y, menu->w, menu_height, menu->color_border);
+        
+        for (unsigned int i = 0; i < menu->item_count; i++) {
+            uint16_t intersector_height = menu->item_height * i;
+            uint16_t menu_x = menu->x + 1;
+            uint16_t menu_y = menu->y + intersector_height;
+            uint16_t menu_w = menu->w - 2;
+            uint16_t menu_h = menu->item_height;
             uint16_t text_x = menu_x + 3;
             uint16_t text_y = menu_y + 7;
             
-            if ((int)i == context_menu.hovered_item) {
-                draw_rect_filled(menu_x, menu_y + 1, menu_w, menu_h - 1, context_menu.color_highlight);
+            if ((int)i == menu->hovered_item) {
+                draw_rect_filled(menu_x, menu_y + 1, menu_w, menu_h - 1, menu->color_highlight);
             }
             
-            if (i > 0 && (int)i != context_menu.hovered_item && (int)(i - 1) != context_menu.hovered_item) {
-                draw_line(menu_x, menu_y, menu_x + menu_w, menu_y, context_menu.color_separator);
+            if (i > 0 && (int)i != menu->hovered_item && (int)(i - 1) != menu->hovered_item) {
+                draw_line(menu_x, menu_y, menu_x + menu_w, menu_y, menu->color_separator);
             }
             
-            size_t length = strlen(context_menu.item[i].name);
-            for (unsigned int s=0; s < length; s++) {
-                draw_glyph(char_rom, context_menu.item[i].name[s], text_x + (s * 6), text_y, context_menu.color_text, 0xFF000000, 0xFF000000);
+            size_t length = strlen(menu->item[i].name);
+            for (unsigned int s = 0; s < length; s++) {
+                draw_glyph(char_rom, menu->item[i].name[s], text_x + (s * 6), text_y, menu->color_text, 0xFF000000, 0xFF000000);
             }
         }
     }

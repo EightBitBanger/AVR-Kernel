@@ -62,32 +62,42 @@ struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mo
 }
 
 bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
-    if (!context_menu.visible) return false;
+    if (context_menu_count == 0) return false;
     
-    // Check if mouse is within context menu bounds
-    if (ctx->mouse.x >= context_menu.x && ctx->mouse.x <= (context_menu.x + context_menu.w) &&
-        ctx->mouse.y >= context_menu.y && ctx->mouse.y <= (context_menu.y + context_menu.h)) {
+    // Check backwards from the top-most submenu down to root menu
+    for (int m = (int)context_menu_count - 1; m >= 0; m--) {
+        struct ContextMenu* menu = &context_menus[m];
         
-        if (is_new_left_click) {
-            // Calculate which item index was clicked
-            int relative_y = ctx->mouse.y - context_menu.y;
-            int item_index = relative_y / context_menu.item_height;
+        if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&
+            ctx->mouse.y >= menu->y && ctx->mouse.y <= (menu->y + menu->h)) {
             
-            if (item_index >= 0 && item_index < context_menu.item_count) {
+            if (is_new_left_click) {
+                int relative_y = ctx->mouse.y - menu->y;
+                int item_index = relative_y / menu->item_height;
                 
-                dwm_process_context_menu_events(item_index);
+                if (item_index >= 0 && item_index < menu->item_count) {
+                    dwm_process_context_menu_events(item_index);
+                    // NOTE: When implementing submenus later, you can intercept here:
+                    // If this item opens a submenu, call a push_submenu routine and return true!
+                }
             }
+            
+            // If an option was processed (and it didn't generate a new submenu layer), collapse everything
+            for (int i = 0; i < context_menu_count; i++) {
+                context_menus[i].visible = false;
+                dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+            }
+            context_menu_count = 0;
+            return true;
         }
-        
-        // Hide and clear the menu since an action was taken
-        context_menu.visible = false;
-        dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
-        return true;
     }
     
-    // Clicked outside the context menu - dismiss it
-    context_menu.visible = false;
-    dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
+    // Clicked outside all currently open context menus - dismiss everything
+    for (int i = 0; i < context_menu_count; i++) {
+        context_menus[i].visible = false;
+        dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+    }
+    context_menu_count = 0;
     return false;
 }
 
@@ -222,27 +232,31 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
             }
         }
         else if (is_new_right_click) {
-            context_menu.visible = true;
-            context_menu.x = ctx->mouse.x;
-            context_menu.y = ctx->mouse.y;
-            context_menu.item_height = 22;
-            context_menu.item_count = 4;
-            context_menu.w = 130;
-            context_menu.h = context_menu.item_height * context_menu.item_count;
+            context_menu_count = 1;
+            struct ContextMenu* root_menu = &context_menus[0];
+            
+            root_menu->visible = true;
+            root_menu->x = ctx->mouse.x;
+            root_menu->y = ctx->mouse.y;
+            root_menu->item_height = 22;
+            root_menu->item_count = 4;
+            root_menu->w = 130;
+            root_menu->h = root_menu->item_height * root_menu->item_count;
+            root_menu->hovered_item = -1;
             
             context_menu_directive = CONTEXT_MENU_ICON;
             
-            strcpy(context_menu.item[0].name, "Open");
-            strcpy(context_menu.item[1].name, "Copy");
-            strcpy(context_menu.item[2].name, "Delete");
-            strcpy(context_menu.item[3].name, "Properties");
+            strcpy(root_menu->item[0].name, "Open");
+            strcpy(root_menu->item[1].name, "Copy");
+            strcpy(root_menu->item[2].name, "Delete");
+            strcpy(root_menu->item[3].name, "Properties");
             
             int display_w = display_get_width();
             int display_h = display_get_height();
-            if (context_menu.x + context_menu.w > display_w) context_menu.x = display_w - context_menu.w;
-            if (context_menu.y + context_menu.h > display_h - taskbar_height) context_menu.y = display_h - taskbar_height - context_menu.h;
+            if (root_menu->x + root_menu->w > display_w) root_menu->x = display_w - root_menu->w;
+            if (root_menu->y + root_menu->h > display_h - taskbar_height) root_menu->y = display_h - taskbar_height - root_menu->h;
             
-            dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
+            dwm_invalidate_region(root_menu->x, root_menu->y, root_menu->w, root_menu->h);
         }
     } else {
         
@@ -253,57 +267,59 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
             last_clicked_icon = NULL;
         }
         else if (is_new_right_click) {
-            context_menu.visible = true;
-            context_menu.x = ctx->mouse.x;
-            context_menu.y = ctx->mouse.y;
-            context_menu.item_height = 22;
-            context_menu.item_count  = 2;
-            context_menu.w = 120;
-            context_menu.h = context_menu.item_height * context_menu.item_count;
+            context_menu_count = 1;
+            struct ContextMenu* root_menu = &context_menus[0];
+            
+            root_menu->visible = true;
+            root_menu->x = ctx->mouse.x;
+            root_menu->y = ctx->mouse.y;
+            root_menu->item_height = 22;
+            root_menu->item_count  = 2;
+            root_menu->w = 120;
+            root_menu->h = root_menu->item_height * root_menu->item_count;
             
             context_menu_directive = CONTEXT_MENU_DESKTOP;
             
-            strcpy(context_menu.item[0].name, "New");
-            strcpy(context_menu.item[1].name, "Properties");
+            strcpy(root_menu->item[0].name, "New");
+            strcpy(root_menu->item[1].name, "Properties");
             
             int display_w = display_get_width();
             int display_h = display_get_height();
-            if (context_menu.x + context_menu.w > display_w) context_menu.x = display_w - context_menu.w;
-            if (context_menu.y + context_menu.h > display_h - taskbar_height) context_menu.y = display_h - taskbar_height - context_menu.h;
+            if (root_menu->x + root_menu->w > display_w) root_menu->x = display_w - root_menu->w;
+            if (root_menu->y + root_menu->h > display_h - taskbar_height) root_menu->y = display_h - taskbar_height - root_menu->h;
             
-            dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
+            dwm_invalidate_region(root_menu->x, root_menu->y, root_menu->w, root_menu->h);
         }
     }
 }
 
 void dwm_handle_context_menu_hover(struct WindowContext* ctx) {
-    if (!context_menu.visible) {
-        context_menu.hovered_item = -1;
-        return;
-    }
+    if (context_menu_count == 0) return;
     
-    // Check if the mouse cursor is inside the bounding box of the context menu
-    if (ctx->mouse.x >= context_menu.x && ctx->mouse.x <= (context_menu.x + context_menu.w) &&
-        ctx->mouse.y >= context_menu.y && ctx->mouse.y <= (context_menu.y + context_menu.h)) {
+    for (int m = 0; m < context_menu_count; m++) {
+        struct ContextMenu* menu = &context_menus[m];
+        if (!menu->visible) continue;
         
-        // Calculate which specific item index the mouse is over
-        int relative_y = ctx->mouse.y - context_menu.y;
-        int current_hover = relative_y / context_menu.item_height;
-        
-        // Bounds check
-        if (current_hover >= 0 && current_hover < context_menu.item_count) {
-            if (context_menu.hovered_item != current_hover) {
-                context_menu.hovered_item = current_hover;
-                // Force a redraw of the menu area to reflect the new highlight
-                dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
+        if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&
+            ctx->mouse.y >= menu->y && ctx->mouse.y <= (menu->y + menu->h)) {
+            
+            int relative_y = ctx->mouse.y - menu->y;
+            int current_hover = relative_y / menu->item_height;
+            
+            if (current_hover >= 0 && current_hover < menu->item_count) {
+                if (menu->hovered_item != current_hover) {
+                    menu->hovered_item = current_hover;
+                    dwm_invalidate_region(menu->x, menu->y, menu->w, menu->h);
+                }
+                // Mouse is accounted for in this menu slot; clear sub-menus layered above it if necessary later
+                continue;
             }
-            return;
         }
-    }
-    
-    // If the mouse left the menu boundaries, remove the highlight
-    if (context_menu.hovered_item != -1) {
-        context_menu.hovered_item = -1;
-        dwm_invalidate_region(context_menu.x, context_menu.y, context_menu.w, context_menu.h);
+        
+        // If the mouse left this specific menu boundary segment, clear its highlight
+        if (menu->hovered_item != -1) {
+            menu->hovered_item = -1;
+            dwm_invalidate_region(menu->x, menu->y, menu->w, menu->h);
+        }
     }
 }

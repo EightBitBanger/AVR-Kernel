@@ -248,7 +248,7 @@ void console_print_reference_entry(uint32_t address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(kdir.name);
         
-        for (size_t i = 0; i < display_get_columns() - (attr_len + name_len) - attr_len - 1; i++) 
+        for (size_t i = 0; i < (display_get_columns() / 8 ) - (attr_len + name_len) - attr_len - 1; i++) 
             print(" ");
         
         print(msg_dir_sym);

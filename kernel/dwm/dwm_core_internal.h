@@ -37,7 +37,8 @@ extern struct IconObject* last_clicked_icon;
 extern uint32_t last_icon_click_time;
 
 // Context menu
-extern struct ContextMenu context_menu;
+extern struct ContextMenu context_menus[];
+extern uint8_t context_menu_count;
 extern uint16_t context_menu_directive;
 
 // Taskbar
@@ -53,6 +54,7 @@ extern const uint8_t char_rom[];
 // Built in event handlers
 
 void callback_button_close_handler(WindowHandle handle, wEvent event);
+void callback_taskbar_handler(WindowHandle handle, wEvent event);
 
 // Internal routines
 
