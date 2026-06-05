@@ -9,8 +9,8 @@
 // Main Page Directory
 uint32_t page_directory[1024] __attribute__((aligned(4096)));
 
-// 16 static tables to map the first 64 MB (Kernel, Stack, Backbuffer, Heap safety)
-uint32_t static_page_tables[16][1024] __attribute__((aligned(4096)));
+// 32 static tables to map the first 128 MB
+uint32_t static_page_tables[32][1024] __attribute__((aligned(4096)));
 
 // Dynamic page table allocator tracking pointer.
 // Any new page tables requested at runtime will be allocated starting right after the 64MB mark.
@@ -55,8 +55,9 @@ void paging_initiate(struct MultibootInfo* mbi) {
         page_directory[i] = 0;
     }
     
-    // Map the first 64MB of physical memory as kernel memory
-    for (uint32_t t = 0; t < 16; t++) {
+    // Map the first 128MB of physical memory as kernel memory
+    // Map the first 128MB of physical memory
+    for (uint32_t t = 0; t < 32; t++) { // Change 16 to 32
         page_directory[t] = ((uint32_t)&static_page_tables[t]) | VM_PRESENT | VM_READWRITE;
         
         for (uint32_t entry = 0; entry < 1024; entry++) {

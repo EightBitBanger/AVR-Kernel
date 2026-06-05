@@ -56,6 +56,7 @@ void draw_set_buffer(uint32_t* target_buffer, uint32_t width, uint32_t height);
 void draw_set_info(uint32_t mb_info);
 void draw_set_frame_buffer(uint32_t* buffer_ptr);
 void draw_flush_region(int x, int y, int width, int height);
+void draw_flush_display(void);
 
 uint32_t make_color(float a, float r, float g, float b);
 

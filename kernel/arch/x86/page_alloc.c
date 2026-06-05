@@ -141,6 +141,36 @@ void* alloc_pages(size_t num_pages) {
     return (void*)start_vaddr;
 }
 
+void* alloc_virt_mmio(uint32_t phys_addr, size_t num_pages) {
+    if (num_pages == 0) return NULL;
+    
+    // Search for a large enough continuous segment in the managed virtual space pool
+    int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
+    if (virt_start_page == -1) {
+        return NULL; // Out of Virtual Memory space
+    }
+    
+    // Calculate the unique virtual address block starting point
+    uint32_t start_vaddr = VM_START + (virt_start_page * PAGE_SIZE);
+    
+    // Map each unique virtual page to the fixed hardware physical address
+    for (size_t i = 0; i < num_pages; i++) {
+        uint32_t current_vaddr = start_vaddr + (i * PAGE_SIZE);
+        uint32_t current_paddr = phys_addr + (i * PAGE_SIZE);
+        
+        map_page(current_paddr, current_vaddr, VM_PRESENT | VM_READWRITE);
+    }
+    
+    // Finalize allocation by marking these virtual pages as occupied
+    // This ensures regular 'alloc_pages' won't hand this virtual address out to anyone else
+    for (size_t i = 0; i < num_pages; i++) {
+        size_t bit = virt_start_page + i;
+        virt_bitmap[bit / 8] |= (1 << (bit % 8));
+    }
+    
+    return (void*)start_vaddr;
+}
+
 void free_pages(void* virtual_addr, size_t num_pages) {
     if (!virtual_addr || num_pages == 0) return;
     

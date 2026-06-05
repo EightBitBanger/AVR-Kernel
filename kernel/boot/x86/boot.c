@@ -5,10 +5,12 @@
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/paging.h>
 #include <kernel/arch/x86/page_alloc.h>
-
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+#include <kernel/arch/x86/bus/pci.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/boot/x86/gdt.h>
+
+#include <kernel/arch/x86/drivers/ata.h>
+#include <kernel/arch/x86/drivers/multiboot_info.h>
 
 #include <kernel/kernel.h>
 #include <kernel/util/math.h>
@@ -113,6 +115,53 @@ void init_sse(void) {
 }
 
 
+
+void debug_dump_storage_first_bytes(void) {
+    uint16_t io_base = 0x1F0; // Legacy primary IDE base port
+    uint16_t buffer[256];     // 256 words = 512 bytes
+    
+    // Select Master Drive and use LBA addressing mode
+    outb(io_base + 6, 0xE0);
+    
+    // Set sector count to 1
+    outb(io_base + 2, 1);
+    
+    // Set LBA address to 0 (Sector 0: the very beginning of the raw chunk)
+    outb(io_base + 3, 0x00); // LBA Low
+    outb(io_base + 4, 0x00); // LBA Mid
+    outb(io_base + 5, 0x00); // LBA High
+    
+    // Send the "Read Sectors with Retry" Command (0x20)
+    outb(io_base + 7, 0x20);
+    
+    // Poll Status Register: Wait for BUSY (0x80) to clear
+    while (inb(io_base + 7) & 0x80);
+    
+    // Poll Status Register: Wait for DRQ (Data Request, 0x08) to set
+    while (!(inb(io_base + 7) & 0x08));
+    
+    // Read 256 words from the Data Port into our buffer
+    for (int i = 0; i < 256; i++) {
+        buffer[i] = inw(io_base + 0);
+    }
+    
+    // Print the bytes out in a clean hex formatting grid
+    uint8_t* byte_ptr = (uint8_t*)buffer;
+    print("\n\n");
+    
+    for (int i = 0; i < 64; i++) {
+        print_hex(byte_ptr[i]);
+        print(" ");
+        
+        if ((i + 1) % 16 == 0) {
+            print("\n");
+        }
+    }
+    print("\n\n");
+}
+
+
+
 void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
         return;
@@ -179,7 +228,34 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     console_prompt_set_string("/>");
     print("kernel v0.0.0\n");
-    draw_flush_region(0, 0, display_width, display_height);
+    draw_flush_display();
+    
+    pci_init();
+    
+    //debug_dump_storage_first_bytes();
+    
+    uint16_t io_base = 0x1F0;
+    
+    ata_init(io_base);
+    
+    uint8_t sector_data[512];
+    //memset(sector_data, 0x55, 512);
+    //ata_write_sector(io_base, 0, sector_data);
+    
+    ata_read_sector(io_base, 0, sector_data);
+    
+    uint8_t line=0;
+    for (unsigned int i=0; i < 512; i++) {
+        if (line > 32) {line=0; print("\n");}
+        line++;
+        
+        print_hex(sector_data[i]);
+        print(" ");
+        
+    }
+    print("\n\n");
+    draw_flush_display();
+    
     
     //
     // Command console boot option
@@ -187,7 +263,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     {
     
     bool activate_console = false;
-    draw_flush_region(0, 0, display_width, display_height);
+    draw_flush_display();
     
     uint64_t old_ms = timer_get_ms();
     while(1) {
@@ -202,11 +278,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
                     activate_console = true;
                     
                     console_prompt_print();
-                    draw_flush_region(0, 0, display_width, display_height);
+                    draw_flush_display();
                     break;
                 }
                 
-                draw_flush_region(0, 0, display_width, display_height);
+                draw_flush_display();
             }
         }
         
@@ -223,7 +299,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
                 mouse_event_handler();
             } else {
                 kb_event_handler();
-                draw_flush_region(0, 0, display_width, display_height);
+                draw_flush_display();
             }
         }
     }

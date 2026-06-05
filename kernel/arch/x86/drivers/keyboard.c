@@ -17,6 +17,7 @@ static volatile uint8_t isr_key_ready   = 0;
 
 static bool is_ctrl_pressed = false;
 static bool is_alt_pressed  = false;
+static bool is_shift_pressed = false;
 
 // Architecture Native Lookup Tables
 // Native PS/2 Scan Code Set 1 Table
@@ -27,6 +28,15 @@ static const char scancode_to_ascii_set1[] = {
   'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';',    /* 0x1E - 0x27 */
  '\'', '`',   0, '\\', 'z', 'x', 'c', 'v', 'b', 'n',   /* 0x28 - 0x31 */
   'm', ',', '.', '/',   0, '*',   0, ' ',   0,   0,    /* 0x32 - 0x3B */
+};
+
+static const char scancode_to_ascii_shifted_set1[] = {
+    0,  0, '!', '@', '#', '$', '%', '^', '&', '*',     /* 0x00 - 0x09 */
+  '(', ')', '_', '+', 0x01, '\t', 'Q', 'W', 'E', 'R',  /* 0x0A - 0x13 */
+  'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0x02,   0,   /* 0x14 - 0x1D */
+  'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':',    /* 0x1E - 0x27 */
+ '"', '~',   0, '|', 'Z', 'X', 'C', 'V', 'B', 'N',   /* 0x28 - 0x31 */
+  'M', '<', '>', '?',   0, '*',   0, ' ',   0,   0,    /* 0x32 - 0x3B */
 };
 
 void kb_init(void) {
@@ -156,12 +166,12 @@ char kb_getc(void) {
     bool is_break = (high_byte == 0x80);
     
     // Track Left Ctrl (0x1D) and Left Alt (0x38)
-    
-    // Note: Right Ctrl/Alt usually send an 0xE0 prefix which you may need to catch in kb_get_raw later
     if (scancode == 0x1D) {
         is_ctrl_pressed = !is_break;
     } else if (scancode == 0x38) {
         is_alt_pressed = !is_break;
+    } else if (scancode == 0x2A || scancode == 0x36) {
+        is_shift_pressed = !is_break;
     }
     
     // Check for Delete key (0x53) while Ctrl and Alt are held down
@@ -173,8 +183,14 @@ char kb_getc(void) {
     
     kb_vkey_set(scancode, !is_break);
     
-    if (scancode < sizeof(scancode_to_ascii_set1) && !is_break) 
-        return scancode_to_ascii_set1[scancode];
+    // MODIFIED: Return appropriate character map based on Shift state
+    if (scancode < sizeof(scancode_to_ascii_set1) && !is_break) {
+        if (is_shift_pressed) {
+            return scancode_to_ascii_shifted_set1[scancode];
+        } else {
+            return scancode_to_ascii_set1[scancode];
+        }
+    }
     
     return 0;
 }

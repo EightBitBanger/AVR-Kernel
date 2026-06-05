@@ -27,15 +27,10 @@ void kernel_init(void) {
     uint32_t dev  = create_knode("dev", root_node);
     uint32_t mnt  = create_knode("mnt", root_node);
     
-    
-    uint32_t nt_ptr = create_device("device");
-    knode_add_reference(dev, nt_ptr);
-    
     hardware_identify_devices(dev, mnt, dev);
     
     kernel_set_local_paths(&fs_paths);
     kernel_set_working_directory(&fs_current);
-    
 }
 
 void hardware_identify_devices(uint32_t knode_device, uint32_t knode_mount, uint32_t nt_device) {
