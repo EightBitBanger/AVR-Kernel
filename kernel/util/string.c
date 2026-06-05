@@ -305,3 +305,81 @@ uint32_t stou(const char* str) {
     
     return result;
 }
+
+void u8tox(uint8_t value, char* dest) {
+    char buffer[3]; // 2 digits max for uint8_t + null terminator
+    int32_t i = 0;
+    int32_t d = 0;
+    const char hex_digits[] = "0123456789ABCDEF";
+    
+    // Explicitly handle 0 case
+    if (value == 0) {
+        dest[0] = '0';
+        dest[1] = '\0';
+        return;
+    }
+    
+    while (value > 0) {
+        buffer[i++] = hex_digits[value % 16];
+        value /= 16;
+    }
+    
+    // Reverse the string into destination
+    while (i > 0) {
+        dest[d++] = buffer[--i];
+    }
+    
+    dest[d] = '\0';
+}
+
+void u16tox(uint16_t value, char* dest) {
+    char buffer[5]; // 4 digits max for uint16_t + null terminator
+    int32_t i = 0;
+    int32_t d = 0;
+    const char hex_digits[] = "0123456789ABCDEF";
+    
+    // Explicitly handle 0 case
+    if (value == 0) {
+        dest[0] = '0';
+        dest[1] = '\0';
+        return;
+    }
+    
+    while (value > 0) {
+        buffer[i++] = hex_digits[value % 16];
+        value /= 16;
+    }
+    
+    // Reverse the string into destination
+    while (i > 0) {
+        dest[d++] = buffer[--i];
+    }
+    
+    dest[d] = '\0';
+}
+
+void u32tox(uint32_t value, char* dest) {
+    char buffer[9]; // 8 digits max for uint32_t + null terminator
+    int32_t i = 0;
+    int32_t d = 0;
+    const char hex_digits[] = "0123456789ABCDEF";
+    
+    // Explicitly handle 0 case
+    if (value == 0) {
+        dest[0] = '0';
+        dest[1] = '\0';
+        return;
+    }
+    
+    while (value > 0) {
+        buffer[i++] = hex_digits[value % 16];
+        value /= 16;
+    }
+    
+    // Reverse the string into destination
+    while (i > 0) {
+        dest[d++] = buffer[--i];
+    }
+    
+    dest[d] = '\0';
+}

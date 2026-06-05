@@ -27,3 +27,9 @@ void itos(int32_t value, char* dest);
 void utos(uint32_t value, char* dest);
 int32_t stoi(const char* str);
 uint32_t stou(const char* str);
+
+// Hex
+
+void u8tox(uint8_t value, char* dest);
+void u16tox(uint16_t value, char* dest);
+void u32tox(uint32_t value, char* dest);
