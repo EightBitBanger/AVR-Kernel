@@ -354,7 +354,6 @@ void draw_rect_filled(int x, int y, int width, int height, uint32_t color) {
         uint32_t* dest = &frame_buffer[(curr_y * buffer_stride) + x_start];
         size_t count = dwords_to_write; 
         
-        // This is highly optimal inside system RAM cache (WB)
         asm volatile(
             "cld\n\t"
             "rep stosl"

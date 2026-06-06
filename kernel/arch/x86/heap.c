@@ -401,16 +401,16 @@ uint32_t kmalloc_next(uint32_t previous_address) {
 }
 
 void kmem_write(uint32_t destination, const void* source, uint32_t size) {
-    void* dest_ptr = (void*)(uintptr_t)(__KMALLOC_HEAP_BEGIN__ + destination);
+    void* dest_ptr = (void*)(uintptr_t)destination;
     memcpy(dest_ptr, source, size);
 }
 
 void kmem_read(void* destination, uint32_t source, uint32_t size) {
-    const void* src_ptr = (const void*)(uintptr_t)(__KMALLOC_HEAP_BEGIN__ + source);
+    const void* src_ptr = (const void*)(uintptr_t) + source;
     memcpy(destination, src_ptr, size);
 }
 
 void kmemset(uint32_t destination, unsigned char value, uint32_t size) {
-    void* dest_ptr = (void*)(uintptr_t)(__KMALLOC_HEAP_BEGIN__ + destination);
+    void* dest_ptr = (void*)(uintptr_t)destination;
     memset(dest_ptr, value, size);
 }

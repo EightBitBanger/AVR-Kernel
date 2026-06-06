@@ -40,4 +40,6 @@ void fs_mem_read(uint32_t address, void* destination, uint32_t size);
 
 bool fs_check_directory_valid(uint32_t address);
 
+void fs_cache_sync(void);
+
 #endif

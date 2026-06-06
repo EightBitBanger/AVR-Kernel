@@ -4,11 +4,18 @@
 #include <kernel/arch/x86/paging.h>
 #include <kernel/arch/x86/page_alloc.h>
 
+#include <kernel/arch/x86/drivers/ata.h>
+#include <kernel/fs/fs.h>
+
 #include <kernel/console/print.h>
 #include <kernel/knode.h>
 #include <kernel/util/string.h>
 
 #define PAGE_SIZE 4096
+
+//#define PCI_DEBUG_HARDWARE_DUMP
+
+uint16_t storage_device_index = 0;
 
 static void format_device_string(char* buf, uint8_t dev, uint8_t func) {
     buf[0] = '0' + (dev / 10);
@@ -97,6 +104,8 @@ void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
         uint8_t bar_offset = 0x10 + (bar_index * 4);
         uint32_t original_bar = pci_config_read(bus, dev, func, bar_offset);
         
+#ifdef PCI_DEBUG_HARDWARE_DUMP
+        
         if (original_bar != 0) {
             // Print out what the BAR actually contains
             if (original_bar & 0x1) {
@@ -105,6 +114,9 @@ void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
                 print("MMIO  ::  ");
             }
         }
+        
+#endif
+        
     }
     
     for (uint8_t bar_index = 0; bar_index < 6; bar_index++) {
@@ -137,7 +149,20 @@ void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
     return first_mapped_vaddr;
 }
 
-void pci_scan_bus(uint8_t bus_number, uint32_t parent_bus_directory) {
+uint16_t pci_get_io_bar(uint8_t bus, uint8_t dev, uint8_t func, uint8_t bar_index) {
+    uint8_t bar_offset = 0x10 + (bar_index * 4);
+    uint32_t bar = pci_config_read(bus, dev, func, bar_offset);
+    
+    // Check if it is a valid, populated I/O BAR
+    if (bar != 0 && (bar & 0x01) == 1) {
+        // Bit 0 and 1 are formatting flags; mask them out
+        return (uint16_t)(bar & 0xFFFFFFFC);
+    }
+    
+    return 0; // Not an I/O BAR or empty
+}
+
+void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_directory) {
     for (uint8_t dev = 0; dev < 32; dev++) {
         // Read Register 0 (Vendor/Device ID) for Function 0 first
         uint32_t reg0 = pci_config_read(bus_number, dev, 0, 0);
@@ -185,12 +210,13 @@ void pci_scan_bus(uint8_t bus_number, uint32_t parent_bus_directory) {
             char device_node_name[16];
             format_device_string(device_node_name, dev, func);
             
-            uint32_t device_knode = create_knode(device_node_name, parent_bus_directory);
+            uint32_t device_knode = create_knode(device_node_name, pci_directory);
             
             const char* type_name = pci_get_class_name(class_code);
             uint32_t type_knode = create_knode(type_name, device_knode);
             
             
+#ifdef PCI_DEBUG_HARDWARE_DUMP
             
             char base_address[16];
             format_hex32_string(base_address, (uint32_t)base_virtual_address);
@@ -199,6 +225,76 @@ void pci_scan_bus(uint8_t bus_number, uint32_t parent_bus_directory) {
             print(": ");
             print( base_address );
             print("\n");
+            
+#endif
+            
+            //
+            // Initiate ATA devices
+            
+            if (class_code == 0x01 && subclass == 0x01) { // Storage Controller, IDE
+                uint16_t primary_io_base = 0;
+                
+                // Check Prog IF to see if it's Native Mode or Legacy Compatibility Mode
+                if (prog_if & 0x01) {
+                    // Native Mode: Read BAR 0 for Primary Channel Command Ports
+                    primary_io_base = pci_get_io_bar(bus_number, dev, func, 0);
+                } else {
+                    // Legacy Mode: Force the standard PC architecture ports
+                    primary_io_base = 0x1F0;
+                }
+                
+                if (primary_io_base != 0) {
+                    bool ata_present = ata_init(primary_io_base);
+                    if (ata_present) {
+                        
+                        {
+                        //
+                        // Quick format example
+                        /*
+                        uint32_t device_size = 1024 * 1024 * 32;
+                        
+                        uint32_t device_address = kmalloc( 512 );
+                        kmemset(device_address, 0x00, 512);
+                        
+                        fs_device_format(device_address, device_size, 512);
+                        
+                        struct FSPartitionBlock part;
+                        fs_device_open(device_address, &part);
+                        
+                        uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
+                        
+                        part.root_directory = root_directory;
+                        
+                        fs_mem_write(sizeof(struct FSDeviceHeader), &part, sizeof(struct FSPartitionBlock));
+                        
+                        fs_cache_sync();
+                        */
+                        }
+                        
+                        
+                        
+                        char device_name[] = "ssd ";
+                        device_name[3] = '0' + storage_device_index++;
+                        
+                        uint32_t mount_ptr = create_knode(device_name, mnt_directory);
+                        kmalloc_set_flags(mount_ptr, KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT);
+                        
+                        uint32_t block_device = kmalloc( 512 );
+                        
+                        struct FSPartitionBlock part;
+                        fs_device_open(block_device, &part);
+                        
+                        ata_read_sector(0, (uint8_t*)block_device);
+                        
+                        knode_add_reference(mount_ptr, block_device);
+                        
+                        
+                        
+                        
+                        
+                    }
+                }
+            }
             
             
             
@@ -266,8 +362,9 @@ void pci_scan_bus(uint8_t bus_number, uint32_t parent_bus_directory) {
                 
                 uint32_t secondary_bus_directory = create_knode(sub_bus_name, type_knode);
                 
-                pci_scan_bus(secondary_bus, secondary_bus_directory);
+                pci_scan_bus(secondary_bus, secondary_bus_directory, mnt_directory);
             }
+            
         }
     }
 }
@@ -275,10 +372,11 @@ void pci_scan_bus(uint8_t bus_number, uint32_t parent_bus_directory) {
 void pci_init(void) {
     uint32_t root_node = knode_get_root();
     uint32_t dev_directory = knode_find_by_name(root_node, "dev");
-    uint32_t pci_master_directory = create_knode("pci", dev_directory);
+    uint32_t mnt_directory = knode_find_by_name(root_node, "mnt");
+    uint32_t pci_directory = create_knode("pci", dev_directory);
     
-    uint32_t bus0_directory = create_knode("bus0", pci_master_directory);
+    uint32_t bus0_directory = create_knode("bus0", pci_directory);
     
-    pci_scan_bus(0, bus0_directory);
+    pci_scan_bus(0, bus0_directory, mnt_directory);
 }
 

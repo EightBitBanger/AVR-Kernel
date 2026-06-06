@@ -120,25 +120,27 @@ uint32_t fs_find_next(uint32_t prev_addr) {
 void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t sector_size) {
     struct FSDeviceHeader devH = { .id = 0x13, .name = "fs" };
     struct FSPartitionBlock partH = {
-        .total_size = capacity, .sector_size = sector_size, 
-        .magic = FS_MAGIC, .name = "eeprom"
+        .total_size = capacity, 
+        .sector_size = sector_size, 
+        .magic = FS_MAGIC, 
+        .name = "SSD"
     };
     
     fs_device_address = device_address;
     uint32_t b_size = ((capacity / sector_size) + 7) / 8;
     uint32_t meta_size = sizeof(devH) + sizeof(partH) + b_size;
     uint32_t res_blocks = (meta_size + sector_size - 1) / sector_size;
-
+    
     fs_mem_write(0, &devH, sizeof(devH));
     fs_mem_write(sizeof(devH), &partH, sizeof(partH));
-
+    
     // Clear bitmap area on device
     uint32_t b_addr = sizeof(devH) + sizeof(partH);
     for (uint32_t i = 0; i < b_size; i++) fs_writeb(b_addr + i, 0x00);
-
-    // Re-open to initialize window logic
+    
+    // Re-open to initialize logic
     fs_device_open(device_address, &partH);
-
+    
     // Mark reserved blocks
     for (uint32_t i = 0; i < res_blocks; i++) fs_bitmap_set(i);
     fs_bitmap_flush();

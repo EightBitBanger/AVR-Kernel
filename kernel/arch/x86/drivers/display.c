@@ -76,11 +76,11 @@ uint16_t display_get_height(void) {
 }
 
 uint16_t display_get_columns(void) {
-    return console_width;
+    return console_height;
 }
 
 uint16_t display_get_rows(void) {
-    return console_height;
+    return console_width;
 }
 
 void display_putc(const char ch) {
@@ -89,7 +89,9 @@ void display_putc(const char ch) {
 }
 
 void display_newline(void) {
-    uint8_t* fb_bytes = (uint8_t*)((uintptr_t)vinfo->framebuffer_addr);
+    extern uint32_t* back_buffer;
+    
+    uint8_t* fb_bytes = (uint8_t*)((uintptr_t)back_buffer);
     
     uint32_t pitch = vinfo->framebuffer_pitch;
     uint32_t height = display_get_height();

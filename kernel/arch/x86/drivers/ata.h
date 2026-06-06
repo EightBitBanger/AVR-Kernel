@@ -5,16 +5,14 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Standard sector size for ATA/IDE drives
 #define ATA_SECTOR_SIZE 512
 
-// Initializes the drive context
 bool ata_init(uint16_t io_base);
 
-// Reads a specific sector from the disk into a 512-byte buffer
-bool ata_read_sector(uint16_t io_base, uint32_t lba, uint8_t* buffer);
+bool ata_read_sector(uint32_t address, uint8_t* buffer);
+bool ata_write_sector(uint32_t address, const uint8_t* buffer);
 
-// Writes a 512-byte buffer out to a specific sector on the disk
-bool ata_write_sector(uint16_t io_base, uint32_t lba, const uint8_t* buffer);
+bool ata_read_bytes(uint32_t address, uint8_t* buffer, size_t total_bytes);
+bool ata_write_bytes(uint32_t address, const uint8_t* buffer, size_t total_bytes);
 
 #endif

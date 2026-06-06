@@ -73,16 +73,48 @@ void desktop_environment_init(void) {
     wclass.y = 100 + 40;
     wclass.width = 200;
     wclass.height = 100;
-    WindowHandle window = create_window(wclass, 0, callback_handler);
+    WindowHandle window = create_window(wclass, WINDOW_STYLE_RESIZEABLE, callback_handler);
     
+    {
     WindowClass wclassbutton;
-    wclassbutton.x = 67;
+    wclassbutton.x = 20;
     wclassbutton.y = 56;
     wclassbutton.width = 65;
     wclassbutton.height = 27;
     WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
-    
     dwm_window_set_parent(button, window);
+    }
+    
+    {
+    WindowClass wclassbutton;
+    wclassbutton.x = 100;
+    wclassbutton.y = 56;
+    wclassbutton.width = 65;
+    wclassbutton.height = 27;
+    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
+    dwm_window_set_parent(button, window);
+    }
+    
+    {
+    WindowClass wclassbutton;
+    wclassbutton.x = 20;
+    wclassbutton.y = 80;
+    wclassbutton.width = 65;
+    wclassbutton.height = 27;
+    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
+    dwm_window_set_parent(button, window);
+    }
+    
+    {
+    WindowClass wclassbutton;
+    wclassbutton.x = 100;
+    wclassbutton.y = 80;
+    wclassbutton.width = 65;
+    wclassbutton.height = 27;
+    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
+    dwm_window_set_parent(button, window);
+    }
+    
     
 }
 
@@ -113,53 +145,6 @@ void init_sse(void) {
     // Write back to CR4
     asm volatile("mov %0, %%cr4" :: "r"(cr4));
 }
-
-
-
-void debug_dump_storage_first_bytes(void) {
-    uint16_t io_base = 0x1F0; // Legacy primary IDE base port
-    uint16_t buffer[256];     // 256 words = 512 bytes
-    
-    // Select Master Drive and use LBA addressing mode
-    outb(io_base + 6, 0xE0);
-    
-    // Set sector count to 1
-    outb(io_base + 2, 1);
-    
-    // Set LBA address to 0 (Sector 0: the very beginning of the raw chunk)
-    outb(io_base + 3, 0x00); // LBA Low
-    outb(io_base + 4, 0x00); // LBA Mid
-    outb(io_base + 5, 0x00); // LBA High
-    
-    // Send the "Read Sectors with Retry" Command (0x20)
-    outb(io_base + 7, 0x20);
-    
-    // Poll Status Register: Wait for BUSY (0x80) to clear
-    while (inb(io_base + 7) & 0x80);
-    
-    // Poll Status Register: Wait for DRQ (Data Request, 0x08) to set
-    while (!(inb(io_base + 7) & 0x08));
-    
-    // Read 256 words from the Data Port into our buffer
-    for (int i = 0; i < 256; i++) {
-        buffer[i] = inw(io_base + 0);
-    }
-    
-    // Print the bytes out in a clean hex formatting grid
-    uint8_t* byte_ptr = (uint8_t*)buffer;
-    print("\n\n");
-    
-    for (int i = 0; i < 64; i++) {
-        print_hex(byte_ptr[i]);
-        print(" ");
-        
-        if ((i + 1) % 16 == 0) {
-            print("\n");
-        }
-    }
-    print("\n\n");
-}
-
 
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
@@ -196,17 +181,17 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     page_allocator_init(mbi_info);
     
     // Lock the Graphics back buffer at the 8MB mark
-    // This is well within our 64MB chunk
+    // This is well within the 64MB chunk
     uint32_t* forced_back_buffer = (uint32_t*)0x00800000;
     
     extern void draw_set_frame_buffer(uint32_t* buffer_ptr);
     draw_set_frame_buffer(forced_back_buffer);
     
-    uint32_t heap_start = 0x01800000; 
+    uint32_t heap_start = 0x01800000;
     heap_set_base_address(heap_start);
     
-    // Initialize an 8 MB heap block (spans from 24MB to 32MB)
-    uint32_t heap_sz  = (1024 * 1024 * 8); 
+    // Initialize an 8 MB heap block
+    uint32_t heap_sz  = (1024 * 1024 * 8);
     uint32_t block_sz = 16;
     heap_init(block_sz, heap_sz);
     
@@ -226,23 +211,18 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     kernel_init();
     
-    console_prompt_set_string("/>");
     print("kernel v0.0.0\n");
     draw_flush_display();
     
     pci_init();
     
-    //debug_dump_storage_first_bytes();
     
-    uint16_t io_base = 0x1F0;
-    
-    ata_init(io_base);
-    
+    //
+    // DEBUG dump ATA drive
+    //
+    /*
     uint8_t sector_data[512];
-    //memset(sector_data, 0x55, 512);
-    //ata_write_sector(io_base, 0, sector_data);
-    
-    ata_read_sector(io_base, 0, sector_data);
+    ata_read_sector(0, sector_data);
     
     uint8_t line=0;
     for (unsigned int i=0; i < 512; i++) {
@@ -255,6 +235,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     }
     print("\n\n");
     draw_flush_display();
+    */
     
     
     //
@@ -315,7 +296,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     
     create_folder(30, 30, "system");
-    create_folder(30, 130, "new folder");
     
     
     
@@ -329,6 +309,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     
     // Scalable vector font
     
+    // Resize windows
     
     while(1) {
         
