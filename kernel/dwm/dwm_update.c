@@ -18,6 +18,8 @@ void dwm_update(void) {
     // UI processing loops
     if (dragged_window != NULL) {
         dwm_update_window_dragging(&window_context);
+    } else if (resizing_window != NULL) {
+        dwm_update_window_resizing(&window_context); // <--- Inject here
     } else if (dragged_icon != NULL) {
         dwm_update_icon_dragging(&window_context);
     } else {
@@ -33,7 +35,6 @@ void dwm_update(void) {
         struct WindowObject* win = (struct WindowObject*)current->data;
         
         if (win->events & EVENT_CLOSE) {
-            // This calls your clean destroy logic safely
             destroy_window(win->id);
         }
         

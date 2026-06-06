@@ -17,6 +17,10 @@ extern struct IconObject* dragged_icon;
 extern int icon_drag_offset_x;
 extern int icon_drag_offset_y;
 
+extern struct WindowObject* resizing_window;
+extern int resize_offset_x;
+extern int resize_offset_y;
+
 // Object lists
 extern struct list_node* window_head;
 extern struct list_node* window_tail;
@@ -71,7 +75,9 @@ void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
 void dwm_update_mouse(struct WindowContext* ctx);
 void dwm_update_window_dragging(struct WindowContext* ctx);
 void dwm_update_icon_dragging(struct WindowContext* ctx);
+void dwm_update_window_resizing(struct WindowContext* ctx);
 
+void dwm_sync_child_positions(struct WindowObject* parent);
 void dwm_calculate_icon_bounds(struct IconObject* icon);
 void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h);
 void dwm_get_absolute_position(struct WindowObject* window, int* out_x, int* out_y);

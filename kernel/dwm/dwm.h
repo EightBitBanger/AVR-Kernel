@@ -40,6 +40,7 @@ WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure 
 void destroy_window(WindowHandle window_handle);
 
 int8_t create_folder(uint16_t x, uint16_t y, const char* name);
+int8_t create_file(uint16_t x, uint16_t y, const char* name);
 
 void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
 WindowHandle dwm_window_get_parent(WindowHandle window);

@@ -2,6 +2,7 @@
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/console/display.h>
 #include <kernel/util/list.h>
+#include <kernel/util/string.h>
 
 void dwm_update_icon_dragging(struct WindowContext* ctx) {
     if (dragged_icon == NULL) return;
@@ -75,6 +76,87 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
     } else {
         // Released - drop the window
         dragged_window = NULL;
+    }
+}
+
+void dwm_update_window_resizing(struct WindowContext* ctx) {
+    if (resizing_window == NULL) return;
+    
+    if (ctx->left_button_pressed) {
+        // Project desired sizing bounds derived from mouse tracking adjustments
+        int target_w = (ctx->mouse.x + resize_offset_x) - resizing_window->x;
+        int target_h = (ctx->mouse.y + resize_offset_y) - resizing_window->y;
+        
+        // Enforce a sensible minimum geometry threshold
+        int min_width = 64;
+        int min_height = 48 + resizing_window->titlebar_height;
+        
+        if (target_w < min_width)  target_w = min_width;
+        if (target_h < min_height) target_h = min_height;
+        
+        // Check if dimension shifts have actually happened
+        if (resizing_window->w != target_w || resizing_window->h != target_h) {
+            
+            // Invalidate old window space configuration to clear out previous borders
+            int border_ext = resizing_window->border_width;
+            dwm_invalidate_region(resizing_window->x - border_ext, 
+                                  resizing_window->y - border_ext, 
+                                  resizing_window->w + (border_ext * 2), 
+                                  resizing_window->h + (border_ext * 2));
+            
+            // Commit the new target geometry properties
+            resizing_window->w = target_w;
+            resizing_window->h = target_h;
+            
+            // Re-compute client-surface mapping offsets
+            resizing_window->surface_w = resizing_window->w;
+            resizing_window->surface_h = resizing_window->h - resizing_window->titlebar_height;
+            resizing_window->buffer_w  = target_w; 
+            resizing_window->buffer_h  = target_h - resizing_window->titlebar_height;
+            
+            resizing_window->surface_x = resizing_window->x;
+            resizing_window->surface_y = resizing_window->y + resizing_window->titlebar_height + (border_ext ? 1 : 0);
+            
+            // Safely reallocate internal window back-buffer surface dimensions
+            uint32_t frame_buffer_sz = resizing_window->buffer_w * resizing_window->buffer_h * sizeof(uint32_t);
+            if (resizing_window->frame_buffer != NULL) {
+                free(resizing_window->frame_buffer);
+            }
+            resizing_window->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
+            if (resizing_window->frame_buffer != NULL) {
+                memset(resizing_window->frame_buffer, 0x11, frame_buffer_sz);
+            }
+            
+            // Update the positioning coordinates of the resize handle button itself
+            for (struct list_node* node = resizing_window->buttons_head; node != NULL; node = node->next) {
+                struct WindowButton* btn = (struct WindowButton*)node->data;
+                if (btn->event == EVENT_RESIZE) {
+                    btn->x = resizing_window->w - btn->width;
+                    btn->y = resizing_window->h - btn->height;
+                }
+                // Option: Update regular buttons (Close/Minimize) positions if window width changes
+                if (btn->event == EVENT_CLOSE) {
+                    btn->x = resizing_window->w - btn->width;
+                }
+                if (btn->event == EVENT_MINIMIZE) {
+                    struct Image* button_close = dwm_resource_find("ui_close");
+                    btn->x = resizing_window->w - button_close->width - btn->width;
+                }
+            }
+            
+            // Synchronize any nested hierarchical layouts attached to it
+            dwm_sync_child_positions(resizing_window);
+            
+            // Request a complete paint pass and invalidate the updated boundaries
+            resizing_window->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW | WINDOW_FLAG_REDECORATE);
+            dwm_invalidate_region(resizing_window->x - border_ext, 
+                                  resizing_window->y - border_ext, 
+                                  resizing_window->w + (border_ext * 2), 
+                                  resizing_window->h + (border_ext * 2));
+        }
+    } else {
+        // Drag click released - conclude the sizing operations safely
+        resizing_window = NULL;
     }
 }
 

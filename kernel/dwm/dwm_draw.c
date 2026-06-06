@@ -8,6 +8,25 @@ bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int
     return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
 }
 
+void get_rect_intersection(int x1, int y1, int w1, int h1, 
+                           int x2, int y2, int w2, int h2, 
+                           int *out_x, int *out_y, int *out_w, int *out_h) {
+    int ix1 = (x1 > x2) ? x1 : x2;
+    int iy1 = (y1 > y2) ? y1 : y2;
+    int ix2 = (x1 + w1 < x2 + w2) ? x1 + w1 : x2 + w2;
+    int iy2 = (y1 + h1 < y2 + h2) ? y1 + h1 : y2 + h2;
+
+    if (ix1 < ix2 && iy1 < iy2) {
+        *out_x = ix1;
+        *out_y = iy1;
+        *out_w = ix2 - ix1;
+        *out_h = iy2 - iy1;
+    } else {
+        *out_w = 0;
+        *out_h = 0; // No overlap
+    }
+}
+
 void dwm_sync_child_positions(struct WindowObject* parent) {
     if (parent == NULL) return;
     
@@ -55,6 +74,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
     dwm_process_window_events( window );
     
     if (do_redraw) {
+        
         // Handle application-level redraw request
         if (window->flags & WINDOW_FLAG_REDRAW) { 
             window->flags &= ~WINDOW_FLAG_REDRAW;
@@ -85,8 +105,20 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
                 clip_h = window->h - window->titlebar_height;
             }
             
-            dwm_draw_window(window);
-            dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+            if (window->parent != NULL) {
+                // Intersect current calculated window clip against its parent surface bounds
+                get_rect_intersection(clip_x, clip_y, clip_w, clip_h,
+                                      window->parent->surface_x, window->parent->surface_y,
+                                      window->parent->surface_w, window->parent->surface_h,
+                                      &clip_x, &clip_y, &clip_w, &clip_h);
+            }
+            
+            if (clip_w > 0 && clip_h > 0) {
+                
+                dwm_draw_window(window);
+                
+                dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+            }
             
             window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
         }
@@ -242,9 +274,8 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
 }
 
 void dwm_draw_window(struct WindowObject* window_handle) {
-    if (window_handle->style & WINDOW_STYLE_NOBORDERS) {
+    if (window_handle->style & WINDOW_STYLE_NOBORDERS) 
         return;
-    }
     
     int32_t wx = window_handle->x;
     int32_t wy = window_handle->y;
@@ -262,6 +293,7 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     
     // Draw the window outer borders
     for (uint8_t b = 1; b <= window_handle->border_width; b++) {
+        
         draw_rect(window_handle->x - b, window_handle->y - b, window_handle->w + (b * 2), window_handle->h + (b * 2), window_handle->border_color);
     }
     

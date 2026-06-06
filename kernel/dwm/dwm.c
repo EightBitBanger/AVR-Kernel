@@ -38,6 +38,10 @@ int icon_drag_offset_y = 0;
 struct IconObject* last_clicked_icon = NULL;
 uint32_t last_icon_click_time = 0;
 
+struct WindowObject* resizing_window = NULL;
+int resize_offset_x = 0;
+int resize_offset_y = 0;
+
 Point mouse_old;
 
 #define MAX_CONTEXT_MENUS 8
@@ -171,6 +175,20 @@ WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure 
         int16_t vertical = window->titlebar_height / button_close->height;
         if (button_close != NULL) window_add_button(window, close_x, vertical, button_close->width, button_close->height, EVENT_CLOSE, *button_close);
         if (button_minimize != NULL) window_add_button(window, close_min, vertical, button_close->width, button_close->height, EVENT_MINIMIZE, *button_minimize);
+    }
+    
+    if (wstyle & WINDOW_STYLE_RESIZEABLE) {
+        uint16_t resize_w = 12;
+        uint16_t resize_h = 12;
+        int16_t resize_x = window->w - resize_w;
+        int16_t resize_y = window->h - resize_h;
+        
+        struct Image img_null;
+        img_null.data = NULL;
+        img_null.width = 0;
+        img_null.height = 0;
+        
+        window_add_button(window, resize_x, resize_y, resize_w, resize_h, EVENT_RESIZE, img_null);
     }
     
     return window->id;

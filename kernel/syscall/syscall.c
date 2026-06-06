@@ -20,8 +20,6 @@ static const struct CommandFunction command_table[] = {
     {"ls",        SYSCALL_LIST,         call_routine_lsdir,        KSCF_COMMAND},
     {"cd",        SYSCALL_CHDIR,        call_routine_chdir,        KSCF_COMMAND},
     
-    /*
-    
     {"mk",        SYSCALL_MAKE,         call_routine_mk,           KSCF_COMMAND},
     {"mkdir",     SYSCALL_MAKEDIR,      call_routine_mkdir,        KSCF_COMMAND},
     {"rm",        SYSCALL_REMOVE,       call_routine_rm,           KSCF_COMMAND},
@@ -29,12 +27,11 @@ static const struct CommandFunction command_table[] = {
     {"cp",        SYSCALL_COPY,         call_routine_copy,         KSCF_COMMAND},
     
     {"type",      SYSCALL_TYPE,         call_routine_type,         KSCF_COMMAND},
-    */
+    
+    {"format",    SYSCALL_FORMAT,       call_routine_format,       KSCF_COMMAND},
+    {"chkdsk",    SYSCALL_CHKDSK,       call_routine_chkdsk,       KSCF_COMMAND},
     
     //{"boot",      SYSCALL_BOOT,         call_routine_boot,         KSCF_COMMAND},
-    //{"format",    SYSCALL_FORMAT,       call_routine_format,       KSCF_COMMAND},
-    //{"chkdsk",    SYSCALL_CHKDSK,       call_routine_chkdsk,       KSCF_COMMAND},
-    
     //{"graph",     SYSCALL_GRAPHICS,     call_routine_graph,        KSCF_COMMAND},
     
 };

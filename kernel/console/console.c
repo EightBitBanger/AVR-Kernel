@@ -78,6 +78,8 @@ void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length
     memset(keyboard_string, 0x00, keyboard_length_max);
     keyboard_length = 0;
     
+    console_prompt_set_string("/>");
+    
     display_clear();
 }
 
@@ -248,7 +250,7 @@ void console_print_reference_entry(uint32_t address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(kdir.name);
         
-        for (size_t i = 0; i < (display_get_columns() / 8 ) - (attr_len + name_len) - attr_len - 1; i++) 
+        for (size_t i = 0; i < (display_get_columns() - (attr_len + name_len) - attr_len - 1) / 2; i++) 
             print(" ");
         
         print(msg_dir_sym);
@@ -285,7 +287,7 @@ void console_print_fs_entry(uint32_t directory_address) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(header.block.name);
         if (header.block.attributes & FS_ATTRIBUTE_DIRECTORY) {
-            for (size_t i = 0; i < display_get_columns() - (attr_len + name_len) - attr_len - 1; i++) 
+            for (size_t i = 0; i < (display_get_columns() - (attr_len + name_len) - attr_len - 1) / 2; i++) 
                 print(" ");
             
             print(msg_dir_sym);
@@ -296,7 +298,7 @@ void console_print_fs_entry(uint32_t directory_address) {
             if (file_size > 99) size_len = 6;
             if (file_size > 999) size_len = 7;
             
-            for (size_t i = 0; i < display_get_columns() - (size_len + name_len) - 1; i++) 
+            for (size_t i = 0; i < (display_get_columns() - (size_len + name_len) - 1) / 2; i++) 
                 print(" ");
             
             print_int(file_size);

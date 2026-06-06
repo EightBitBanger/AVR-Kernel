@@ -18,23 +18,55 @@ int call_routine_format(int arg_count, char** args) {
         return 1;
     }
     
-    for (int i=0; i < arg_count; i++) {
+    for (int i = 0; i < arg_count; i++) {
         char* argument = args[i];
         
-        if (strcmp(argument, "-4k" ) == 0) {total_capacity = 1024UL * 4UL; continue;}
-        if (strcmp(argument, "-8k" ) == 0) {total_capacity = 1024UL * 8UL; continue;}
-        if (strcmp(argument, "-16k") == 0) {total_capacity = 1024UL * 16UL; continue;}
-        if (strcmp(argument, "-32k") == 0) {total_capacity = 1024UL * 32UL; continue;}
+        // Ensure argument starts with '-' and has at least a flag character and a digit
+        if (argument[0] != '-' || argument[1] == '\0' || argument[2] == '\0') {
+            print("Unknown argument '");
+            print(argument);
+            print("'\n");
+            return 2;
+        }
         
-        if (strcmp(argument, "-32s")  == 0)  {sector_size = 32UL; continue;}
-        if (strcmp(argument, "-64s")  == 0)  {sector_size = 64UL; continue;}
-        if (strcmp(argument, "-512s") == 0)  {sector_size = 512UL; continue;}
-        if (strcmp(argument, "-1024s") == 0) {sector_size = 1024UL; continue;}
+        char flag_type = argument[1];
         
-        print("Unknown argument '");
-        print(argument);
-        print("'\n");
-        return 2;
+        // Inlined parse_int logic
+        uint32_t value = 0;
+        const char* str = &argument[2];
+        const char* startptr = str; // Track the start to ensure at least one digit is parsed
+        
+        while (*str >= '0' && *str <= '9') {
+            value = value * 10 + (*str - '0');
+            str++;
+        }
+        
+        // If no digits were parsed or there are extra characters at the end, it's invalid
+        if (str == startptr || *str != '\0') {
+            print("Unknown argument '");
+            print(argument);
+            print("'\n");
+            return 2;
+        }
+        
+        // Handle Capacity Flags (-k32, -M1, etc.)
+        if (flag_type == 'k') {
+            total_capacity = value * 1024UL;
+        }
+        else if (flag_type == 'M') {
+            total_capacity = value * 1024UL * 1024UL;
+        }
+        // Handle Sector Flags (-s32, -s512, etc.)
+        else if (flag_type == 's' && (value == 32 || value == 64 || value == 512 || value == 1024)) {
+            sector_size = value;
+        }
+        // If it didn't match any valid conditions:
+        else {
+            print("Unknown argument '");
+            print(argument);
+            print("'\n");
+            return 2;
+        }
     }
     
     if (total_capacity == 0) {
@@ -62,6 +94,9 @@ int call_routine_format(int arg_count, char** args) {
     fs_mem_write(sizeof(struct FSDeviceHeader), &partition, sizeof(struct FSPartitionBlock));
     
     fs_bitmap_flush();
+    fs_current.mount_root = root_directory;
+    
+    kernel_set_working_directory(&fs_current);
     return 0;
 }
 

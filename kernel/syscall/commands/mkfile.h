@@ -20,7 +20,7 @@ int call_routine_mk(int arg_count, char** args) {
         return 3;
     
     uint32_t file_size = 0;
-    if (arg_count == 2) file_size = strtol(args[1], NULL, 10);
+    if (arg_count == 2) file_size = stoi(args[1]);
     
     uint32_t file_address = fs_file_create(args[0], FS_PERMISSION_READ | FS_PERMISSION_WRITE, file_size, fs_current.mount_directory);
     if (file_address == FS_NULL) 

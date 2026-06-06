@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <kernel/dwm/objects/window_handle.h>
-#include <kernel/dwm/objects/window_events.h>
+#include <kernel/dwm/dwm_events.h>
 
 struct WindowObject {
     WindowHandle id;

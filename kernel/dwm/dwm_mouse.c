@@ -157,6 +157,16 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         if (ctx->mouse.x >= btn_min_x && ctx->mouse.x <= btn_max_x &&
             ctx->mouse.y >= btn_min_y && ctx->mouse.y <= btn_max_y) {
             
+            if (btn->event == EVENT_RESIZE) {
+                resizing_window = clicked_win;
+                // Calculate offset between the cursor and the bottom right corner of the window
+                resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
+                resize_offset_y = (clicked_win->y + clicked_win->h) - ctx->mouse.y;
+                return true;
+            } else {
+                clicked_win->events |= btn->event;
+            }
+            
             if (is_new_left_click) {
                 // Pipe the registered custom flag directly into the active event queue
                 clicked_win->events |= btn->event;
