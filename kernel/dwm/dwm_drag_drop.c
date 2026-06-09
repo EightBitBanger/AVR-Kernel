@@ -81,6 +81,8 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
 
 void dwm_update_window_resizing(struct WindowContext* ctx) {
     if (resizing_window == NULL) return;
+    if (resizing_window->frame_buffer == NULL) 
+        return;
     
     if (ctx->left_button_pressed) {
         // Project desired sizing bounds derived from mouse tracking adjustments
@@ -93,6 +95,14 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
         
         if (target_w < min_width)  target_w = min_width;
         if (target_h < min_height) target_h = min_height;
+        
+        // Enforce the maximum geometry threshold if defined (greater than 0)
+        if (resizing_window->max_width > 0 && target_w > resizing_window->max_width) {
+            target_w = resizing_window->max_width;
+        }
+        if (resizing_window->max_height > 0 && target_h > resizing_window->max_height) {
+            target_h = resizing_window->max_height;
+        }
         
         // Check if dimension shifts have actually happened
         if (resizing_window->w != target_w || resizing_window->h != target_h) {
@@ -107,6 +117,19 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             // Commit the new target geometry properties
             resizing_window->w = target_w;
             resizing_window->h = target_h;
+            
+            // Synchronize any nested hierarchical layouts attached to it
+            dwm_sync_child_positions(resizing_window);
+            
+            // Flag the resize event so the window's callback receives it
+            dwm_window_send_event(resizing_window->id, EVENT_RESIZE);
+            
+            // Request a complete paint pass and invalidate the updated boundaries
+            resizing_window->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW | WINDOW_FLAG_REDECORATE);
+            dwm_invalidate_region(resizing_window->x - border_ext, 
+                                  resizing_window->y - border_ext, 
+                                  resizing_window->w + (border_ext * 2), 
+                                  resizing_window->h + (border_ext * 2));
             
             // Re-compute client-surface mapping offsets
             resizing_window->surface_w = resizing_window->w;

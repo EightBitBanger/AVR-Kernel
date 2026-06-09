@@ -24,19 +24,28 @@
 
 #define DOUBLE_CLICK_THRESHOLD_MS   500
 
-typedef void(*WindowProcedure)(WindowHandle, wEvent);
+typedef void(*WindowProcedure)(WindowHandle, wEvent, uint16_t wparam);
 
 typedef struct {
-    uint32_t x;
-    uint32_t y;
-    uint32_t width;
-    uint32_t height;
+    uint16_t x;
+    uint16_t y;
+    uint16_t width;
+    uint16_t height;
+    uint16_t max_width;
+    uint16_t max_height;
+    char* title;
 } WindowClass;
+
+
+// Testing - non user functions
+
+void* dwm_resource_find(const char* name);
+
 
 void dwm_initiate(void);
 void dwm_update(void);
 
-WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure proc);
+WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc);
 void destroy_window(WindowHandle window_handle);
 
 int8_t create_folder(uint16_t x, uint16_t y, const char* name);
@@ -45,7 +54,7 @@ int8_t create_file(uint16_t x, uint16_t y, const char* name);
 void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
 WindowHandle dwm_window_get_parent(WindowHandle window);
 
-struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t* sprite);
+struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite);
 void destroy_icon(struct IconObject* icon);
 
 // Primitive drawing

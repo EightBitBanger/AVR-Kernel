@@ -1,5 +1,6 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/dwm_core_internal.h>
+#include <kernel/events.h>
 #include <kernel/console/display.h>
 #include <kernel/util/list.h>
 #include <kernel/util/timer.h>
@@ -224,13 +225,7 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
                 
                 // Left mouse double click
                 
-                WindowClass wclass;
-                wclass.x = 200;
-                wclass.y = 100;
-                wclass.width = 250;
-                wclass.height = 250;
-                
-                WindowHandle window = create_window(wclass, 0, NULL);
+                kernel_event_send(KEVENT_EXECUTE, "event");
                 
             } else {
                 dragged_icon = clicked_icon;

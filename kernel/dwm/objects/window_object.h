@@ -12,6 +12,8 @@ struct WindowObject {
     uint16_t style;
     uint16_t events;
     
+    char title[16];
+    
     struct WindowObject* parent;
     struct list_node* children_head;
     struct list_node* children_tail;
@@ -19,7 +21,7 @@ struct WindowObject {
     struct list_node* buttons_head;
     struct list_node* buttons_tail;
     
-    void(*event_callback)(WindowHandle, wEvent);
+    void(*event_callback)(WindowHandle, wEvent, uint16_t wparam);
     
     // Position and size
     uint16_t x;
@@ -29,6 +31,9 @@ struct WindowObject {
     
     uint16_t local_x;
     uint16_t local_y;
+    
+    uint16_t max_width;
+    uint16_t max_height;
     
     // Drawing area
     uint16_t surface_x;
@@ -48,6 +53,7 @@ struct WindowObject {
     // Colors
     uint32_t border_color;
     uint32_t background_color;
+    uint32_t title_text_color;
     
     uint32_t title_color_low;
     uint32_t title_color_high;

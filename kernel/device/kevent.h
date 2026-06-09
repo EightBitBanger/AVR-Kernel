@@ -6,12 +6,7 @@
 struct KEvent {
     char name[16];
     
-    uint8_t flags;
-    uint8_t reserved;
-    
-    void(*callback)();
-    
-    uint8_t padding[4];
+    uint16_t flags;
 };
 
 #endif

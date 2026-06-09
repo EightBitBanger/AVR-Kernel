@@ -6,7 +6,7 @@
 #define KDIRECTORY_REF_MAX    6
 #define KDIRECTORYEX_REF_MAX  11
 
-struct __attribute__((packed)) KernelDirectory {
+struct KernelDirectory {
     char name[16];
     
     uint32_t parent;
@@ -18,7 +18,7 @@ struct __attribute__((packed)) KernelDirectory {
     uint32_t reference[KDIRECTORY_REF_MAX];
 };
 
-struct __attribute__((packed)) KernelDirectoryExtent {
+struct KernelDirectoryExtent {
     uint32_t next;
     uint32_t prev;
     

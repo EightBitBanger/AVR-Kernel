@@ -1,4 +1,5 @@
 #include <kernel/dwm/dwm.h>
+#include <kernel/arch/x86/virtual/vmm.h>
 #include <kernel/dwm/dwm_core_internal.h>
 
 #include <kernel/console/mouse.h>
@@ -96,12 +97,14 @@ void dwm_initiate(void) {
     
     // Load resources
     
-    uint32_t* folder_sprite = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
-    sprite_get_bitmap(folder_sprite, &rc_icon_folder);
-    
     // Icons
     
-    dwm_resource_load("icon_folder", folder_sprite);
+    struct Image* icon_folder = malloc(sizeof(struct Image));
+    icon_folder->data = malloc(sizeof(uint32_t) * rc_icon_folder.width * rc_icon_folder.height);
+    sprite_get_bitmap(icon_folder->data, &rc_icon_folder);
+    icon_folder->width = rc_icon_folder.width;
+    icon_folder->height = rc_icon_folder.height;
+    dwm_resource_load("icon_folder", icon_folder);
     
     // UI
     
@@ -160,8 +163,8 @@ void dwm_initiate(void) {
     draw_flush_region(0, 0, display_get_width(), display_get_height());
 }
 
-WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure proc) {
-    struct WindowObject* window = dwm_window_create(wclass, wstyle, proc);
+WindowHandle create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc) {
+    struct WindowObject* window = dwm_window_create(wclass, wstyle, wproc);
     
     if (window == NULL) 
         return 0;
@@ -271,7 +274,7 @@ void destroy_window(WindowHandle handle) {
     free(window_handle);
 }
 
-struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint32_t* sprite) {
+struct IconObject* create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite) {
     struct IconObject* icon = malloc(sizeof(struct IconObject));
     if (icon == NULL) return NULL;
     
@@ -330,13 +333,17 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     memset(window_object, 0x00, sizeof(struct WindowObject));
     
     uint32_t frame_buffer_sz = w_class.width * w_class.height * sizeof(uint32_t);
-    window_object->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
-    if (window_object->frame_buffer == NULL) {
-        free(window_object);
-        return NULL;
-    }
     
-    memset(window_object->frame_buffer, 0x11, frame_buffer_sz);
+    if (w_style & WINDOW_STYLE_CHILD) {
+        window_object->frame_buffer = NULL; 
+    } else {
+        window_object->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
+        if (window_object->frame_buffer == NULL) {
+            free(window_object);
+            return NULL;
+        }
+        memset(window_object->frame_buffer, 0x11, frame_buffer_sz);
+    }
     
     uint32_t candidate_id = next_window_id++;
     if (candidate_id == 0) candidate_id = next_window_id++;
@@ -357,6 +364,7 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     
     window_object->id = candidate_id;
     window_object->style = w_style;
+    strncpy(window_object->title, w_class.title, 16);
     
     // Check if the no-borders style is applied
     if (window_object->style & WINDOW_STYLE_NOBORDERS) {
@@ -385,8 +393,13 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
     window_object->buffer_w = w_class.width;
     window_object->buffer_h = w_class.height;
     
+    window_object->max_width = w_class.max_width;
+    window_object->max_height = w_class.max_height;
+    
     window_object->border_color         = 0xFF2A2A2A;
     window_object->background_color     = 0xFF6F6F6F;
+    window_object->title_text_color     = 0xFFEFEFEF;
+    
     window_object->title_color_low      = 0xFF008000;
     window_object->title_color_high     = 0xFF001900;
     window_object->inactive_color_low   = 0xFF505050;
@@ -429,11 +442,11 @@ struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, Wi
 }
 
 int8_t create_folder(uint16_t x, uint16_t y, const char* name) {
-    uint32_t* folder_sprite = dwm_resource_find("icon_folder");
+    struct Image* folder_sprite = dwm_resource_find("icon_folder");
     if (folder_sprite == NULL) 
         return -1;
     
-    struct IconObject* folder = create_icon(x, y, rc_icon_folder.width, rc_icon_folder.height, folder_sprite);
+    struct IconObject* folder = create_icon(x, y, folder_sprite->width, folder_sprite->height, folder_sprite);
     
     strncpy(folder->name, name, sizeof(folder->name) - 1);
     dwm_calculate_icon_bounds(folder);

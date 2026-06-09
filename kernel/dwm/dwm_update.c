@@ -19,7 +19,7 @@ void dwm_update(void) {
     if (dragged_window != NULL) {
         dwm_update_window_dragging(&window_context);
     } else if (resizing_window != NULL) {
-        dwm_update_window_resizing(&window_context); // <--- Inject here
+        dwm_update_window_resizing(&window_context);
     } else if (dragged_icon != NULL) {
         dwm_update_icon_dragging(&window_context);
     } else {

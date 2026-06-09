@@ -1,7 +1,6 @@
 #ifndef KERNEL_CORE_H
 #define KERNEL_CORE_H
 
-#include <kernel/device/kbuffer.h>
 #include <kernel/device/driver.h>
 #include <kernel/device/device.h>
 #include <kernel/device/procblock.h>
@@ -17,6 +16,7 @@
 #include <kernel/fs/fs.h>
 
 #include <kernel/knode.h>
+#include <kernel/events.h>
 #include <kernel/syscall.h>
 
 #include <stdint.h>

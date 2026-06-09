@@ -18,7 +18,7 @@ void dwm_resource_load(const char* name, void* resource) {
 
 void* dwm_resource_find(const char* name) {
     if (name == NULL) return NULL;
-
+    
     struct map_node* current = resource_head;
     while (current != NULL) {
         if (strcmp(current->name, name) == 0) {

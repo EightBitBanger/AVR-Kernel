@@ -25,7 +25,7 @@ struct IconObject {
     int16_t bounds_w;
     int16_t bounds_h;
     
-    uint32_t* icon_sprite;
+    struct Image* icon_sprite;
 };
 
 #endif

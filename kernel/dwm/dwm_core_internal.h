@@ -57,8 +57,8 @@ extern const uint8_t char_rom[];
 
 // Built in event handlers
 
-void callback_button_close_handler(WindowHandle handle, wEvent event);
-void callback_taskbar_handler(WindowHandle handle, wEvent event);
+void callback_button_close_handler(WindowHandle handle, wEvent event, uint16_t wparam);
+void callback_taskbar_handler(WindowHandle handle, wEvent event, uint16_t wparam);
 
 // Internal routines
 
@@ -87,6 +87,8 @@ void dwm_process_context_menu_events(uint16_t index);
 
 void dwm_set_focus(struct WindowObject* target);
 void dwm_calculate_flush_region(struct WindowContext* ctx);
+
+struct WindowObject* dwm_get_root_parent(struct WindowObject* window);
 
 void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_t* frame_buffer, uint32_t screen_stride, 
                                             int clip_x, int clip_y, int clip_w, int clip_h);

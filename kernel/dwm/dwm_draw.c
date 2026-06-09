@@ -27,6 +27,14 @@ void get_rect_intersection(int x1, int y1, int w1, int h1,
     }
 }
 
+struct WindowObject* dwm_get_root_parent(struct WindowObject* window) {
+    struct WindowObject* root = window;
+    while (root->parent != NULL) {
+        root = root->parent;
+    }
+    return root;
+}
+
 void dwm_sync_child_positions(struct WindowObject* parent) {
     if (parent == NULL) return;
     
@@ -51,7 +59,42 @@ void dwm_sync_child_positions(struct WindowObject* parent) {
 
 void dwm_render_window_recursive(struct WindowObject* window, const struct WindowContext* ctx, uint32_t* frame_buffer, uint32_t screen_stride) {
     if (window == NULL) return;
-
+    
+    if (window->flags & WINDOW_FLAG_REDRAW) { 
+        window->flags &= ~WINDOW_FLAG_REDRAW;
+        
+        struct WindowObject* root = dwm_get_root_parent(window);
+        
+        // Calculate child's position relative to the root parent's surface bounds
+        int root_abs_x, root_abs_y, child_abs_x, child_abs_y;
+        dwm_get_absolute_position(root, &root_abs_x, &root_abs_y);
+        dwm_get_absolute_position(window, &child_abs_x, &child_abs_y);
+        
+        int relative_x = child_abs_x - root->surface_x;
+        int relative_y = child_abs_y - root->surface_y;
+        
+        // Clip drawing to the child window's visual boundaries on the parent buffer
+        draw_set_clip_rect(relative_x, relative_y, window->buffer_w, window->buffer_h);
+        
+        // Point to the shared memory array
+        draw_set_buffer(root->frame_buffer, root->buffer_w, root->buffer_h);
+        
+        // Shift the drawing origin to the child's relative starting spot!
+        // (Adjust this to match your graphics library API)
+        draw_set_origin(relative_x, relative_y); 
+        
+        event_window = window;
+        if (window->event_callback != NULL) {
+            window->event_callback(window->id, EVENT_REDRAW, 0);
+        }
+        event_window = NULL;
+        
+        // Reset drawing state back to defaults
+        draw_set_origin(0, 0); 
+        draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
+        draw_set_buffer_default();
+    }
+    
     int win_min_x = window->x - window->border_width;
     int win_min_y = window->y - window->border_width;
     int win_w = window->w + (window->border_width * 2);
@@ -84,7 +127,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
             
             event_window = window;
             if (window->event_callback != NULL) {
-                window->event_callback(window->id, EVENT_REDRAW);
+                window->event_callback(window->id, EVENT_REDRAW, 0);
             }
             event_window = NULL;
             
@@ -92,32 +135,41 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
             draw_set_buffer_default();
         }
         
-        // Render decorations and upload client buffer
         if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
-            int clip_x, clip_y, clip_w, clip_h;
             
-            if (window->style & WINDOW_STYLE_NOBORDERS) {
-                clip_x = window->x; clip_y = window->y; clip_w = window->w; clip_h = window->h;
-            } else {
-                clip_x = win_min_x + 1;
-                clip_y = win_min_y + window->titlebar_height + 1;
-                clip_w = window->w;
-                clip_h = window->h - window->titlebar_height;
-            }
+            // Draw decorations (borders/titlebars) onto the screen
+            dwm_draw_window(window);
             
-            if (window->parent != NULL) {
-                // Intersect current calculated window clip against its parent surface bounds
-                get_rect_intersection(clip_x, clip_y, clip_w, clip_h,
-                                      window->parent->surface_x, window->parent->surface_y,
-                                      window->parent->surface_w, window->parent->surface_h,
-                                      &clip_x, &clip_y, &clip_w, &clip_h);
-            }
-            
-            if (clip_w > 0 && clip_h > 0) {
-                
-                dwm_draw_window(window);
+            // Upload client pixel contents to the system back-buffer
+            if (window->parent == NULL) {
+                // Root windows blit their own buffer normally
+                int clip_x = window->x; 
+                int clip_y = window->y + window->titlebar_height;
+                int clip_w = window->w; 
+                int clip_h = window->h - window->titlebar_height;
                 
                 dwm_upload_window_buffer_to_backbuffer(window, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+            } else {
+                // Child windows force their root ancestor to re-blit the specific region they occupy
+                struct WindowObject* root = dwm_get_root_parent(window);
+                
+                int child_abs_x, child_abs_y;
+                dwm_get_absolute_position(window, &child_abs_x, &child_abs_y);
+                
+                int clip_x = child_abs_x;
+                int clip_y = child_abs_y;
+                int clip_w = window->buffer_w;
+                int clip_h = window->buffer_h;
+                
+                // Intersect child with parent's surface boundary clip
+                get_rect_intersection(clip_x, clip_y, clip_w, clip_h,
+                                    window->parent->surface_x, window->parent->surface_y,
+                                    window->parent->surface_w, window->parent->surface_h,
+                                    &clip_x, &clip_y, &clip_w, &clip_h);
+                                    
+                if (clip_w > 0 && clip_h > 0) {
+                    dwm_upload_window_buffer_to_backbuffer(root, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
+                }
             }
             
             window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
@@ -176,7 +228,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         
         if (in_refresh_zone) {
             if (current_icon->icon_sprite != NULL) {
-                draw_sprite_blend(current_icon->icon_sprite, current_icon->width, current_icon->height, current_icon->x, current_icon->y, 0xFF000000);
+                draw_sprite_blend(current_icon->icon_sprite->data, current_icon->width, current_icon->height, current_icon->x, current_icon->y, 0xFF000000);
             } else {
                 draw_rect_filled(current_icon->x, current_icon->y, current_icon->width, current_icon->height, 0xFFFFFFFF);
             }
@@ -289,6 +341,7 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     
     if (window_handle->titlebar_height > 0) {
         draw_rect_filled(wx, wy, ww, window_handle->titlebar_height, current_title_color_low);
+        draw_text(wx + 7, wy + 6, window_handle->title, window_handle->title_text_color);
     }
     
     // Draw the window outer borders

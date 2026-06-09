@@ -29,7 +29,7 @@ void dwm_process_window_events(struct WindowObject* window) {
         
         // If the child is completely pushed outside the parent, it has no active event zone
         if (ix1 >= ix2 || iy1 >= iy2) {
-            return; // Block all events! Mouse cannot possibly click it safely.
+            return; // Block all events
         }
         
         // Update our hit-test bounds to the clipped intersection rectangle
@@ -41,14 +41,18 @@ void dwm_process_window_events(struct WindowObject* window) {
     
     // Perform standard hit-testing against the updated (potentially shrunk) bounds
     bool mouse_inside = (mx >= win_x && mx < win_x + win_w && 
-                        my >= win_y && my < win_y + win_h);
+                         my >= win_y && my < win_y + win_h);
     
+    // Check mouse is outside the visible/clamped area of the button
     if (!mouse_inside) 
-        return; // Mouse is outside the visible/clamped area of the button
+        return;
     
     if (window->event_callback != NULL && window->events != 0) {
-        if (window->events & EVENT_MOUSE)     {window->events &= ~EVENT_MOUSE;     window->event_callback(window->id, EVENT_MOUSE);}
-        if (window->events & EVENT_KEYBOARD)  {window->events &= ~EVENT_KEYBOARD;  window->event_callback(window->id, EVENT_KEYBOARD);}
+        if (window->events & EVENT_MOUSE)     {window->events &= ~EVENT_MOUSE;     window->event_callback(window->id, EVENT_MOUSE, 0);}
+        if (window->events & EVENT_KEYBOARD)  {window->events &= ~EVENT_KEYBOARD;  window->event_callback(window->id, EVENT_KEYBOARD, 0);}
+        
+        // Add handling for the resize notification event
+        if (window->events & EVENT_RESIZE)    {window->events &= ~EVENT_RESIZE;    window->event_callback(window->id, EVENT_RESIZE, 0);}
         
         if (window->events & EVENT_REDRAW)    {window->events &= ~EVENT_REDRAW;
             dwm_invalidate_region(window->x, window->y, window->w, window->h);

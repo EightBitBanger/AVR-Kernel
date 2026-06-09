@@ -3,7 +3,7 @@
 
 #ifdef KERNEL_PLATFORM_X86
   #include <kernel/arch/x86/heap.h>
-  #include <kernel/arch/x86/drivers/draw.h>
+  #include <kernel/arch/x86/drivers/display/draw.h>
 #endif
 
 #endif
