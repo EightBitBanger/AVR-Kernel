@@ -19,7 +19,6 @@ static bool is_ctrl_pressed = false;
 static bool is_alt_pressed  = false;
 static bool is_shift_pressed = false;
 
-// Architecture Native Lookup Tables
 // Native PS/2 Scan Code Set 1 Table
 static const char scancode_to_ascii_set1[] = {
     0,  0, '1', '2', '3', '4', '5', '6', '7', '8',     /* 0x00 - 0x09 */

@@ -3,7 +3,8 @@
 
 #include <stdint.h>
 
-#define MULTIBOOT_BOOTLOADER_MAGIC 0x2BADB002
+#define MULTIBOOT_BOOTLOADER_MAGIC  0x2BADB002
+#define MULTIBOOT_MEMORY_AVAILABLE  1
 
 struct MultibootInfo {
     uint32_t flags;
@@ -52,5 +53,12 @@ struct MultibootInfo {
     uint8_t  framebuffer_blue_field_position;
     uint8_t  framebuffer_blue_mask_size;
 };
+
+struct MultibootMmapEntry {
+    uint32_t size;
+    uint64_t addr;   // Base address of the memory region
+    uint64_t len;    // Length of the region in bytes
+    uint32_t type;   // Type of region (1 = Available RAM)
+} __attribute__((packed));
 
 #endif

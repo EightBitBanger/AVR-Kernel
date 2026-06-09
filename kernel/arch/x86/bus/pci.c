@@ -1,8 +1,7 @@
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/bus/pci.h>
-#include <kernel/arch/x86/paging.h>
-#include <kernel/arch/x86/page_alloc.h>
+#include <kernel/arch/x86/virtual/vmm.h>
 
 #include <kernel/arch/x86/drivers/ata.h>
 #include <kernel/fs/fs.h>
@@ -10,8 +9,6 @@
 #include <kernel/console/print.h>
 #include <kernel/knode.h>
 #include <kernel/util/string.h>
-
-#define PAGE_SIZE 4096
 
 //#define PCI_DEBUG_HARDWARE_DUMP
 
@@ -140,9 +137,14 @@ void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
             uint32_t bar_size_bytes = ~size_mask + 1;
             size_t num_pages = (bar_size_bytes + (PAGE_SIZE - 1)) / PAGE_SIZE;
             
+            /*
             void* virt_addr = alloc_virt_mmio(physical_mmio_addr, num_pages);
             if (virt_addr != NULL && first_mapped_vaddr == NULL) {
                 first_mapped_vaddr = virt_addr; 
+            }
+            */
+            if (first_mapped_vaddr == NULL) {
+                first_mapped_vaddr = (void*)physical_mmio_addr; 
             }
         }
     }

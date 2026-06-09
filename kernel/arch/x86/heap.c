@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <kernel/util/string.h>
+#include <kernel/panic/panic_error.h>
 
 #include <kernel/arch/x86/heap.h>
 
@@ -247,13 +248,16 @@ uint32_t kmalloc(uint32_t size) {
                 // Flush changes to the physical bitmap tracking layer
                 kmalloc_bitmap_write();
                 
-                // CRITICAL: Return absolute virtual/physical address
+                // Return absolute virtual/physical address
                 return __KMALLOC_HEAP_BEGIN__ + header_address_rel + KMALLOC_HEADER_SIZE;
             }
         } else {
             found_blocks = 0;
         }
     }
+    
+    // Panic on a bad allocation or out of memory in kernel space
+    kernel_crashout(0, 0x00000000, 0x03, "malloc");
     
     return KMALLOC_NULL;
 }
@@ -406,7 +410,7 @@ void kmem_write(uint32_t destination, const void* source, uint32_t size) {
 }
 
 void kmem_read(void* destination, uint32_t source, uint32_t size) {
-    const void* src_ptr = (const void*)(uintptr_t) + source;
+    const void* src_ptr = (const void*)(uintptr_t)source;
     memcpy(destination, src_ptr, size);
 }
 

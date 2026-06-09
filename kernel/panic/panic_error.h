@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include <kernel/arch/x86/drivers/draw.h>
+#include <kernel/arch/x86/drivers/display/draw.h>
 #include <kernel/console/display.h>
 #include <kernel/console/print.h>
 

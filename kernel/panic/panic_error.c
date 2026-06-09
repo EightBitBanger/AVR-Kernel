@@ -1,6 +1,8 @@
 #include <kernel/panic/panic_error.h>
 
 extern struct MultibootInfo* vinfo;
+extern uint32_t* front_buffer;
+
 extern const uint8_t char_rom[];
 
 // Emergency isolated hyper simple text drawing
@@ -89,7 +91,7 @@ void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t typ
 }
 
 void iso_draw_char(char ch, int x, int y, uint32_t fg_color, uint32_t bg_color) {
-    uint32_t* fb = (uint32_t*)(uintptr_t)vinfo->framebuffer_addr;
+    uint32_t* frame_buffer = (uint32_t*)(uintptr_t)vinfo->framebuffer_addr;
     uint32_t stride = vinfo->framebuffer_pitch / 4;
     uint32_t screen_w = vinfo->framebuffer_width;
     uint32_t screen_h = vinfo->framebuffer_height;
@@ -109,9 +111,9 @@ void iso_draw_char(char ch, int x, int y, uint32_t fg_color, uint32_t bg_color) 
             if (pixel_y < 0 || pixel_y >= (int)screen_h) continue;
             
             if (column_mask & (1 << row)) {
-                fb[pixel_y * stride + pixel_x] = fg_color;
+                front_buffer[pixel_y * stride + pixel_x] = fg_color;
             } else {
-                fb[pixel_y * stride + pixel_x] = bg_color;
+                front_buffer[pixel_y * stride + pixel_x] = bg_color;
             }
         }
     }

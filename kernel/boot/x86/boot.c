@@ -3,11 +3,11 @@
 
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
-#include <kernel/arch/x86/paging.h>
-#include <kernel/arch/x86/page_alloc.h>
 #include <kernel/arch/x86/bus/pci.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/boot/x86/gdt.h>
+
+#include <kernel/arch/x86/virtual/vmm.h>
 
 #include <kernel/arch/x86/drivers/ata.h>
 #include <kernel/arch/x86/drivers/multiboot_info.h>
@@ -32,173 +32,75 @@
 
 extern char _kernel_memory_end[];
 
-extern uint32_t display_width;
-extern uint32_t display_height;
+#define PS2_STATUS_REG         0x64
+#define PS2_DATA_REG           0x60
+#define PS2_STATUS_OUTPUT_FULL 0x01
+#define PS2_STATUS_MOUSE_DATA  0x20
+
+bool ps2_check_keyboard(void);
+void flush_keyboard_buffer(void);
+void ps2_route_console(void);
 
 
-
-
-
-
-void callback_handler(WindowHandle handle, wEvent event) {
-    switch (event) {
-    case EVENT_REDRAW:
-        dwm_draw_rect_filled(0, 0, 1024, 1024, 0xFF080808);
-        
-        dwm_draw_text(5, 10, "Fancy message box...", 0xFFFFFFFF);
-        break;
-    }
-}
-
-void callback_button_handler(WindowHandle handle, wEvent event) {
-    switch (event) {
-    case EVENT_MOUSE:
-        dwm_window_send_event(dwm_window_get_parent(handle), EVENT_CLOSE);
-        break;
-        
-    case EVENT_REDRAW:
-        dwm_draw_rect_filled(0, 0, 65, 27, 0xFF555555);
-        dwm_draw_rect_filled(1, 1, 63, 25, 0xFF222282);
-        
-        dwm_draw_text(25, 9, "ok", 0xFF0AEA0A);
-        
-        break;
-    }
-}
-
-void desktop_environment_init(void) {
-    
-    WindowClass wclass;
-    wclass.x = 200 + 30;
-    wclass.y = 100 + 40;
-    wclass.width = 200;
-    wclass.height = 100;
-    WindowHandle window = create_window(wclass, WINDOW_STYLE_RESIZEABLE, callback_handler);
-    
-    {
-    WindowClass wclassbutton;
-    wclassbutton.x = 20;
-    wclassbutton.y = 56;
-    wclassbutton.width = 65;
-    wclassbutton.height = 27;
-    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
-    dwm_window_set_parent(button, window);
-    }
-    
-    {
-    WindowClass wclassbutton;
-    wclassbutton.x = 100;
-    wclassbutton.y = 56;
-    wclassbutton.width = 65;
-    wclassbutton.height = 27;
-    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
-    dwm_window_set_parent(button, window);
-    }
-    
-    {
-    WindowClass wclassbutton;
-    wclassbutton.x = 20;
-    wclassbutton.y = 80;
-    wclassbutton.width = 65;
-    wclassbutton.height = 27;
-    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
-    dwm_window_set_parent(button, window);
-    }
-    
-    {
-    WindowClass wclassbutton;
-    wclassbutton.x = 100;
-    wclassbutton.y = 80;
-    wclassbutton.width = 65;
-    wclassbutton.height = 27;
-    WindowHandle button = create_window(wclassbutton, WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_button_handler);
-    dwm_window_set_parent(button, window);
-    }
-    
-    
-}
-
-
-void init_sse(void) {
-    uint32_t cr0;
-    uint32_t cr4;
-    
-    // Read current CR0
-    asm volatile("mov %%cr0, %0" : "=r"(cr0));
-    
-    // Clear the EM (Emulation) bit (bit 2) -> We have a real FPU, don't emulate it
-    cr0 &= ~(1 << 2);
-    // Set the MP (Monitor Coprocessor) bit (bit 1) -> Controls interaction with TS bit
-    cr0 |= (1 << 1);
-    
-    // Write back to CR0
-    asm volatile("mov %0, %%cr0" :: "r"(cr0));
-    
-    // Read current CR4
-    asm volatile("mov %%cr4, %0" : "=r"(cr4));
-    
-    // Set OSFXSR (bit 9) -> FXSAVE/FXRSTOR support for SSE state
-    cr4 |= (1 << 9);
-    // Set OSXMMEXCPT (bit 10) -> Use unmasked SIMD floating-point exceptions (#XM)
-    cr4 |= (1 << 10);
-    
-    // Write back to CR4
-    asm volatile("mov %0, %%cr4" :: "r"(cr4));
-}
-
-
-void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
+void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
         return;
     
-    if ((mbi_info->flags & (1 << 11)) == 0) 
+    if ((mbi->flags & (1 << 11)) == 0) 
         return;
+    
+    uint32_t framebuffer_pixels      = mbi->framebuffer_width * mbi->framebuffer_height;
+    uint32_t framebuffer_size_bytes  = framebuffer_pixels * sizeof(uint32_t);
+    
+    uint32_t heap_start         = (uint32_t)_kernel_memory_end;
+    uint32_t heap_size          = 1024U * 1024U * 32U;
+    uint32_t block_size         = 16U;                  // 16 byte aligned
+    
+    uint32_t front_buffer       = (heap_start + heap_size + 0xFFFU) & ~0xFFFU;
+    uint32_t back_buffer        = (front_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
+    
+    uint32_t identity_map_sz    = back_buffer + 1024U * 1024U * 128U; // + framebuffer_size_bytes
     
     gdt_initiate();
     idt_initiate();
     
+    // Initiate SIMD processing
     //init_sse();
     
+    // Set millisecond timer
     timer_init();
     
-    char keyboard_string[255];
-    char prompt_string[255];
-    char virtual_key_map[255];
-    
-    // Frame buffer
-    
-    draw_set_info((uint32_t)mbi_info);
-    
+    // Initiate display and drawing
+    draw_set_info((uint32_t)mbi);
     display_init();
-    draw_set_clip_rect(0, 0, display_width, display_height);
-    
-    uint32_t fb_pixels = mbi_info->framebuffer_width * mbi_info->framebuffer_height;
-    uint32_t fb_size_bytes = fb_pixels * sizeof(uint32_t);
-    
-    // Paging
-    
-    paging_initiate(mbi_info);
-    page_allocator_init(mbi_info);
-    
-    // Lock the Graphics back buffer at the 8MB mark
-    // This is well within the 64MB chunk
-    uint32_t* forced_back_buffer = (uint32_t*)0x00800000;
-    
-    extern void draw_set_frame_buffer(uint32_t* buffer_ptr);
-    draw_set_frame_buffer(forced_back_buffer);
-    
-    uint32_t heap_start = 0x01800000;
-    heap_set_base_address(heap_start);
-    
-    // Initialize an 8 MB heap block
-    uint32_t heap_sz  = (1024 * 1024 * 8);
-    uint32_t block_sz = 16;
-    heap_init(block_sz, heap_sz);
-    
-    draw_set_buffer_default();
     
     display_cursor_set_line(0);
     display_cursor_set_position(0);
+    
+    // Set drawing frame buffers
+    draw_set_clip_rect(0, 0, mbi->framebuffer_width, mbi->framebuffer_height);
+    draw_set_frame_front_buffer(front_buffer);
+    draw_set_frame_back_buffer(back_buffer);
+    draw_set_buffer_default();
+    
+    // Paging
+    pmm_init(mbi);
+    vmm_init(mbi, identity_map_sz);
+    
+    // Map the front frame buffer
+    if (mbi->flags & (1 << 12)) { 
+        uint32_t vram_bytes = mbi->framebuffer_pitch * mbi->framebuffer_height;
+        vmm_map_hardware_region(mbi->framebuffer_addr, front_buffer, vram_bytes, VM_WRITE_COMBINING);
+    }
+    
+    // Initialize the kernels personal heap block
+    heap_set_base_address(heap_start);
+    heap_init(block_size, heap_size);
+    
+    // Initiate keyboard and mouse
+    static char keyboard_string[255];
+    static char prompt_string[255];
+    static char virtual_key_map[255];
     
     kb_init();
     kb_map_init(virtual_key_map, sizeof(virtual_key_map));
@@ -207,6 +109,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     mouse_set_cursor_speed(14, 14);
     mouse_set_cursor_acceleration(2);
     
+    // Prepare the console and fire up the kernel
     console_init(keyboard_string, prompt_string, sizeof(keyboard_string), sizeof(prompt_string));
     
     kernel_init();
@@ -214,157 +117,107 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi_info) {
     print("kernel v0.0.0\n");
     draw_flush_display();
     
-    pci_init();
-    
-    
     //
-    // DEBUG dump ATA drive
+    // Command console boot options
     //
-    /*
-    uint8_t sector_data[512];
-    ata_read_sector(0, sector_data);
-    
-    uint8_t line=0;
-    for (unsigned int i=0; i < 512; i++) {
-        if (line > 32) {line=0; print("\n");}
-        line++;
-        
-        print_hex(sector_data[i]);
-        print(" ");
-        
-    }
-    print("\n\n");
-    draw_flush_display();
-    */
-    
-    
-    //
-    // Command console boot option
     
     {
-    
-    bool activate_console = false;
-    draw_flush_display();
-    
-    uint64_t old_ms = timer_get_ms();
-    while(1) {
-        uint8_t status = inb(0x64);
-        if (status & 0x01) {
-            // If bit 5 is 1 this is a mouse byte
-            if (status & 0x20) {
-                mouse_event_handler();
-            } else {
+        bool activate_console = false;
+        draw_flush_display();
+        
+        uint64_t old_ms = timer_get_ms();
+        while ((timer_get_ms() - old_ms) <= BOOT_DELAY_MS) {
+            // If there's keyboard data ready, check for 'c'
+            if (ps2_check_keyboard()) {
                 
                 if (kb_getc() == 'c') {
                     activate_console = true;
+                    
+                    pci_init();
+                    
+                    flush_keyboard_buffer();
                     
                     console_prompt_print();
                     draw_flush_display();
                     break;
                 }
-                
                 draw_flush_display();
             }
         }
         
-        uint64_t current_ms = timer_get_ms();
-        if ((current_ms - old_ms) > BOOT_DELAY_MS) 
-            break;
-    }
-    
-    while(activate_console) {
-        uint8_t status = inb(0x64);
-        if (status & 0x01) {
-            // If bit 5 is 1 this is a mouse byte
-            if (status & 0x20) {
-                mouse_event_handler();
-            } else {
-                kb_event_handler();
-                draw_flush_display();
-            }
+        // Run the dedicated console mode if activated
+        while (activate_console) {
+            ps2_route_console();
         }
     }
     
-    }
+    // Blank the screen in preparation of the graphical environment
+    draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
+    draw_flush_region(0, 0, display_get_width(), display_get_height());
+    
+    pci_init();
     
     //
-    // Initiate desktop environment
+    // Initiate the DWM
     
     dwm_initiate();
     
-    desktop_environment_init();
     
+    //
+    // DWM Testing
     
     create_folder(30, 30, "system");
-    
-    
-    
-    
     
     // Event system
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
     
-    // Make context menus instantiable for sub menuing
-    
-    // Scalable vector font
-    
-    // Resize windows
+    // Scalable vector font or MSDF
     
     while(1) {
-        
         dwm_update();
+        kernel_event_update();
+        
+        //__asm__ volatile ("hlt");
         
         
-        
-        //
-        // Testing - rapid creation / deletion
-        //
-        /*
-        WindowHandle parent;
-        {
-        WindowClass wclass;
-        wclass.x = 0;
-        wclass.y = 0;
-        wclass.width = 65;
-        wclass.height = 27;
-        parent = create_window(wclass, WINDOW_STYLE_NOBORDERS, NULL);
-        }
-        
-        if (parent == 0) 
-            trigger_test_page_fault();
-        {
-        
-        for (unsigned int i=0; i < 3; i++) {
-            WindowClass wclass;
-            wclass.x = 0;
-            wclass.y = 0;
-            wclass.width = 65;
-            wclass.height = 27;
-            WindowHandle child = create_window(wclass, WINDOW_STYLE_NOBORDERS, NULL);
-            dwm_window_set_parent(child, parent);
-        }
-        }
-        
-        destroy_window(parent);
-        */
-        
-        
-        
-        __asm__ volatile ("hlt");
-        
-        // Handle mouse and keyboard input
         // TODO move to interrupt handlers later on
-        uint8_t status = inb(0x64);
-        if (status & 0x01) {
-            // If bit 5 is 1 this is a mouse byte
-            if (status & 0x20) {
-                mouse_event_handler();
-            } else {
-                kb_getc(); // Burn keyboard input
-            }
-        }
         
+        if (ps2_check_keyboard()) {
+            
+            kb_getc();
+        }
     }
 }
 
+
+
+bool ps2_check_keyboard(void) {
+    uint8_t status = inb(PS2_STATUS_REG);
+    if (status & PS2_STATUS_OUTPUT_FULL) {
+        if (status & PS2_STATUS_MOUSE_DATA) {
+            mouse_event_handler();
+        } else {
+            return true; // Keyboard data is ready
+        }
+    }
+    return false;
+}
+
+void flush_keyboard_buffer(void) {
+    while (inb(PS2_STATUS_REG) & PS2_STATUS_OUTPUT_FULL) {
+        inb(PS2_DATA_REG);
+    }
+}
+
+void ps2_route_console(void) {
+    uint8_t status = inb(PS2_STATUS_REG);
+    if (status & PS2_STATUS_OUTPUT_FULL) {
+        if (status & PS2_STATUS_MOUSE_DATA) {
+            mouse_event_handler();
+        } else {
+            kb_event_handler();
+            draw_flush_display();
+        }
+    }
+}
