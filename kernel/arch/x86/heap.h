@@ -22,7 +22,7 @@
 #define KMALLOC_TYPE_RAW               0x08
 #define KMALLOC_TYPE_PROCBLOCK         0x10
 
-struct __attribute__((packed)) KMallocHeader {
+struct __attribute__((aligned(16))) KMallocHeader {
     uint32_t size;
     uint8_t  flags;
     uint8_t  type;

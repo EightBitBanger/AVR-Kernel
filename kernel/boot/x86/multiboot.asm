@@ -27,7 +27,7 @@ align 4
 section .bss nobits
 align 16
 stack_bottom:
-    resb 1000000                                ; 1 MB
+    resb 16000000                                ; 16 MB
 stack_top:
     
 section .text

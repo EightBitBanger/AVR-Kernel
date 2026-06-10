@@ -7,7 +7,7 @@
 
 #define PAGE_SIZE 4096U
 
-void pmm_init(struct MultibootInfo* mbi);
+void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin);
 
 uint32_t pmm_alloc_frame(void);
 void pmm_free_frame(uint32_t phys_addr);

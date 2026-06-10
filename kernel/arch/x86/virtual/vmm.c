@@ -7,25 +7,27 @@
 #define VM_SIZE           (VM_END - VM_START)
 #define VIRT_BITMAP_SIZE  (VM_SIZE / PAGE_SIZE / 8)
 
+#define VM_PAGE_DIR_SIZE     1024
+#define VM_PAGE_TABLE_SIZE   1024
+
 static uint8_t virt_bitmap[VIRT_BITMAP_SIZE];
 
 static int find_contiguous_bits(uint8_t* bitmap, size_t bitmap_size, size_t num_bits);
 
-// Statically reserve a full page directory and all 1024 page tables in BSS.
-// Takes 4MB of RAM
-uint32_t page_directory[1024] __attribute__((aligned(PAGE_SIZE)));
-static uint32_t static_page_tables[1024][1024] __attribute__((aligned(PAGE_SIZE)));
+// Statically reserve a full page directory and all page tables in BSS using defines
+uint32_t page_directory[VM_PAGE_DIR_SIZE] __attribute__((aligned(PAGE_SIZE)));
+static uint32_t static_page_tables[VM_PAGE_DIR_SIZE][VM_PAGE_TABLE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
 void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     memset(virt_bitmap, 0x00, VIRT_BITMAP_SIZE);
     
     // Link every directory entry to its corresponding static page table
-    for (uint32_t pd_idx = 0; pd_idx < 1024; pd_idx++) {
+    for (uint32_t pd_idx = 0; pd_idx < VM_PAGE_DIR_SIZE; pd_idx++) {
         page_directory[pd_idx] = ((uint32_t)&static_page_tables[pd_idx]) | VM_PRESENT | VM_READWRITE;
         
         // Identity map only up to the specified identity_map_size
-        for (uint32_t pt_idx = 0; pt_idx < 1024; pt_idx++) {
-            uint32_t physical_address = (pd_idx * 1024 * PAGE_SIZE) + (pt_idx * PAGE_SIZE);
+        for (uint32_t pt_idx = 0; pt_idx < VM_PAGE_TABLE_SIZE; pt_idx++) {
+            uint32_t physical_address = (pd_idx * VM_PAGE_TABLE_SIZE * PAGE_SIZE) + (pt_idx * PAGE_SIZE);
             
             if (physical_address < identity_map_size) {
                 static_page_tables[pd_idx][pt_idx] = physical_address | VM_PRESENT | VM_READWRITE;
@@ -65,7 +67,6 @@ void* vmm_alloc_pages(size_t num_pages) {
             return NULL;
         }
         
-        // Map page using our guaranteed stable static layout
         vmm_map_page(phys_frame, current_vaddr, VM_PRESENT | VM_READWRITE);
         
         size_t bit = (size_t)virt_start_page + i;

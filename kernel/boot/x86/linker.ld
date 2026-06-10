@@ -15,5 +15,5 @@ SECTIONS
     .data   : { *(.data) }
     .bss    : { *(COMMON) *(.bss) }
     
-    _kernel_memory_end = .;
+    _kernel_program_end = .;
 }

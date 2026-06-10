@@ -8,7 +8,7 @@
 static uint8_t pmm_bitmap[PHYS_BITMAP_SIZE];
 static uint32_t total_frames = 0;
 
-void pmm_init(struct MultibootInfo* mbi) {
+void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin) {
     // Default to marking ALL physical memory as reserved/used
     memset(pmm_bitmap, 0xFF, PHYS_BITMAP_SIZE);
     
@@ -18,8 +18,8 @@ void pmm_init(struct MultibootInfo* mbi) {
         return;
     }
     
-    // extern char _kernel_memory_end[];
-    uint64_t _physical_memory_begin = 1024U * 1024U * 128U;
+    // extern char _kernel_program_end[];
+    uint64_t _physical_memory_begin = (physical_begin + 0xFFFU) & ~0xFFFU;
     
     struct MultibootMmapEntry* mmap = (struct MultibootMmapEntry*)mbi->mmap_addr;
     uint32_t mmap_end = mbi->mmap_addr + mbi->mmap_length;
@@ -48,7 +48,7 @@ void pmm_init(struct MultibootInfo* mbi) {
                 // Clear the bit to mark this specific frame as FREE
                 pmm_bitmap[frame / 8] &= ~(1U << (frame % 8));
                 
-                // Track total frames available to the PMM
+                // Track total frames available
                 if (frame >= total_frames) {
                     total_frames = frame + 1;
                 }

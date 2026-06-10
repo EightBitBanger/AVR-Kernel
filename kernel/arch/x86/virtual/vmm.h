@@ -26,7 +26,7 @@
 
 #define VM_WRITE_COMBINING (VM_PRESENT | VM_READWRITE | VM_PWT | VM_PCD)
 
-extern uint32_t page_directory[1024];
+extern uint32_t page_directory[];
 
 void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size);
 

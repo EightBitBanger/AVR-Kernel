@@ -17,7 +17,7 @@ void gdt_set_gate(int32_t num, uint32_t base, uint32_t limit, uint8_t access, ui
 
 extern void gdt_flush();
 
-void gdt_initiate(void) {
+void gdt_init(void) {
     // Total size of GDT minus 1
     gdt_ptr.limit = (sizeof(gdt_entry_t) * 5) - 1;
     gdt_ptr.base  = (uint32_t)&gdt_entries;

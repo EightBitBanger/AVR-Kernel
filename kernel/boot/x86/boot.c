@@ -30,7 +30,7 @@
 #define BOOT_DELAY_MS  1000
 
 
-extern char _kernel_memory_end[];
+extern char _kernel_program_end[];
 
 #define PS2_STATUS_REG         0x64
 #define PS2_DATA_REG           0x60
@@ -52,20 +52,19 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     uint32_t framebuffer_pixels      = mbi->framebuffer_width * mbi->framebuffer_height;
     uint32_t framebuffer_size_bytes  = framebuffer_pixels * sizeof(uint32_t);
     
-    uint32_t heap_start         = (uint32_t)_kernel_memory_end;
-    uint32_t heap_size          = 1024U * 1024U * 32U;
-    uint32_t block_size         = 16U;                  // 16 byte aligned
+    // 16 byte aligned
+    uint32_t heap_start              = ((uint32_t)_kernel_program_end + 0xFU) & ~0xFU;
+    uint32_t heap_size               = 1024U * 1024U * 8U;
+    uint32_t block_size              = 16U;
     
-    uint32_t front_buffer       = (heap_start + heap_size + 0xFFFU) & ~0xFFFU;
-    uint32_t back_buffer        = (front_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
+    // 4k page aligned
+    uint32_t front_buffer            = (heap_start + heap_size + 0xFFFU) & ~0xFFFU;
+    uint32_t back_buffer             = (front_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
     
-    uint32_t identity_map_sz    = back_buffer + 1024U * 1024U * 128U; // + framebuffer_size_bytes
+    uint32_t _kernel_memory_end      = (back_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
     
-    gdt_initiate();
-    idt_initiate();
-    
-    // Initiate SIMD processing
-    //init_sse();
+    gdt_init();
+    idt_init();
     
     // Set millisecond timer
     timer_init();
@@ -84,10 +83,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     draw_set_buffer_default();
     
     // Paging
-    pmm_init(mbi);
-    vmm_init(mbi, identity_map_sz);
+    pmm_init(mbi, _kernel_memory_end);
+    vmm_init(mbi, _kernel_memory_end);
     
-    // Map the front frame buffer
+    // Map the graphics front frame buffer 
+    // as a cached write combine buffer
     if (mbi->flags & (1 << 12)) { 
         uint32_t vram_bytes = mbi->framebuffer_pitch * mbi->framebuffer_height;
         vmm_map_hardware_region(mbi->framebuffer_addr, front_buffer, vram_bytes, VM_WRITE_COMBINING);
@@ -123,7 +123,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     {
         bool activate_console = false;
-        draw_flush_display();
         
         uint64_t old_ms = timer_get_ms();
         while ((timer_get_ms() - old_ms) <= BOOT_DELAY_MS) {
@@ -151,10 +150,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         }
     }
     
-    // Blank the screen in preparation of the graphical environment
+    // Blank the screen in preparation for the graphical environment
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
     
+    // Scan PCI bus for available hardware
     pci_init();
     
     //
@@ -180,11 +180,8 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
         //__asm__ volatile ("hlt");
         
-        
         // TODO move to interrupt handlers later on
-        
         if (ps2_check_keyboard()) {
-            
             kb_getc();
         }
     }
