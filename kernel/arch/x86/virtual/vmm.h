@@ -32,6 +32,7 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size);
 
 void* vmm_alloc_pages(size_t num_pages);
 void vmm_free_pages(void* virtual_addr, size_t num_pages);
+void vmm_unmap_page(uint32_t virtual_addr);
 
 // Map a physical address into a virtual address space
 void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags);

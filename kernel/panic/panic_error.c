@@ -11,6 +11,10 @@ void iso_draw_char(char ch, int x, int y, uint32_t fg_color, uint32_t bg_color);
 void iso_print(int* x, int* y, int start_x, const char* str, uint32_t fg_color, uint32_t bg_color);
 void iso_print_hex32(int* x, int* y, int start_x, uint32_t val, uint32_t fg_color, uint32_t bg_color);
 
+void system_clown_behavior(void);
+void driver_skill_issue(void);
+
+
 void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t type, const char* extra) {
     uint32_t colorbg = 0xFF3A0000;
     uint32_t colorfg = 0xFFD0D0D0;
@@ -19,7 +23,7 @@ void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t typ
     uint32_t screen_w = vinfo->framebuffer_width;
     uint32_t screen_h = vinfo->framebuffer_height;
     uint32_t stride = vinfo->framebuffer_pitch / 4;
-    uint32_t* fb = (uint32_t*)(uintptr_t)vinfo->framebuffer_addr;
+    uint32_t* fb = front_buffer;
     
     // Clear background
     for (uint32_t y = 0; y < screen_h; y++) {

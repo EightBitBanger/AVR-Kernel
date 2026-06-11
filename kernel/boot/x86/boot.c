@@ -3,6 +3,7 @@
 
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
+#include <kernel/arch/x86/slab.h>
 #include <kernel/arch/x86/bus/pci.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/boot/x86/gdt.h>
@@ -41,6 +42,7 @@ bool ps2_check_keyboard(void);
 void flush_keyboard_buffer(void);
 void ps2_route_console(void);
 
+void vmm_stress_test(void);
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -54,7 +56,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // 16 byte aligned
     uint32_t heap_start              = ((uint32_t)_kernel_program_end + 0xFU) & ~0xFU;
-    uint32_t heap_size               = 1024U * 1024U * 8U;
+    uint32_t heap_size               = 1024U * 1024U * 64U;
     uint32_t block_size              = 16U;
     
     // 4k page aligned
@@ -116,6 +118,29 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     print("kernel v0.0.0\n");
     draw_flush_display();
+    
+    
+    while(1) {
+        
+        /*
+        // Get a raw page
+        uint32_t* raw_page = (uint32_t*)vmm_alloc_pages(1);
+        
+        // Write a highly specific magic number to the very first byte
+        *raw_page = 0xDEADBEEF;
+        
+        // Read it immediately back
+        print("Wrote DEADBEEF, Read back: ");
+        print_hex32(*raw_page);
+        print("\n");
+        
+        draw_flush_display();
+        while(1);
+        */
+        
+        vmm_stress_test();
+    }
+    
     
     //
     // Command console boot options
@@ -218,3 +243,110 @@ void ps2_route_console(void) {
         }
     }
 }
+
+SlabCache thread_cb_cache;
+
+void vmm_stress_test(void) {
+    thread_cb_cache.object_size = 64;
+    thread_cb_cache.page_list = NULL;
+    
+    uint8_t* object = slab_alloc(&thread_cb_cache);
+    
+    print_hex32((uint32_t) object);
+    print("\n");
+    draw_flush_display();
+    
+    slab_free(&thread_cb_cache, object);
+    
+    return;
+    
+    
+    while(1) {
+        //uint32_t* page = vmm_alloc_pages(1);
+        uint32_t frame = pmm_alloc_frame();
+        
+        print_hex32( (uint32_t)frame );
+        
+        print("\n");
+        draw_flush_display();
+    }
+    
+    while(1);
+    
+    
+    
+    
+    /*
+    thread_cb_cache.object_size = 64;
+    thread_cb_cache.page_list = NULL;
+    
+    uint8_t* objA = slab_alloc(&thread_cb_cache);
+    uint8_t* objB = slab_alloc(&thread_cb_cache);
+    
+    print_hex((uint32_t)thread_cb_cache.object_size);
+    
+    draw_flush_display();
+    
+    while(1);
+    
+    //uint8_t* objA = slab_alloc(&thread_cb_cache);
+    //uint8_t* objB = slab_alloc(&thread_cb_cache);
+    //uint8_t* objC = slab_alloc(&thread_cb_cache);
+    
+    
+    print_hex((uint32_t) objA);
+    print("\n");
+    print_hex((uint32_t) objB);
+    print("\n");
+    print_hex((uint32_t) objC);
+    print("\n");
+    */
+    
+    while(1);
+    
+    //slab_free(&thread_cb_cache, obj);
+    
+    //while(1);
+    
+    //void* obj1 = slab_alloc(&thread_cb_cache); 
+    //void* obj2 = slab_alloc(&thread_cb_cache);
+    
+    //slab_free(&thread_cb_cache, obj1); 
+    //slab_free(&thread_cb_cache, obj2);
+    /*
+    uint8_t* pages[5];
+    pages[0] = vmm_alloc_pages(1);
+    pages[1] = vmm_alloc_pages(1);
+    pages[2] = vmm_alloc_pages(1);
+    pages[3] = vmm_alloc_pages(1);
+    pages[4] = vmm_alloc_pages(1);
+    
+    print_hex32( (uint32_t) pages[1] );
+    
+    //vmm_free_pages(pages[0], 1);
+    vmm_free_pages(pages[1], 1);
+    //vmm_free_pages(pages[2], 1);
+    vmm_free_pages(pages[3], 1);
+    //vmm_free_pages(pages[4], 1);
+    
+    print("\n");
+    pages[1] = vmm_alloc_pages(10);
+    
+    print_hex32( (uint32_t) pages[1] );
+    
+    vmm_free_pages(pages[0], 1);
+    vmm_free_pages(pages[1], 10);
+    vmm_free_pages(pages[2], 1);
+    vmm_free_pages(pages[4], 1);
+    
+    print("\n");
+    
+    print("\n");
+    draw_flush_display();
+    
+    */
+}
+
+
+
+

@@ -1,4 +1,5 @@
 #include <kernel/arch/x86/virtual/vmm.h>
+#include <kernel/panic/panic_error.h>
 #include <kernel/util/string.h>
 #include <stdbool.h>
 
@@ -21,20 +22,28 @@ static uint32_t static_page_tables[VM_PAGE_DIR_SIZE][VM_PAGE_TABLE_SIZE] __attri
 void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     memset(virt_bitmap, 0x00, VIRT_BITMAP_SIZE);
     
-    // Link every directory entry to its corresponding static page table
+    // Completely clear the page directory so everything starts as "not present"
+    memset(page_directory, 0, sizeof(page_directory));
+    
+    // Clear out all static page tables to ensure no garbage data exists
+    memset(static_page_tables, 0, sizeof(static_page_tables));
+    
+    // Handle Identity Mapping up to identity_map_size
     for (uint32_t pd_idx = 0; pd_idx < VM_PAGE_DIR_SIZE; pd_idx++) {
-        page_directory[pd_idx] = ((uint32_t)&static_page_tables[pd_idx]) | VM_PRESENT | VM_READWRITE;
-        
-        // Identity map only up to the specified identity_map_size
+        bool dir_has_mappings = false;
+
         for (uint32_t pt_idx = 0; pt_idx < VM_PAGE_TABLE_SIZE; pt_idx++) {
             uint32_t physical_address = (pd_idx * VM_PAGE_TABLE_SIZE * PAGE_SIZE) + (pt_idx * PAGE_SIZE);
             
             if (physical_address < identity_map_size) {
                 static_page_tables[pd_idx][pt_idx] = physical_address | VM_PRESENT | VM_READWRITE;
-            } else {
-                // Explicitly clear entries outside the requested range to ensure they are marked "not present"
-                static_page_tables[pd_idx][pt_idx] = 0;
+                dir_has_mappings = true;
             }
+        }
+        
+        // Only link the directory entry and mark it present if this page table actually holds an identity mapping
+        if (dir_has_mappings) {
+            page_directory[pd_idx] = ((uint32_t)&static_page_tables[pd_idx]) | VM_PRESENT | VM_READWRITE;
         }
     }
     
@@ -54,7 +63,10 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
 
 void* vmm_alloc_pages(size_t num_pages) {
     int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
-    if (virt_start_page == -1) return NULL;
+    if (virt_start_page == -1) {
+        kernel_crashout(0x00, 0x00000000, 0x03, "Out of physical memory");
+        return NULL;
+    }
     
     uint32_t start_vaddr = VM_START + (virt_start_page * PAGE_SIZE);
     
@@ -64,6 +76,8 @@ void* vmm_alloc_pages(size_t num_pages) {
         
         if (phys_frame == 0) {
             vmm_free_pages((void*)start_vaddr, i);
+            
+            kernel_crashout(0x00, 0x00000000, 0x03, "Out of physical memory");
             return NULL;
         }
         
@@ -77,17 +91,42 @@ void* vmm_alloc_pages(size_t num_pages) {
 }
 
 void vmm_free_pages(void* virtual_addr, size_t num_pages) {
-    uint32_t vaddr = (uint32_t)virtual_addr;
+    uint32_t vaddr = ((uint32_t)virtual_addr + 0xFFFU) & ~0xFFFU;
     size_t virt_start_page = (vaddr - VM_START) / PAGE_SIZE;
     
     for (size_t i = 0; i < num_pages; i++) {
         uint32_t current_vaddr = vaddr + (i * PAGE_SIZE);
         
-        // Re-identity map back to its default clean address space profile
-        vmm_map_page(current_vaddr, current_vaddr, VM_PRESENT | VM_READWRITE);
+        // Get the physical frame mapped here so we can return it to the PMM
+        uint32_t pd_index = current_vaddr >> 22;
+        uint32_t pt_index = (current_vaddr >> 12) & 0x3FFU;
+        uint32_t pte = static_page_tables[pd_index][pt_index];
         
+        if (pte & VM_PRESENT) {
+            uint32_t phys_frame = pte & ~0xFFFU;
+            pmm_free_frame(phys_frame); // Assuming this function exists in your PMM!
+        }
+        
+        // Clear the mapping from the page tables
+        vmm_unmap_page(current_vaddr);
+        
+        // Clear our virtual allocation bitmap track tracker
         size_t bit = virt_start_page + i;
         virt_bitmap[bit / 8] &= ~(1U << (bit % 8));
+    }
+}
+
+void vmm_unmap_page(uint32_t virtual_addr) {
+    uint32_t pd_index = virtual_addr >> 22;
+    uint32_t pt_index = (virtual_addr >> 12) & 0x3FFU;
+    
+    // Only clear if the directory table says a page table actually exists
+    if (page_directory[pd_index] & VM_PRESENT) {
+        // Break the mapping by zeroing the entry out (clears VM_PRESENT)
+        static_page_tables[pd_index][pt_index] = 0;
+        
+        // CRITICAL: Flush the TLB for this address
+        __asm__ volatile("invlpg (%0)" : : "r"(virtual_addr) : "memory");
     }
 }
 
@@ -95,8 +134,13 @@ void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags)
     uint32_t pd_index = virtual_addr >> 22;
     uint32_t pt_index = (virtual_addr >> 12) & 0x3FFU;
     
-    // Every single page table is already allocated and present! 
-    // We simply update the table entry directly via its identity-mapped pointer.
+    // NEW LOGIC: Check if this directory entry is blank/not present
+    if (!(page_directory[pd_index] & VM_PRESENT)) {
+        // Link the directory entry to the pre-reserved static page table and mark it present
+        page_directory[pd_index] = ((uint32_t)&static_page_tables[pd_index]) | VM_PRESENT | VM_READWRITE;
+    }
+    
+    // Update the table entry directly via its pointer.
     static_page_tables[pd_index][pt_index] = (physical_addr & ~0xFFFU) | flags;
     
     // Clear out stale CPU caches for this specific address mapping alteration
@@ -104,18 +148,13 @@ void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags)
 }
 
 void vmm_map_hardware_region(uint32_t phys_addr, uint32_t virt_addr, uint32_t size, uint32_t flags) {
-    // Align the starting addresses down to the nearest page boundary
     uint32_t page_offset = phys_addr & (PAGE_SIZE - 1);
     uint32_t start_phys  = phys_addr & ~(PAGE_SIZE - 1);
     uint32_t start_virt  = virt_addr & ~(PAGE_SIZE - 1);
     
-    // Adjust total size to account for the starting offset misalignment
-    uint32_t total_size  = size + page_offset;
+    uint32_t total_size = size + page_offset;
+    uint32_t num_pages = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
     
-    // Round total size up to the nearest multiple of PAGE_SIZE
-    uint32_t num_pages   = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
-    
-    // Iterate through every page, mapping physical frames to distinct virtual destinations
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t current_phys = start_phys + (i * PAGE_SIZE);
         uint32_t current_virt = start_virt + (i * PAGE_SIZE);
