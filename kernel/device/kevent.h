@@ -4,7 +4,8 @@
 #include <stdint.h>
 
 struct KEvent {
-    char name[16];
+    char name[32];
+    char args[32];
     
     uint16_t flags;
 };

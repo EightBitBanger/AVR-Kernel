@@ -4,28 +4,14 @@
 #include <kernel/util/list.h>
 #include <kernel/util/string.h>
 
-bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2) {
-    return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
-}
+extern struct ClippingPlane clipping_plain;
+extern struct MultibootInfo* vinfo;
+extern uint32_t* front_buffer;
+extern uint32_t* back_buffer;
+extern uint32_t* frame_buffer;
 
-void get_rect_intersection(int x1, int y1, int w1, int h1, 
-                           int x2, int y2, int w2, int h2, 
-                           int *out_x, int *out_y, int *out_w, int *out_h) {
-    int ix1 = (x1 > x2) ? x1 : x2;
-    int iy1 = (y1 > y2) ? y1 : y2;
-    int ix2 = (x1 + w1 < x2 + w2) ? x1 + w1 : x2 + w2;
-    int iy2 = (y1 + h1 < y2 + h2) ? y1 + h1 : y2 + h2;
-
-    if (ix1 < ix2 && iy1 < iy2) {
-        *out_x = ix1;
-        *out_y = iy1;
-        *out_w = ix2 - ix1;
-        *out_h = iy2 - iy1;
-    } else {
-        *out_w = 0;
-        *out_h = 0; // No overlap
-    }
-}
+bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2);
+void get_rect_intersection(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2, int *out_x, int *out_y, int *out_w, int *out_h);
 
 struct WindowObject* dwm_get_root_parent(struct WindowObject* window) {
     struct WindowObject* root = window;
@@ -63,34 +49,17 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
     if (window->flags & WINDOW_FLAG_REDRAW) { 
         window->flags &= ~WINDOW_FLAG_REDRAW;
         
-        struct WindowObject* root = dwm_get_root_parent(window);
-        
-        // Calculate child's position relative to the root parent's surface bounds
-        int root_abs_x, root_abs_y, child_abs_x, child_abs_y;
-        dwm_get_absolute_position(root, &root_abs_x, &root_abs_y);
-        dwm_get_absolute_position(window, &child_abs_x, &child_abs_y);
-        
-        int relative_x = child_abs_x - root->surface_x;
-        int relative_y = child_abs_y - root->surface_y;
-        
-        // Clip drawing to the child window's visual boundaries on the parent buffer
-        draw_set_clip_rect(relative_x, relative_y, window->buffer_w, window->buffer_h);
-        
-        // Point to the shared memory array
-        draw_set_buffer(root->frame_buffer, root->buffer_w, root->buffer_h);
-        
-        // Shift the drawing origin to the child's relative starting spot!
-        // (Adjust this to match your graphics library API)
-        draw_set_origin(relative_x, relative_y); 
+        // Clip explicitly to the current buffer sizes
+        draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
+        draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
         
         event_window = window;
         if (window->event_callback != NULL) {
-            window->event_callback(window->id, EVENT_REDRAW, 0);
+            window->event_callback(window->id, EVENT_REDRAW, 0, 0);
         }
         event_window = NULL;
         
-        // Reset drawing state back to defaults
-        draw_set_origin(0, 0); 
+        // Restore layout state safely
         draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
         draw_set_buffer_default();
     }
@@ -127,7 +96,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
             
             event_window = window;
             if (window->event_callback != NULL) {
-                window->event_callback(window->id, EVENT_REDRAW, 0);
+                window->event_callback(window->id, EVENT_REDRAW, 0, 0);
             }
             event_window = NULL;
             
@@ -137,7 +106,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
         
         if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
             
-            // Draw decorations (borders/titlebars) onto the screen
+            // Draw decorations (borders/titlebars)
             dwm_draw_window(window);
             
             // Upload client pixel contents to the system back-buffer
@@ -188,6 +157,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
 
 
 void dwm_draw_desktop(const struct WindowContext* ctx) {
+    const uint32_t screen_stride = vinfo->framebuffer_pitch / 4;
     
     // Clear out background pixels for all localized dirty regions
     for (int i = 0; i < ctx->dirty_count; i++) {
@@ -244,13 +214,6 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         }
         current_node = current_node->next;
     }
-    
-    extern struct ClippingPlane clipping_plain;
-    extern struct MultibootInfo* vinfo;
-    extern uint32_t* front_buffer;
-    extern uint32_t* back_buffer;
-    extern uint32_t* frame_buffer;
-    const uint32_t screen_stride = vinfo->framebuffer_pitch / 4;
     
     // Sync positions before drawing
     for (struct list_node* node = window_head; node != NULL; node = node->next) {
@@ -344,6 +307,14 @@ void dwm_draw_window(struct WindowObject* window_handle) {
         draw_text(wx + 7, wy + 6, window_handle->title, window_handle->title_text_color);
     }
     
+    // Draw titlebar divider
+    int div_x = window_handle->x;
+    int div_y = window_handle->y + window_handle->titlebar_height - 1;
+    int div_w = window_handle->x + window_handle->w;
+    int div_h = window_handle->y + window_handle->titlebar_height - 1;
+    
+    draw_line(div_x, div_y, div_w, div_h, window_handle->border_color);
+    
     // Draw the window outer borders
     for (uint8_t b = 1; b <= window_handle->border_width; b++) {
         
@@ -354,12 +325,12 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     for (struct list_node* node = window_handle->buttons_head; node != NULL; node = node->next) {
         struct WindowButton* btn = (struct WindowButton*)node->data;
         
-        if (btn->img.data == NULL) 
+        if (btn->sprite.data == NULL) 
             continue;
         
         int32_t btn_abs_x = wx + btn->x;
         int32_t btn_abs_y = wy + btn->y;
         
-        draw_sprite_blend(btn->img.data, btn->img.width, btn->img.height, btn_abs_x, btn_abs_y, 0xFF000000);
+        draw_sprite_blend(btn->sprite.data, btn->sprite.width, btn->sprite.height, btn_abs_x, btn_abs_y, 0xFF000000);
     }
 }

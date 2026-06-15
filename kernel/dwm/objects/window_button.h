@@ -10,7 +10,7 @@ struct WindowButton {
     uint16_t height;
     
     uint16_t event;
-    struct Image img;
+    struct Image sprite;
 };
 
 #endif

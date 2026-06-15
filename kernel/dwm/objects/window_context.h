@@ -17,6 +17,7 @@ struct WindowContext {
     
     bool left_button_pressed;
     bool right_button_pressed;
+    bool is_double_click;
     
     uint32_t cursor_width;
     uint32_t cursor_height;

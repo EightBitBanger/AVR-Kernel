@@ -5,9 +5,11 @@
 
 #include <stdint.h>
 
-extern const struct Sprite rc_icon_file;
-extern const struct Sprite rc_icon_document;
+extern const struct Sprite rc_icon_storage;
 extern const struct Sprite rc_icon_system;
 extern const struct Sprite rc_icon_folder;
+extern const struct Sprite rc_icon_system;
+extern const struct Sprite rc_icon_document;
+extern const struct Sprite rc_icon_file;
 
 #endif

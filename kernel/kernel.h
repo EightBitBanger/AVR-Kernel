@@ -22,6 +22,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct WorkingDirectory {
+    uint32_t current_directory;
+    uint32_t mount_device;
+    uint32_t mount_directory;
+    uint32_t mount_root;
+};
+
+struct LocalPaths {
+    char path[64];
+};
+
 void kernel_get_working_directory(struct WorkingDirectory* out_dir);
 void kernel_set_working_directory(struct WorkingDirectory* out_dir);
 

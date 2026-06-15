@@ -3,17 +3,6 @@
 
 #include <stdint.h>
 
-struct WorkingDirectory {
-    uint32_t current_directory;
-    uint32_t mount_device;
-    uint32_t mount_directory;
-    uint32_t mount_root;
-};
-
-struct LocalPaths {
-    char path[64];
-};
-
 void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length);
 
 void console_process_command(char* keyboard_str);

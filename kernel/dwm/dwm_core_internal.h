@@ -6,6 +6,8 @@
 #define CONTEXT_MENU_DESKTOP  0x01
 #define CONTEXT_MENU_ICON     0x02
 
+#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS 300
+
 extern uint32_t bg_color;
 
 // Drag movement
@@ -57,16 +59,17 @@ extern const uint8_t char_rom[];
 
 // Built in event handlers
 
-void callback_button_close_handler(WindowHandle handle, wEvent event, uint16_t wparam);
-void callback_taskbar_handler(WindowHandle handle, wEvent event, uint16_t wparam);
+void callback_button_close_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 // Internal routines
 
-struct WindowObject* dwm_window_create(WindowClass w_class, uint16_t w_style, WindowProcedure proc);
+struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, WindowProcedure proc);
 
 void dwm_resource_load(const char* name, void* resource);
 void* dwm_resource_find(const char* name);
 void dwm_resource_unload(const char* name);
+void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sprite);
 
 void dwm_draw_desktop(const struct WindowContext* ctx);
 void dwm_draw_window(struct WindowObject* window_handle);
@@ -94,6 +97,6 @@ void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_
                                             int clip_x, int clip_y, int clip_w, int clip_h);
 
 void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16_t width, uint16_t height, 
-                       uint16_t event, struct Image sprite);
+                       uint16_t event, struct Image* sprite);
 
 #endif

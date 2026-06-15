@@ -3,7 +3,7 @@
 
 #include <kernel/console/display.h>
 
-void callback_button_close_handler(WindowHandle handle, wEvent event, uint16_t wparam) {
+void callback_button_close_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     switch (event) {
     case EVENT_MOUSE:
         WindowHandle parent = dwm_window_get_parent(handle);
@@ -16,7 +16,7 @@ void callback_button_close_handler(WindowHandle handle, wEvent event, uint16_t w
     }
 }
 
-void callback_taskbar_handler(WindowHandle handle, wEvent event, uint16_t wparam) {
+void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     switch (event) {
     case EVENT_MOUSE:
         break;

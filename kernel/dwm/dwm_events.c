@@ -4,11 +4,10 @@
 void dwm_process_window_events(struct WindowObject* window) {
     if (window == NULL) return;
     
-    // Get current mouse state from global context
-    int mx = window_context.mouse.x;
-    int my = window_context.mouse.y;
+    // Keep global mouse coordinates for the hit-test bounds check
+    int mouse_world_x = window_context.mouse.x;
+    int mouse_world_y = window_context.mouse.y;
     
-    // Calculate the actual absolute boundaries of this window
     int win_x = window->x;
     int win_y = window->y;
     int win_w = window->w;
@@ -27,11 +26,6 @@ void dwm_process_window_events(struct WindowObject* window) {
         int ix2 = (win_x + win_w < px + pw) ? win_x + win_w : px + pw;
         int iy2 = (win_y + win_h < py + ph) ? win_y + win_h : py + ph;
         
-        // If the child is completely pushed outside the parent, it has no active event zone
-        if (ix1 >= ix2 || iy1 >= iy2) {
-            return; // Block all events
-        }
-        
         // Update our hit-test bounds to the clipped intersection rectangle
         win_x = ix1;
         win_y = iy1;
@@ -39,20 +33,37 @@ void dwm_process_window_events(struct WindowObject* window) {
         win_h = iy2 - iy1;
     }
     
-    // Perform standard hit-testing against the updated (potentially shrunk) bounds
-    bool mouse_inside = (mx >= win_x && mx < win_x + win_w && 
-                         my >= win_y && my < win_y + win_h);
-    
-    // Check mouse is outside the visible/clamped area of the button
-    if (!mouse_inside) 
+    // Check mouse is inside the visible/clamped area using absolute screen space coordinates
+    if (!(mouse_world_x >= win_x && mouse_world_x < win_x + win_w && 
+          mouse_world_y >= win_y && mouse_world_y < win_y + win_h)) 
         return;
     
+    // Hit-test passed! Now convert to surface-local coordinates for user packing
+    int mx = mouse_world_x - window->surface_x;
+    int my = mouse_world_y - window->surface_y;
+    
+    // Lower limit
+    if (mx < 0) mx = 0;
+    if (my < 0) my = 0;
+    
+    // Pack data down for the callback function
+    uint32_t window_sz_data = ((uint32_t)(uint16_t)window->h << 16) | ((uint32_t)(uint16_t)window->w & 0xFFFF);
+    
+    uint32_t mouse_data = ((uint32_t)(uint16_t)my << 16) | ((uint32_t)(uint16_t)mx & 0xFFFF);
+    int32_t mouse_state = 0;
+    if (window_context.left_button_pressed)  mouse_state |= EVENT_STATE_MOUSE_BTN_LEFT;
+    if (window_context.right_button_pressed) mouse_state |= EVENT_STATE_MOUSE_BTN_RIGHT;
+    
+    // On double click event (UPDATED)
+    if (window_context.is_double_click) {
+        mouse_state |= EVENT_STATE_MOUSE_DOUBLE_CLK;
+    }
+    
     if (window->event_callback != NULL && window->events != 0) {
-        if (window->events & EVENT_MOUSE)     {window->events &= ~EVENT_MOUSE;     window->event_callback(window->id, EVENT_MOUSE, 0);}
-        if (window->events & EVENT_KEYBOARD)  {window->events &= ~EVENT_KEYBOARD;  window->event_callback(window->id, EVENT_KEYBOARD, 0);}
+        if (window->events & EVENT_MOUSE)     {window->events &= ~EVENT_MOUSE;     window->event_callback(window->id, EVENT_MOUSE, mouse_data, mouse_state);}
+        if (window->events & EVENT_KEYBOARD)  {window->events &= ~EVENT_KEYBOARD;  window->event_callback(window->id, EVENT_KEYBOARD, 0, 0);}
         
-        // Add handling for the resize notification event
-        if (window->events & EVENT_RESIZE)    {window->events &= ~EVENT_RESIZE;    window->event_callback(window->id, EVENT_RESIZE, 0);}
+        if (window->events & EVENT_RESIZE)    {window->events &= ~EVENT_RESIZE;    window->event_callback(window->id, EVENT_RESIZE, window_sz_data, 0);}
         
         if (window->events & EVENT_REDRAW)    {window->events &= ~EVENT_REDRAW;
             dwm_invalidate_region(window->x, window->y, window->w, window->h);

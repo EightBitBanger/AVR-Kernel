@@ -11,6 +11,11 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
 bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click);
 void dwm_handle_context_menu_hover(struct WindowContext* ctx);
 
+struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mouse_x, int mouse_y);
+
+static struct WindowObject* last_clicked_window = NULL;
+static uint64_t last_window_click_time = 0;
+
 void dwm_update_mouse(struct WindowContext* ctx) {
     // Check for hover states first (always runs regardless of clicks)
     dwm_handle_context_menu_hover(ctx);
@@ -31,77 +36,6 @@ void dwm_update_mouse(struct WindowContext* ctx) {
     dwm_handle_icon_clicks(ctx, is_new_left_click, is_new_right_click);
 }
 
-struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mouse_x, int mouse_y) {
-    // Traverse backwards through the current z-order level (top-most first)
-    for (struct list_node* node = tail_node; node != NULL; node = node->prev) {
-        struct WindowObject* window = (struct WindowObject*)node->data;
-        
-        int abs_x, abs_y;
-        dwm_get_absolute_position(window, &abs_x, &abs_y);
-        
-        int full_min_x = abs_x - window->border_width;
-        int full_max_x = abs_x + window->w + window->border_width;
-        int full_min_y = abs_y - window->border_width;
-        int full_max_y = abs_y + window->h + window->border_width;
-        
-        if (mouse_x >= full_min_x && mouse_x <= full_max_x &&
-            mouse_y >= full_min_y && mouse_y <= full_max_y) {
-            
-            // Check child window clicks
-            if (window->children_tail != NULL) {
-                struct WindowObject* clicked_child = dwm_find_clicked_window(window->children_tail, mouse_x, mouse_y);
-                if (clicked_child != NULL) {
-                    return clicked_child; // A child intercepted the click!
-                }
-            }
-            
-            // No children where selected, this window itself is the target
-            return window;
-        }
-    }
-    return NULL;
-}
-
-bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
-    if (context_menu_count == 0) return false;
-    
-    // Check backwards from the top-most submenu down to root menu
-    for (int m = (int)context_menu_count - 1; m >= 0; m--) {
-        struct ContextMenu* menu = &context_menus[m];
-        
-        if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&
-            ctx->mouse.y >= menu->y && ctx->mouse.y <= (menu->y + menu->h)) {
-            
-            if (is_new_left_click) {
-                int relative_y = ctx->mouse.y - menu->y;
-                int item_index = relative_y / menu->item_height;
-                
-                if (item_index >= 0 && item_index < menu->item_count) {
-                    dwm_process_context_menu_events(item_index);
-                    // NOTE: When implementing submenus later, you can intercept here:
-                    // If this item opens a submenu, call a push_submenu routine and return true!
-                }
-            }
-            
-            // If an option was processed (and it didn't generate a new submenu layer), collapse everything
-            for (int i = 0; i < context_menu_count; i++) {
-                context_menus[i].visible = false;
-                dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
-            }
-            context_menu_count = 0;
-            return true;
-        }
-    }
-    
-    // Clicked outside all currently open context menus - dismiss everything
-    for (int i = 0; i < context_menu_count; i++) {
-        context_menus[i].visible = false;
-        dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
-    }
-    context_menu_count = 0;
-    return false;
-}
-
 bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
     // Kick off the recursive search starting from the top-most desktop window
     struct WindowObject* clicked_win = dwm_find_clicked_window(window_tail, ctx->mouse.x, ctx->mouse.y);
@@ -110,6 +44,28 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     
     // Assign the mouse event to the specific window that was clicked
     clicked_win->events |= EVENT_MOUSE;
+    
+    // Window double click detection
+    if (is_new_left_click) {
+        uint64_t current_time = timer_get_ms();
+        
+        if (clicked_win == last_clicked_window && 
+            (current_time - last_window_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
+            
+            // Mark a flag on the window context or environment that a double click occurred
+            window_context.is_double_click = true; 
+            
+            // Reset tracking so a third click isn't automatically a double click
+            last_clicked_window = NULL;
+            last_window_click_time = 0;
+        } else {
+            window_context.is_double_click = false;
+            last_clicked_window = clicked_win;
+            last_window_click_time = current_time;
+        }
+    } else {
+        window_context.is_double_click = false;
+    }
     
     // Shift focus/z-order tracking to its top-level root parent
     struct WindowObject* root_win = clicked_win;
@@ -169,10 +125,9 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
             }
             
             if (is_new_left_click) {
-                // Pipe the registered custom flag directly into the active event queue
                 clicked_win->events |= btn->event;
             }
-            return true; // Intercepted by custom button bounds
+            return true;
         }
     }
     
@@ -225,7 +180,7 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
                 
                 // Left mouse double click
                 
-                kernel_event_send(KEVENT_EXECUTE, "event");
+                kernel_event_send(KEVENT_EXECUTE, "explorer", "/");
                 
             } else {
                 dragged_icon = clicked_icon;
@@ -298,6 +253,46 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     }
 }
 
+bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
+    if (context_menu_count == 0) return false;
+    
+    // Check backwards from the top-most submenu down to root menu
+    for (int m = (int)context_menu_count - 1; m >= 0; m--) {
+        struct ContextMenu* menu = &context_menus[m];
+        
+        if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&
+            ctx->mouse.y >= menu->y && ctx->mouse.y <= (menu->y + menu->h)) {
+            
+            if (is_new_left_click) {
+                int relative_y = ctx->mouse.y - menu->y;
+                int item_index = relative_y / menu->item_height;
+                
+                if (item_index >= 0 && item_index < menu->item_count) {
+                    dwm_process_context_menu_events(item_index);
+                    // NOTE: When implementing submenus later, you can intercept here:
+                    // If this item opens a submenu, call a push_submenu routine and return true!
+                }
+            }
+            
+            // If an option was processed (and it didn't generate a new submenu layer), collapse everything
+            for (int i = 0; i < context_menu_count; i++) {
+                context_menus[i].visible = false;
+                dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+            }
+            context_menu_count = 0;
+            return true;
+        }
+    }
+    
+    // Clicked outside all currently open context menus - dismiss everything
+    for (int i = 0; i < context_menu_count; i++) {
+        context_menus[i].visible = false;
+        dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+    }
+    context_menu_count = 0;
+    return false;
+}
+
 void dwm_handle_context_menu_hover(struct WindowContext* ctx) {
     if (context_menu_count == 0) return;
     
@@ -327,4 +322,35 @@ void dwm_handle_context_menu_hover(struct WindowContext* ctx) {
             dwm_invalidate_region(menu->x, menu->y, menu->w, menu->h);
         }
     }
+}
+
+struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mouse_x, int mouse_y) {
+    // Traverse backwards through the current z-order level (top-most first)
+    for (struct list_node* node = tail_node; node != NULL; node = node->prev) {
+        struct WindowObject* window = (struct WindowObject*)node->data;
+        
+        int abs_x, abs_y;
+        dwm_get_absolute_position(window, &abs_x, &abs_y);
+        
+        int full_min_x = abs_x - window->border_width;
+        int full_max_x = abs_x + window->w + window->border_width;
+        int full_min_y = abs_y - window->border_width;
+        int full_max_y = abs_y + window->h + window->border_width;
+        
+        if (mouse_x >= full_min_x && mouse_x <= full_max_x &&
+            mouse_y >= full_min_y && mouse_y <= full_max_y) {
+            
+            // Check child window clicks
+            if (window->children_tail != NULL) {
+                struct WindowObject* clicked_child = dwm_find_clicked_window(window->children_tail, mouse_x, mouse_y);
+                if (clicked_child != NULL) {
+                    return clicked_child; // A child intercepted the click!
+                }
+            }
+            
+            // No children where selected, this window itself is the target
+            return window;
+        }
+    }
+    return NULL;
 }

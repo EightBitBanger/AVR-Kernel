@@ -131,14 +131,15 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
                                   resizing_window->w + (border_ext * 2), 
                                   resizing_window->h + (border_ext * 2));
             
-            // Re-compute client-surface mapping offsets
+            int border_offset = 0;
+            
             resizing_window->surface_w = resizing_window->w;
-            resizing_window->surface_h = resizing_window->h - resizing_window->titlebar_height;
+            resizing_window->surface_h = resizing_window->h - (resizing_window->titlebar_height + border_offset);
             resizing_window->buffer_w  = target_w; 
-            resizing_window->buffer_h  = target_h - resizing_window->titlebar_height;
+            resizing_window->buffer_h  = target_h - resizing_window->titlebar_height - border_offset;
             
             resizing_window->surface_x = resizing_window->x;
-            resizing_window->surface_y = resizing_window->y + resizing_window->titlebar_height + (border_ext ? 1 : 0);
+            resizing_window->surface_y = resizing_window->y + resizing_window->titlebar_height + 1;
             
             // Safely reallocate internal window back-buffer surface dimensions
             uint32_t frame_buffer_sz = resizing_window->buffer_w * resizing_window->buffer_h * sizeof(uint32_t);
@@ -157,7 +158,8 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
                     btn->x = resizing_window->w - btn->width;
                     btn->y = resizing_window->h - btn->height;
                 }
-                // Option: Update regular buttons (Close/Minimize) positions if window width changes
+                
+                // Update system button (Close/Minimize) positions if window width changes
                 if (btn->event == EVENT_CLOSE) {
                     btn->x = resizing_window->w - btn->width;
                 }

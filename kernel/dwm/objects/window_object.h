@@ -14,14 +14,16 @@ struct WindowObject {
     
     char title[16];
     
+    // Child windows
     struct WindowObject* parent;
     struct list_node* children_head;
     struct list_node* children_tail;
     
+    // Buttons
     struct list_node* buttons_head;
     struct list_node* buttons_tail;
     
-    void(*event_callback)(WindowHandle, wEvent, uint16_t wparam);
+    void(*event_callback)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
     
     // Position and size
     uint16_t x;

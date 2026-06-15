@@ -32,10 +32,13 @@ void dwm_update(void) {
     while (current != NULL) {
         // Save the next pointer immediately before destruction breaks it
         struct list_node* next_node = current->next;
-        struct WindowObject* win = (struct WindowObject*)current->data;
+        struct WindowObject* window = (struct WindowObject*)current->data;
         
-        if (win->events & EVENT_CLOSE) {
-            destroy_window(win->id);
+        if (window->events & EVENT_CLOSE) {
+            
+            window->event_callback(window->id, EVENT_DESTROY, 0, 0);
+            
+            dwm_destroy_window(window->id);
         }
         
         current = next_node;
