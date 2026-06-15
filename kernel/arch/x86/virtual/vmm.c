@@ -31,7 +31,7 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     // Handle Identity Mapping up to identity_map_size
     for (uint32_t pd_idx = 0; pd_idx < VM_PAGE_DIR_SIZE; pd_idx++) {
         bool dir_has_mappings = false;
-
+        
         for (uint32_t pt_idx = 0; pt_idx < VM_PAGE_TABLE_SIZE; pt_idx++) {
             uint32_t physical_address = (pd_idx * VM_PAGE_TABLE_SIZE * PAGE_SIZE) + (pt_idx * PAGE_SIZE);
             
@@ -125,7 +125,7 @@ void vmm_unmap_page(uint32_t virtual_addr) {
         // Break the mapping by zeroing the entry out (clears VM_PRESENT)
         static_page_tables[pd_index][pt_index] = 0;
         
-        // CRITICAL: Flush the TLB for this address
+        // Flush the TLB for this address
         __asm__ volatile("invlpg (%0)" : : "r"(virtual_addr) : "memory");
     }
 }
@@ -134,7 +134,7 @@ void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags)
     uint32_t pd_index = virtual_addr >> 22;
     uint32_t pt_index = (virtual_addr >> 12) & 0x3FFU;
     
-    // NEW LOGIC: Check if this directory entry is blank/not present
+    // Check if this directory entry is blank/not present
     if (!(page_directory[pd_index] & VM_PRESENT)) {
         // Link the directory entry to the pre-reserved static page table and mark it present
         page_directory[pd_index] = ((uint32_t)&static_page_tables[pd_index]) | VM_PRESENT | VM_READWRITE;
@@ -155,6 +155,7 @@ void vmm_map_hardware_region(uint32_t phys_addr, uint32_t virt_addr, uint32_t si
     uint32_t total_size = size + page_offset;
     uint32_t num_pages = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
     
+    // Map pages to virtual kernel space
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t current_phys = start_phys + (i * PAGE_SIZE);
         uint32_t current_virt = start_virt + (i * PAGE_SIZE);

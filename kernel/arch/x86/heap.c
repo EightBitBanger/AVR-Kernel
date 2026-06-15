@@ -248,7 +248,7 @@ uint32_t kmalloc(uint32_t size) {
                 // Flush changes to the physical bitmap tracking layer
                 kmalloc_bitmap_write();
                 
-                // Return absolute virtual/physical address
+                // Return absolute physical address
                 return __KMALLOC_HEAP_BEGIN__ + header_address_rel + KMALLOC_HEADER_SIZE;
             }
         } else {
@@ -257,7 +257,7 @@ uint32_t kmalloc(uint32_t size) {
     }
     
     // Panic on a bad allocation or out of memory in kernel space
-    kernel_crashout(0, 0x00000000, 0x03, "malloc");
+    kernel_crashout(0, 0x00000000, PT_OUT_OF_MEMORY, "malloc");
     
     return KMALLOC_NULL;
 }
@@ -290,24 +290,6 @@ void kfree(uint32_t address) {
     kmalloc_bitmap_write();
 }
 
-void* malloc(size_t size) {
-    uint32_t addr = kmalloc((uint32_t)size);
-    
-    if (addr == KMALLOC_NULL) 
-        return NULL;
-    
-    return (void*)(uintptr_t)addr;
-}
-
-void free(void* ptr) {
-    if (ptr == NULL) 
-        return;
-    
-    uint32_t addr = (uint32_t)(uintptr_t)ptr;
-    kfree(addr);
-}
-
-// Helpers updated to utilize fixed layout logic
 uint8_t kmalloc_get_type(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h> // Included for malloc and free
 #include <string.h>
 #include <stdbool.h>
 
@@ -12,16 +13,20 @@
 struct list_node* event_list_head = NULL;
 struct list_node* event_list_tail = NULL;
 
-bool kernel_event_send(uint8_t event, const char* arguments) {
+bool kernel_event_send(uint8_t flags, const char* name, const char* arguments) {
     // Allocate memory for the actual KEvent object
     struct KEvent* new_event = malloc(sizeof(struct KEvent));
     if (new_event == NULL) 
         return false;
     
-    // Initialize the KEvent fields
-    strncpy(new_event->name, arguments, sizeof(new_event->name) - 1);
-    new_event->name[sizeof(new_event->name) - 1] = '\0';
-    new_event->flags = event;
+    // Initialize the KEvent fields and guarantee null-termination
+    strncpy(new_event->name, name, 32);
+    new_event->name[31] = '\0'; 
+    
+    strncpy(new_event->args, arguments, 32);
+    new_event->args[31] = '\0';
+    
+    new_event->flags = flags;
     
     // Append the KEvent pointer to the linked list
     if (!list_append(&event_list_head, &event_list_tail, (void*)new_event)) {
@@ -36,12 +41,14 @@ bool kernel_event_remove(const char* name) {
     if (event_list_head == NULL) return false;
     
     struct list_node* current = event_list_head;
+    struct list_node* target_node = NULL;
     struct KEvent* target_event = NULL;
     
     // Walk the list nodes to find the KEvent matching the name
     while (current != NULL) {
         struct KEvent* ev = (struct KEvent*)current->data;
-        if (strncmp(ev->name, name, sizeof(ev->name)) == 0) {
+        if (strncmp(ev->name, name, 32) == 0) {
+            target_node = current;
             target_event = ev;
             break;
         }
@@ -51,7 +58,7 @@ bool kernel_event_remove(const char* name) {
     if (target_event == NULL) 
         return false;
     
-    list_remove(&event_list_head, &event_list_tail, (void*)target_event);
+    list_remove(&event_list_head, &event_list_tail, (void*)target_node);
     
     free(target_event);
     
@@ -65,9 +72,11 @@ void kernel_event_update(void) {
         
         if (event->flags & KEVENT_EXECUTE) {
             event->flags &= ~KEVENT_EXECUTE;
-            if (strncmp(event->name, "explorer", 16)) {
-                explorer_main();
+            
+            if (strncmp(event->name, "explorer", 32) == 0) {
+                explorer_main(event->args);
             }
+            
             break;
         }
         

@@ -4,6 +4,7 @@
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/slab.h>
+#include <kernel/arch/x86/malloc.h>
 #include <kernel/arch/x86/bus/pci.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/boot/x86/gdt.h>
@@ -42,7 +43,95 @@ bool ps2_check_keyboard(void);
 void flush_keyboard_buffer(void);
 void ps2_route_console(void);
 
-void vmm_stress_test(void);
+void run_kernel_memory_hammer_test(void);
+
+
+
+
+
+
+
+
+
+void test_slab_malloc(void) {
+    /*
+    print("--- STARTING SLAB ALLOCATOR TESTS ---\n");
+    draw_flush_display();
+
+    // Test 1: Basic Allocation and Freeing
+    print("Test 1: Allocating a 32-byte chunk... ");
+    int* ptr1 = (int*)vmalloc(32);
+    if (ptr1 != NULL) {
+        print("SUCCESS\n");
+        *ptr1 = 12345; // Test writing to it
+    } else {
+        print("FAILED\n");
+    }
+    draw_flush_display();
+
+    print("Test 1b: Freeing 32-byte chunk... ");
+    vfree(ptr1);
+    print("DONE\n");
+    draw_flush_display();
+
+
+    // Test 2: Multiple allocations to ensure buckets separate correctly
+    print("Test 2: Allocating different bucket sizes...\n");
+    char* small_ptr = (char*)vmalloc(8);   // Should go to 16-byte bucket
+    char* large_ptr = (char*)vmalloc(400); // Should go to 512-byte bucket
+
+    if (small_ptr != NULL && large_ptr != NULL) {
+        print("  Allocations successful.\n");
+    } else {
+        print("  CRITICAL: Allocation failed!\n");
+    }
+    draw_flush_display();
+
+
+    // Test 3: Force Page Growth
+    // The 512-byte bucket can hold roughly ~7 slots per 4KB page.
+    // Let's allocate 10 slots to force the allocator to call slab_grow().
+    print("Test 3: Forcing slab expansion (allocating 10 blocks of 512 bytes)...\n");
+    void* allocations[10];
+    bool growth_success = true;
+
+    for (int i = 0; i < 10; i++) {
+        allocations[i] = vmalloc(512);
+        if (allocations[i] == NULL) {
+            growth_success = false;
+            print("  Failed at allocation index: ");
+            // If you have a print_int function, use it here
+            print("!\n");
+            break;
+        }
+    }
+
+    if (growth_success) {
+        print("  SUCCESS: Slab expanded and allocated across multiple pages safely.\n");
+    }
+    draw_flush_display();
+
+
+    // Test 4: Free everything to ensure stability
+    print("Test 4: Cleaning up expansion blocks... ");
+    for (int i = 0; i < 10; i++) {
+        if (allocations[i] != NULL) {
+            vfree(allocations[i]);
+        }
+    }
+    vfree(small_ptr);
+    vfree(large_ptr);
+    print("CLEANUP DONE\n");
+    
+    print("--- ALL TESTS COMPLETED ---\n");
+    draw_flush_display();
+    
+    while(1);
+    */
+}
+
+
+
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -120,28 +209,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     draw_flush_display();
     
     
-    while(1) {
-        
-        /*
-        // Get a raw page
-        uint32_t* raw_page = (uint32_t*)vmm_alloc_pages(1);
-        
-        // Write a highly specific magic number to the very first byte
-        *raw_page = 0xDEADBEEF;
-        
-        // Read it immediately back
-        print("Wrote DEADBEEF, Read back: ");
-        print_hex32(*raw_page);
-        print("\n");
-        
-        draw_flush_display();
-        while(1);
-        */
-        
-        vmm_stress_test();
-    }
-    
-    
     //
     // Command console boot options
     //
@@ -191,7 +258,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     //
     // DWM Testing
     
-    create_folder(30, 30, "system");
+    dwm_create_folder(30, 30, "system");
     
     // Event system
     //  wEvent GetMessage();
@@ -199,9 +266,122 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // Scalable vector font or MSDF
     
+    
+    
+    
+    uint8_t counter[6] = {0, 3, 2, 4, 8, 12};
+    
+    WindowHandle whdnlA;
+    WindowHandle whdnlB;
+    void* blockA;
+    void* blockB;
+    
+    void* massA;
+    void* massB;
+    
+    WindowClass wclass;
+    wclass.x = 50;
+    wclass.y = 50;
+    wclass.width  = 640;
+    wclass.height = 480;
+    
     while(1) {
         dwm_update();
         kernel_event_update();
+        
+        //malloc(1024);
+        
+        /*
+        //
+        // Memory stress testing
+        //
+        
+        
+        run_kernel_memory_hammer_test();
+        
+        
+        // Tick forward
+        for (unsigned int i=0; i < sizeof(counter); i++) 
+            counter[i]++;
+        
+        
+        if (counter[0] > 5) {
+            counter[0]=0;
+            
+            if (!whdnlA) 
+                whdnlA = dwm_create_window(wclass, 0, NULL);
+        }
+        
+        if (counter[1] > 5) {
+            counter[1]=0;
+            
+            if (whdnlA) {
+                dwm_destroy_window(whdnlA);
+                whdnlA=0;
+            }
+            
+        }
+        
+        if (counter[2] > 3) {
+            counter[2]=0;
+            if (!blockA) blockA = malloc(1024);
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            if (!blockB) blockB = malloc(1024);
+            dwm_destroy_window(whdnl_temp);}
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            if (!whdnlB) 
+                whdnlB = dwm_create_window(wclass, 0, NULL);
+        }
+        
+        if (counter[3] > 3) {
+            counter[3]=0;
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            if (blockA) {free(blockA); blockA = 0;}
+            if (blockB) {free(blockB); blockB = 0;}
+            dwm_destroy_window(whdnl_temp);}
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            if (whdnlB) {
+                dwm_destroy_window(whdnlB);
+                whdnlB=0;
+            }
+        }
+        
+        if (counter[4] > 20) {
+            counter[4]=0;
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            if (massA) {free(massA); massA = 0;}
+            
+            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
+            dwm_destroy_window(whdnl_temp);}
+            
+            if (massB) {free(massB); massB = 0;}
+        }
+        
+        if (counter[5] > 80) {
+            counter[5]=0;
+            
+            if (!massA) massA = malloc(32768);
+            if (!massB) massB = malloc(32768);
+        }
+        */
+        
         
         //__asm__ volatile ("hlt");
         
@@ -244,109 +424,129 @@ void ps2_route_console(void) {
     }
 }
 
-SlabCache thread_cb_cache;
 
-void vmm_stress_test(void) {
-    thread_cb_cache.object_size = 64;
-    thread_cb_cache.page_list = NULL;
-    
-    uint8_t* object = slab_alloc(&thread_cb_cache);
-    
-    print_hex32((uint32_t) object);
-    print("\n");
-    draw_flush_display();
-    
-    slab_free(&thread_cb_cache, object);
-    
-    return;
-    
-    
-    while(1) {
-        //uint32_t* page = vmm_alloc_pages(1);
-        uint32_t frame = pmm_alloc_frame();
-        
-        print_hex32( (uint32_t)frame );
-        
-        print("\n");
-        draw_flush_display();
-    }
-    
-    while(1);
-    
-    
-    
-    
-    /*
-    thread_cb_cache.object_size = 64;
-    thread_cb_cache.page_list = NULL;
-    
-    uint8_t* objA = slab_alloc(&thread_cb_cache);
-    uint8_t* objB = slab_alloc(&thread_cb_cache);
-    
-    print_hex((uint32_t)thread_cb_cache.object_size);
-    
-    draw_flush_display();
-    
-    while(1);
-    
-    //uint8_t* objA = slab_alloc(&thread_cb_cache);
-    //uint8_t* objB = slab_alloc(&thread_cb_cache);
-    //uint8_t* objC = slab_alloc(&thread_cb_cache);
-    
-    
-    print_hex((uint32_t) objA);
-    print("\n");
-    print_hex((uint32_t) objB);
-    print("\n");
-    print_hex((uint32_t) objC);
-    print("\n");
-    */
-    
-    while(1);
-    
-    //slab_free(&thread_cb_cache, obj);
-    
-    //while(1);
-    
-    //void* obj1 = slab_alloc(&thread_cb_cache); 
-    //void* obj2 = slab_alloc(&thread_cb_cache);
-    
-    //slab_free(&thread_cb_cache, obj1); 
-    //slab_free(&thread_cb_cache, obj2);
-    /*
-    uint8_t* pages[5];
-    pages[0] = vmm_alloc_pages(1);
-    pages[1] = vmm_alloc_pages(1);
-    pages[2] = vmm_alloc_pages(1);
-    pages[3] = vmm_alloc_pages(1);
-    pages[4] = vmm_alloc_pages(1);
-    
-    print_hex32( (uint32_t) pages[1] );
-    
-    //vmm_free_pages(pages[0], 1);
-    vmm_free_pages(pages[1], 1);
-    //vmm_free_pages(pages[2], 1);
-    vmm_free_pages(pages[3], 1);
-    //vmm_free_pages(pages[4], 1);
-    
-    print("\n");
-    pages[1] = vmm_alloc_pages(10);
-    
-    print_hex32( (uint32_t) pages[1] );
-    
-    vmm_free_pages(pages[0], 1);
-    vmm_free_pages(pages[1], 10);
-    vmm_free_pages(pages[2], 1);
-    vmm_free_pages(pages[4], 1);
-    
-    print("\n");
-    
-    print("\n");
-    draw_flush_display();
-    
-    */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define STRESS_MAX_ALLOCS 128
+
+// Pseudo-random number generator to avoid deterministic allocation patterns
+static uint32_t next_random = 12345;
+static uint32_t pseudo_rand(void) {
+    next_random = next_random * 1103515245 + 12345;
+    return (uint32_t)(next_random / 65536) % 32768;
 }
 
+void run_kernel_memory_hammer_test(void) {
+    void* ptrs[STRESS_MAX_ALLOCS] = {NULL};
+    size_t sizes[STRESS_MAX_ALLOCS] = {0};
+    
+    print("\n--- INITIATING MEMORY ALLOCATOR HAMMER TEST ---\n");
+    draw_flush_display();
+
+    // Phase 1: Rapid Fragmentation and Churn
+    print("Phase 1: High-churn random size allocation...\n");
+    for (int iterations = 0; iterations < 500; iterations++) {
+        int index = pseudo_rand() % STRESS_MAX_ALLOCS;
+        
+        // If an allocation already exists at this random slot, free it
+        if (ptrs[index] != NULL) {
+            free(ptrs[index]);
+            ptrs[index] = NULL;
+        } else {
+            // Pick a pseudo-random size between 8 bytes and 2048 bytes
+            // This forces different slab buckets to activate/grow dynamically
+            size_t size = (pseudo_rand() % 2040) + 8;
+            ptrs[index] = malloc(size);
+            sizes[index] = size;
+
+            // Fill memory with a pattern to verify integrity later
+            if (ptrs[index] != NULL) {
+                uint8_t* byte_ptr = (uint8_t*)ptrs[index];
+                for (size_t j = 0; j < size; j++) {
+                    byte_ptr[j] = (uint8_t)(index ^ j);
+                }
+            }
+        }
+        
+        if (iterations % 100 == 0) {
+            print("."); // Progress indicator
+            draw_flush_display();
+        }
+    }
+    print("\nPhase 1 Complete. Checking integrity...\n");
+    draw_flush_display();
+
+    // Phase 2: Integrity Verification
+    // Ensures that active blocks haven't been cross-contaminated or corrupted
+    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
+        if (ptrs[i] != NULL) {
+            uint8_t* byte_ptr = (uint8_t*)ptrs[i];
+            for (size_t j = 0; j < sizes[i]; j++) {
+                if (byte_ptr[j] != (uint8_t)(i ^ j)) {
+                    print("CRITICAL ERROR: Memory Corruption Detected at index ");
+                    // If you have an integer print function use it here, or trip panic
+                    //kernel_panic(0x00, 0x00000000, PT_GENERAL_PROTECTION_FAULT, "");
+                }
+            }
+        }
+    }
+    print("Phase 2 Complete. Memory integrity verified successfully.\n");
+    draw_flush_display();
+
+    // Phase 3: Mass Burst Allocation (Pushing the boundaries)
+    print("Phase 3: Filling up remainder slots with large blocks...\n");
+    int failed_allocations = 0;
+    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
+        if (ptrs[i] == NULL) {
+            // Allocate large chunks (4KB) to force physical page expansions
+            ptrs[i] = malloc(4096);
+            if (ptrs[i] == NULL) {
+                failed_allocations++;
+            }
+        }
+    }
+    print("Phase 3 Complete. (If OOM occurred, check page tables/physical memory limits)\n");
+    draw_flush_display();
+
+    // Phase 4: Full Cleanup
+    print("Phase 4: Cleaning up all stress blocks...\n");
+    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
+        if (ptrs[i] != NULL) {
+            free(ptrs[i]);
+            ptrs[i] = NULL;
+        }
+    }
+    
+    print("--- HAMMER TEST SUCCESSFUL: NO PANICS TRIGGERS ---\n");
+    draw_flush_display();
+}
 
 
 

@@ -64,7 +64,7 @@ _start:
 .skip_sse:
     
     extern kmain
-    call kmain                                  ;
+    call kmain                                  ; Kernel entry point
     
 .hang:
     hlt                

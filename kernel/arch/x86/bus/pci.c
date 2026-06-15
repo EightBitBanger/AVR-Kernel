@@ -2,6 +2,7 @@
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/bus/pci.h>
 #include <kernel/arch/x86/virtual/vmm.h>
+#include <kernel/kernel.h>
 
 #include <kernel/arch/x86/drivers/ata.h>
 #include <kernel/fs/fs.h>
@@ -217,7 +218,6 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             const char* type_name = pci_get_class_name(class_code);
             uint32_t type_knode = create_knode(type_name, device_knode);
             
-            
 #ifdef PCI_DEBUG_HARDWARE_DUMP
             
             char base_address[16];
@@ -250,8 +250,10 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                     if (ata_present) {
                         
                         {
+                        
                         //
-                        // Quick format example
+                        // Quick and dirty format example
+                        
                         /*
                         uint32_t device_size = 1024 * 1024 * 32;
                         
@@ -273,15 +275,13 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                         */
                         }
                         
-                        
-                        
                         char device_name[] = "ssd ";
                         device_name[3] = '0' + storage_device_index++;
                         
                         uint32_t mount_ptr = create_knode(device_name, mnt_directory);
-                        kmalloc_set_flags(mount_ptr, KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT);
+                        kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
                         
-                        uint32_t block_device = kmalloc( 512 );
+                        uint32_t block_device = (uint32_t)malloc( 512 );
                         
                         struct FSPartitionBlock part;
                         fs_device_open(block_device, &part);
@@ -289,17 +289,9 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                         ata_read_sector(0, (uint8_t*)block_device);
                         
                         knode_add_reference(mount_ptr, block_device);
-                        
-                        
-                        
-                        
-                        
                     }
                 }
             }
-            
-            
-            
             
             char value_buffer[16];
             uint32_t prop_dir;
@@ -307,49 +299,59 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             prop_dir = create_knode("bar", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_hex32_string(value_buffer, (uint32_t)base_virtual_address);
-            create_knode(value_buffer, prop_dir);
+            uint32_t device_bar = create_device(value_buffer);
+            knode_add_reference(prop_dir, device_bar);
             
             prop_dir = create_knode("vendor", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_hex16_string(value_buffer, v_id);
-            create_knode(value_buffer, prop_dir);
+            uint32_t device_vendor = create_device(value_buffer);
+            knode_add_reference(prop_dir, device_vendor);
             
             prop_dir = create_knode("device", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_hex16_string(value_buffer, d_id);
-            create_knode(value_buffer, prop_dir);
+            uint32_t device_dev = create_device(value_buffer);
+            knode_add_reference(prop_dir, device_dev);
             
             prop_dir = create_knode("class", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_dec8_string(value_buffer, class_code);
-            create_knode(value_buffer, prop_dir);
+            uint32_t device_class = create_device(value_buffer);
+            knode_add_reference(prop_dir, device_class);
             
             prop_dir = create_knode("subclass", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_dec8_string(value_buffer, subclass);
-            create_knode(value_buffer, prop_dir);
+            uint32_t device_subclass = create_device(value_buffer);
+            knode_add_reference(prop_dir, device_subclass);
             
             // Subsystem Properties (Only if valid/assigned)
             if (sub_v_id != 0x0000 && sub_v_id != 0xFFFF) {
+                
                 prop_dir = create_knode("sub_vendor", type_knode);
                 format_hex16_string(value_buffer, sub_v_id);
-                create_knode(value_buffer, prop_dir);
+                uint32_t sub_vendor = create_device(value_buffer);
+                knode_add_reference(prop_dir, sub_vendor);
                 
                 prop_dir = create_knode("sub_id", type_knode);
                 format_hex16_string(value_buffer, sub_id);
-                create_knode(value_buffer, prop_dir);
+                uint32_t sub_id_address = create_device(value_buffer);
+                knode_add_reference(prop_dir, sub_id_address);
             }
             
             // Interrupt Pin & Line Configuration Context
             if (irq_pin > 0 && irq_pin <= 4) {
                 prop_dir = create_knode("pin", type_knode);
                 format_dec8_string(value_buffer, irq_pin);
-                create_knode(value_buffer, prop_dir);
+                uint32_t device_address = create_device(value_buffer);
+                knode_add_reference(prop_dir, device_address);
                 
                 if (irq_line != 0xFF) {
                     prop_dir = create_knode("irq", type_knode);
                     format_dec8_string(value_buffer, irq_line);
-                    create_knode(value_buffer, prop_dir);
+                    uint32_t device_address = create_device(value_buffer);
+                    knode_add_reference(prop_dir, device_address);
                 }
             }
             

@@ -5,7 +5,6 @@
 #define MAX_PHYS_MEMORY   0xFFFFFFFF
 #define PHYS_BITMAP_SIZE  (MAX_PHYS_MEMORY / PAGE_SIZE / 8U)
 
-
 static uint32_t pmm_bitmap[PHYS_BITMAP_SIZE];
 static uint32_t total_frames = 0;
 
