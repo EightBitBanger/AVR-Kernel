@@ -22,8 +22,8 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     
     // Back button bounding box detection
     if (ui_button_back != NULL) {
-        uint16_t btn_x1 = 7;
-        uint16_t btn_y1 = 3;
+        uint16_t btn_x1 = BUTTON_BACK_X;
+        uint16_t btn_y1 = BUTTON_BACK_Y;
         uint16_t btn_x2 = btn_x1 + ui_button_back->width;
         uint16_t btn_y2 = btn_y1 + ui_button_back->height;
         
@@ -61,18 +61,18 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     if (!(lparam & EVENT_STATE_MOUSE_DOUBLE_CLK)) 
         return;
     
-    uint16_t max_cols = (state->win_width - TILE_BASE_X) / TILE_WIDTH;
+    uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
     if (max_cols == 0) max_cols = 1;
     
     for (unsigned int i = 0; i < state->total_items; i++) {
         uint16_t col = i % max_cols;
         uint16_t row = i / max_cols;
         
-        uint16_t tile_start_x = TILE_BASE_X + (col * TILE_WIDTH);
-        uint16_t tile_start_y = TILE_BASE_Y + (row * TILE_HEIGHT);
+        uint16_t tile_start_x = NAVBAR_X + (col * NAVBAR_WIDTH);
+        uint16_t tile_start_y = NAVBAR_Y + (row * NAVBAR_HEIGHT);
         
-        if (click_x >= tile_start_x && click_x < (tile_start_x + TILE_WIDTH) &&
-            click_y >= tile_start_y && click_y < (tile_start_y + TILE_HEIGHT)) {
+        if (click_x >= tile_start_x && click_x < (tile_start_x + NAVBAR_WIDTH) &&
+            click_y >= tile_start_y && click_y < (tile_start_y + NAVBAR_HEIGHT)) {
             
             if (state->fs_current == 0) {
                 if (state->items[i].icon_index == ICON_FOLDER) {
@@ -108,54 +108,53 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
     uint16_t window_height = dwm_window_get_height(handle);
     
     // Blank to a background color
-    dwm_draw_rect_filled(0, 0, window_width, window_height, background);
+    dwm_draw_rect_filled(EXPLORER_BG_X, EXPLORER_BG_Y, window_width, window_height, background);
     
-    int16_t path_text_x = 12;
+    int16_t path_text_x = 0;
     if (ui_button_back != NULL) {
-        path_text_x = 7 + ui_button_back->width + 12;
+        path_text_x = BUTTON_BACK_X + ui_button_back->width + BACK_BTN_PADDING_RIGHT;
     }
     
     if (ui_button_back != NULL) {
-        dwm_draw_rect_filled(5, 4, path_text_x - 15, 16, path_bg);
-        dwm_draw_rect(4, 3, path_text_x - 14, 18, path_border);
-        dwm_draw_sprite(7, 1, ui_button_back);
+        dwm_draw_rect_filled(BACK_BTN_CONTAINER_X, BACK_BTN_CONTAINER_Y, BACK_BTN_CONTAINER_W(path_text_x), BACK_BTN_CONTAINER_H, path_bg);
+        dwm_draw_rect(BACK_BTN_BORDER_X, BACK_BTN_BORDER_Y, BACK_BTN_BORDER_W(path_text_x), BACK_BTN_BORDER_H, path_border);
+        dwm_draw_sprite(BACK_BTN_SPRITE_X, BACK_BTN_SPRITE_Y, ui_button_back);
     }
     
-    dwm_draw_rect_filled(path_text_x - 5, 4, window_width - path_text_x, 16, path_bg);
-    dwm_draw_rect(path_text_x - 4, 3, window_width - path_text_x, 18, path_border);
+    dwm_draw_rect_filled(PATH_FIELD_BG_X(path_text_x), PATH_FIELD_BG_Y, PATH_FIELD_W(path_text_x, window_width), PATH_FIELD_BG_H, path_bg);
+    dwm_draw_rect(PATH_FIELD_BORDER_X(path_text_x), PATH_FIELD_BORDER_Y, PATH_FIELD_W(path_text_x, window_width), PATH_FIELD_BORDER_H, path_border);
     
     // Color segmented path rendering mechanics
     if (state->fs_current == 0 || state->knode_path_len >= strlen(state->path)) {
-        // Standard View: Render everything in classic Virtual KNode green
-        dwm_draw_text(path_text_x, 8, state->path, text_knode);
+        dwm_draw_text(path_text_x, PATH_TEXT_Y, state->path, text_knode);
     } else {
         // Split View: Read slice limits to split string processing
         char base_buffer[MAX_PATH_LEN];
         memset(base_buffer, 0, MAX_PATH_LEN);
         strncpy(base_buffer, state->path, state->knode_path_len);
         
-        // Draw Virtual KNode sequence in Green
-        dwm_draw_text(path_text_x, 8, base_buffer, text_knode);
+        // Draw Virtual KNode sequence
+        dwm_draw_text(path_text_x, PATH_TEXT_Y, base_buffer, text_knode);
         
         // Calculate pixel offset (assuming standard 6px per char font width)
-        int16_t mount_offset_x = path_text_x + (state->knode_path_len * 6);
+        int16_t mount_offset_x = path_text_x + (state->knode_path_len * PATH_FONT_CHAR_WIDTH);
         
         // Draw the rest of the file system path
-        dwm_draw_text(mount_offset_x, 8, state->path + state->knode_path_len, text_mount);
+        dwm_draw_text(mount_offset_x, PATH_TEXT_Y, state->path + state->knode_path_len, text_mount);
     }
     
     // Navigation bar divider
-    dwm_draw_line(0, 25, window_width, 0, navbar_div);
+    dwm_draw_line(NAV_DIVIDER_X, NAV_DIVIDER_Y, window_width, NAV_DIVIDER_H, navbar_div);
     
-    uint16_t max_cols = (state->win_width - TILE_BASE_X) / TILE_WIDTH;
+    uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
     if (max_cols == 0) max_cols = 1;
     
     for (unsigned int i = 0; i < state->total_items; i++) {
         uint16_t col = i % max_cols;
         uint16_t row = i / max_cols;
         
-        uint16_t sp_x = TILE_BASE_X + (col * TILE_WIDTH);
-        uint16_t sp_y = TILE_BASE_Y + (row * TILE_HEIGHT);
+        uint16_t sp_x = NAVBAR_X + (col * NAVBAR_WIDTH);
+        uint16_t sp_y = NAVBAR_Y + (row * NAVBAR_HEIGHT);
         
         struct Image* current_icon;
         switch (state->items[i].icon_index) {
@@ -168,14 +167,14 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         }
         
         if (current_icon != NULL) {
-            uint16_t icon_offset_x = (TILE_WIDTH - current_icon->width) / 2; 
+            uint16_t icon_offset_x = (NAVBAR_WIDTH - current_icon->width) / 2; 
             dwm_draw_sprite(sp_x + icon_offset_x, sp_y, current_icon);
         }
         
         size_t length = strlen(state->items[i].name);
-        uint16_t string_width = length * 6;
-        int16_t text_start_x = sp_x + ((TILE_WIDTH - string_width) / 2);
-        dwm_draw_text(text_start_x, sp_y + 42, state->items[i].name, item_text);
+        uint16_t string_width = length * ITEM_FONT_CHAR_WIDTH;
+        int16_t text_start_x = sp_x + ((NAVBAR_WIDTH - string_width) / 2);
+        dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_Y_OFF, state->items[i].name, item_text);
     }
 }
 
