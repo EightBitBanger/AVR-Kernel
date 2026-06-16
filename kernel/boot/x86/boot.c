@@ -208,10 +208,18 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     print("kernel v0.0.0\n");
     draw_flush_display();
     
+    extern uint16_t cursor_position; 
+    extern uint16_t cursor_line;
+    extern uint8_t console_glyph_width;
+    extern uint8_t console_glyph_height;
+    int cursor_x = (int)(cursor_position * console_glyph_width) - console_glyph_width;
+    int cursor_y = (int)(cursor_line * console_glyph_height) - console_glyph_height;
+    
+    draw_flush_region(cursor_x, cursor_y, console_glyph_width + 32, console_glyph_height + 32);
+    
     
     //
     // Command console boot options
-    //
     
     {
         bool activate_console = false;
@@ -242,21 +250,17 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         }
     }
     
-    // Blank the screen in preparation for the graphical environment
-    draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
-    draw_flush_region(0, 0, display_get_width(), display_get_height());
-    
     // Scan PCI bus for available hardware
     pci_init();
     
+    // Blank the screen in preparation for pure graphics mode
+    draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
+    draw_flush_region(0, 0, display_get_width(), display_get_height());
+    
     //
-    // Initiate the DWM
+    // Initiate the DWM graphical environment
     
     dwm_initiate();
-    
-    
-    //
-    // DWM Testing
     
     dwm_create_folder(30, 30, "system");
     
@@ -267,121 +271,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Scalable vector font or MSDF
     
     
-    
-    
-    uint8_t counter[6] = {0, 3, 2, 4, 8, 12};
-    
-    WindowHandle whdnlA;
-    WindowHandle whdnlB;
-    void* blockA;
-    void* blockB;
-    
-    void* massA;
-    void* massB;
-    
-    WindowClass wclass;
-    wclass.x = 50;
-    wclass.y = 50;
-    wclass.width  = 640;
-    wclass.height = 480;
-    
     while(1) {
         dwm_update();
         kernel_event_update();
-        
-        //malloc(1024);
-        
-        /*
-        //
-        // Memory stress testing
-        //
-        
-        
-        run_kernel_memory_hammer_test();
-        
-        
-        // Tick forward
-        for (unsigned int i=0; i < sizeof(counter); i++) 
-            counter[i]++;
-        
-        
-        if (counter[0] > 5) {
-            counter[0]=0;
-            
-            if (!whdnlA) 
-                whdnlA = dwm_create_window(wclass, 0, NULL);
-        }
-        
-        if (counter[1] > 5) {
-            counter[1]=0;
-            
-            if (whdnlA) {
-                dwm_destroy_window(whdnlA);
-                whdnlA=0;
-            }
-            
-        }
-        
-        if (counter[2] > 3) {
-            counter[2]=0;
-            if (!blockA) blockA = malloc(1024);
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            if (!blockB) blockB = malloc(1024);
-            dwm_destroy_window(whdnl_temp);}
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            if (!whdnlB) 
-                whdnlB = dwm_create_window(wclass, 0, NULL);
-        }
-        
-        if (counter[3] > 3) {
-            counter[3]=0;
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            if (blockA) {free(blockA); blockA = 0;}
-            if (blockB) {free(blockB); blockB = 0;}
-            dwm_destroy_window(whdnl_temp);}
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            if (whdnlB) {
-                dwm_destroy_window(whdnlB);
-                whdnlB=0;
-            }
-        }
-        
-        if (counter[4] > 20) {
-            counter[4]=0;
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            if (massA) {free(massA); massA = 0;}
-            
-            {WindowHandle whdnl_temp = dwm_create_window(wclass, 0, NULL);
-            dwm_destroy_window(whdnl_temp);}
-            
-            if (massB) {free(massB); massB = 0;}
-        }
-        
-        if (counter[5] > 80) {
-            counter[5]=0;
-            
-            if (!massA) massA = malloc(32768);
-            if (!massB) massB = malloc(32768);
-        }
-        */
-        
         
         //__asm__ volatile ("hlt");
         
@@ -389,6 +281,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         if (ps2_check_keyboard()) {
             kb_getc();
         }
+        
     }
 }
 
@@ -423,130 +316,4 @@ void ps2_route_console(void) {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#include <stddef.h>
-#include <stdint.h>
-
-#define STRESS_MAX_ALLOCS 128
-
-// Pseudo-random number generator to avoid deterministic allocation patterns
-static uint32_t next_random = 12345;
-static uint32_t pseudo_rand(void) {
-    next_random = next_random * 1103515245 + 12345;
-    return (uint32_t)(next_random / 65536) % 32768;
-}
-
-void run_kernel_memory_hammer_test(void) {
-    void* ptrs[STRESS_MAX_ALLOCS] = {NULL};
-    size_t sizes[STRESS_MAX_ALLOCS] = {0};
-    
-    print("\n--- INITIATING MEMORY ALLOCATOR HAMMER TEST ---\n");
-    draw_flush_display();
-
-    // Phase 1: Rapid Fragmentation and Churn
-    print("Phase 1: High-churn random size allocation...\n");
-    for (int iterations = 0; iterations < 500; iterations++) {
-        int index = pseudo_rand() % STRESS_MAX_ALLOCS;
-        
-        // If an allocation already exists at this random slot, free it
-        if (ptrs[index] != NULL) {
-            free(ptrs[index]);
-            ptrs[index] = NULL;
-        } else {
-            // Pick a pseudo-random size between 8 bytes and 2048 bytes
-            // This forces different slab buckets to activate/grow dynamically
-            size_t size = (pseudo_rand() % 2040) + 8;
-            ptrs[index] = malloc(size);
-            sizes[index] = size;
-
-            // Fill memory with a pattern to verify integrity later
-            if (ptrs[index] != NULL) {
-                uint8_t* byte_ptr = (uint8_t*)ptrs[index];
-                for (size_t j = 0; j < size; j++) {
-                    byte_ptr[j] = (uint8_t)(index ^ j);
-                }
-            }
-        }
-        
-        if (iterations % 100 == 0) {
-            print("."); // Progress indicator
-            draw_flush_display();
-        }
-    }
-    print("\nPhase 1 Complete. Checking integrity...\n");
-    draw_flush_display();
-
-    // Phase 2: Integrity Verification
-    // Ensures that active blocks haven't been cross-contaminated or corrupted
-    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
-        if (ptrs[i] != NULL) {
-            uint8_t* byte_ptr = (uint8_t*)ptrs[i];
-            for (size_t j = 0; j < sizes[i]; j++) {
-                if (byte_ptr[j] != (uint8_t)(i ^ j)) {
-                    print("CRITICAL ERROR: Memory Corruption Detected at index ");
-                    // If you have an integer print function use it here, or trip panic
-                    //kernel_panic(0x00, 0x00000000, PT_GENERAL_PROTECTION_FAULT, "");
-                }
-            }
-        }
-    }
-    print("Phase 2 Complete. Memory integrity verified successfully.\n");
-    draw_flush_display();
-
-    // Phase 3: Mass Burst Allocation (Pushing the boundaries)
-    print("Phase 3: Filling up remainder slots with large blocks...\n");
-    int failed_allocations = 0;
-    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
-        if (ptrs[i] == NULL) {
-            // Allocate large chunks (4KB) to force physical page expansions
-            ptrs[i] = malloc(4096);
-            if (ptrs[i] == NULL) {
-                failed_allocations++;
-            }
-        }
-    }
-    print("Phase 3 Complete. (If OOM occurred, check page tables/physical memory limits)\n");
-    draw_flush_display();
-
-    // Phase 4: Full Cleanup
-    print("Phase 4: Cleaning up all stress blocks...\n");
-    for (int i = 0; i < STRESS_MAX_ALLOCS; i++) {
-        if (ptrs[i] != NULL) {
-            free(ptrs[i]);
-            ptrs[i] = NULL;
-        }
-    }
-    
-    print("--- HAMMER TEST SUCCESSFUL: NO PANICS TRIGGERS ---\n");
-    draw_flush_display();
-}
-
-
 

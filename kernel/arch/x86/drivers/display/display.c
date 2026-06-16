@@ -36,6 +36,7 @@ uint32_t make_color(float a, float r, float g, float b);
 void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg);
 void draw_rect(int x, int y, int width, int height, uint32_t color);
 void draw_rect_filled(int x, int y, int width, int height, uint32_t color);
+void draw_flush_region(int x, int y, int width, int height);
 
 void display_init(void) {
     display_width  = vinfo->framebuffer_width;
@@ -85,6 +86,15 @@ uint16_t display_get_rows(void) {
 void display_putc(const char ch) {
     draw_rect_filled(cursor_position * console_glyph_width, cursor_line * console_glyph_height, 6, 8, background_color);
     draw_glyph(char_rom, ch, cursor_position * console_glyph_width, cursor_line * console_glyph_height, foreground_color, background_color, transparent_color);
+    
+    extern uint16_t cursor_position; 
+    extern uint16_t cursor_line;
+    extern uint8_t console_glyph_width;
+    extern uint8_t console_glyph_height;
+    int cursor_x = (int)(cursor_position * console_glyph_width);
+    int cursor_y = (int)(cursor_line * console_glyph_height);
+    
+    draw_flush_region(cursor_x, cursor_y, console_glyph_width, console_glyph_height);
 }
 
 void display_newline(void) {

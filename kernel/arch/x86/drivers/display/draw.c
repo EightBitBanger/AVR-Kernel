@@ -146,6 +146,7 @@ void draw_flush_region_simd(int x, int y, int width, int height) {
     asm volatile("sfence" ::: "memory");
 }
 
+
 void draw_flush_display(void) {
     draw_flush_region(0, 0, display_width, display_height);
 }

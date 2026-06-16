@@ -62,7 +62,7 @@ void display_busy_wait(void) {
 uint16_t display_get_width(void) {return display_width;}
 uint16_t display_get_height(void) {return display_height;}
 uint16_t display_get_rows(void) {return console_width;}
-uint16_t display_get_columbs(void) {return console_height;}
+uint16_t display_get_columns(void) {return console_height;}
 
 void display_putc(const char ch) {
     display_busy_wait();
