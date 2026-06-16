@@ -89,6 +89,18 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
         int target_w = (ctx->mouse.x + resize_offset_x) - resizing_window->x;
         int target_h = (ctx->mouse.y + resize_offset_y) - resizing_window->y;
         
+        int display_w = display_get_width();
+        int display_h = display_get_height();
+        int border_ext = resizing_window->border_width;
+
+        // Prevent resizing beyond the right and bottom screen boundaries
+        if (resizing_window->x + target_w + border_ext > display_w) {
+            target_w = display_w - resizing_window->x - border_ext;
+        }
+        if (resizing_window->y + target_h + border_ext > display_h) {
+            target_h = display_h - resizing_window->y - border_ext;
+        }
+        
         // Enforce a sensible minimum geometry threshold
         int min_width = 64;
         int min_height = 48 + resizing_window->titlebar_height;
@@ -108,7 +120,6 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
         if (resizing_window->w != target_w || resizing_window->h != target_h) {
             
             // Invalidate old window space configuration to clear out previous borders
-            int border_ext = resizing_window->border_width;
             dwm_invalidate_region(resizing_window->x - border_ext, 
                                   resizing_window->y - border_ext, 
                                   resizing_window->w + (border_ext * 2), 
@@ -141,7 +152,7 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             resizing_window->surface_x = resizing_window->x;
             resizing_window->surface_y = resizing_window->y + resizing_window->titlebar_height + 1;
             
-            // Safely reallocate internal window back-buffer surface dimensions
+            // Reallocate internal window back-buffer surface dimensions
             uint32_t frame_buffer_sz = resizing_window->buffer_w * resizing_window->buffer_h * sizeof(uint32_t);
             if (resizing_window->frame_buffer != NULL) {
                 free(resizing_window->frame_buffer);
