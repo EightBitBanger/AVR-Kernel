@@ -71,7 +71,7 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
             
             dwm_invalidate_region(dragged_window->x - dragged_window->border_width, dragged_window->y - dragged_window->border_width, dragged_window->w + (dragged_window->border_width * 2), dragged_window->h + (dragged_window->border_width * 2));
             
-            dragged_window->flags |= WINDOW_FLAG_REFRESH;
+            dragged_window->flags |= DWM_WFLAG_REFRESH;
         }
     } else {
         // Released - drop the window
@@ -133,10 +133,10 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             dwm_sync_child_positions(resizing_window);
             
             // Flag the resize event so the window's callback receives it
-            dwm_window_send_event(resizing_window->id, EVENT_RESIZE);
+            dwm_window_send_event(resizing_window->id, DWM_EVENT_RESIZE);
             
             // Request a complete paint pass and invalidate the updated boundaries
-            resizing_window->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW | WINDOW_FLAG_REDECORATE);
+            resizing_window->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
             dwm_invalidate_region(resizing_window->x - border_ext, 
                                   resizing_window->y - border_ext, 
                                   resizing_window->w + (border_ext * 2), 
@@ -165,16 +165,16 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             // Update the positioning coordinates of the resize handle button itself
             for (struct list_node* node = resizing_window->buttons_head; node != NULL; node = node->next) {
                 struct WindowButton* btn = (struct WindowButton*)node->data;
-                if (btn->event == EVENT_RESIZE) {
+                if (btn->event == DWM_EVENT_RESIZE) {
                     btn->x = resizing_window->w - btn->width;
                     btn->y = resizing_window->h - btn->height;
                 }
                 
                 // Update system button (Close/Minimize) positions if window width changes
-                if (btn->event == EVENT_CLOSE) {
+                if (btn->event == DWM_EVENT_CLOSE) {
                     btn->x = resizing_window->w - btn->width;
                 }
-                if (btn->event == EVENT_MINIMIZE) {
+                if (btn->event == DWM_EVENT_MINIMIZE) {
                     struct Image* button_close = dwm_resource_find("ui_close");
                     btn->x = resizing_window->w - button_close->width - btn->width;
                 }
@@ -184,7 +184,7 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             dwm_sync_child_positions(resizing_window);
             
             // Request a complete paint pass and invalidate the updated boundaries
-            resizing_window->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDRAW | WINDOW_FLAG_REDECORATE);
+            resizing_window->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
             dwm_invalidate_region(resizing_window->x - border_ext, 
                                   resizing_window->y - border_ext, 
                                   resizing_window->w + (border_ext * 2), 
@@ -215,7 +215,7 @@ void dwm_cascade_child_positions(struct WindowObject* parent) {
         child->surface_y = child->y + child->titlebar_height + (child->border_width ? 1 : 0);
         
         // Mark child for refresh and invalidate its new screen space
-        child->flags |= WINDOW_FLAG_REFRESH;
+        child->flags |= DWM_WFLAG_REFRESH;
         dwm_invalidate_region(child->x - child->border_width, child->y - child->border_width,
                               child->w + (child->border_width * 2), child->h + (child->border_width * 2));
         

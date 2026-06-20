@@ -51,38 +51,55 @@ void dwm_process_window_events(struct WindowObject* window) {
     
     uint32_t mouse_data = ((uint32_t)(uint16_t)my << 16) | ((uint32_t)(uint16_t)mx & 0xFFFF);
     int32_t mouse_state = 0;
-    if (window_context.left_button_pressed)  mouse_state |= EVENT_STATE_MOUSE_BTN_LEFT;
-    if (window_context.right_button_pressed) mouse_state |= EVENT_STATE_MOUSE_BTN_RIGHT;
+    if (window_context.left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
+    if (window_context.right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
     
     // On double click event (UPDATED)
     if (window_context.is_double_click) {
-        mouse_state |= EVENT_STATE_MOUSE_DOUBLE_CLK;
+        mouse_state |= DWM_STATE_MOUSE_DOUBLE_CLK;
     }
     
     if (window->event_callback != NULL && window->events != 0) {
-        if (window->events & EVENT_MOUSE)     {window->events &= ~EVENT_MOUSE;     window->event_callback(window->id, EVENT_MOUSE, mouse_data, mouse_state);}
-        if (window->events & EVENT_KEYBOARD)  {window->events &= ~EVENT_KEYBOARD;  window->event_callback(window->id, EVENT_KEYBOARD, 0, 0);}
+        if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
+        if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, 0, 0);}
         
-        if (window->events & EVENT_RESIZE)    {window->events &= ~EVENT_RESIZE;    window->event_callback(window->id, EVENT_RESIZE, window_sz_data, 0);}
+        if (window->events & DWM_EVENT_RESIZE)    {window->events &= ~DWM_EVENT_RESIZE;    window->event_callback(window->id, DWM_EVENT_RESIZE, window_sz_data, 0);}
         
-        if (window->events & EVENT_REDRAW)    {window->events &= ~EVENT_REDRAW;
+        if (window->events & DWM_EVENT_REDRAW)    {window->events &= ~DWM_EVENT_REDRAW;
             dwm_invalidate_region(window->x, window->y, window->w, window->h);
-            window->flags |= (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
+            window->flags |= (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         }
     }
 }
 
-void dwm_process_context_menu_events(uint16_t index) {
+void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) {
     
     switch (context_menu_directive) {
-    case CONTEXT_MENU_DESKTOP:
+        
+    case DWM_CONTEXT_MENU_DESKTOP:
         extern void trigger_test_page_fault(void);
-        //if (index == 0) 
+        
+        switch (index) {
+        case 0:
+            
+            //dwm_create_folder(ctx->mouse.x, ctx->mouse.y, "system");
+            
+            dwm_summon_message_box("window title", "Error message");
+            
+            break;
+        }
         
         break;
         
-    case CONTEXT_MENU_ICON:
+    case DWM_CONTEXT_MENU_ICON:
         
+        switch (index) {
+        case 3:
+            
+            dwm_summon_properties("Properties", "/mnt");
+            
+            break;
+        }
         
         break;
     }

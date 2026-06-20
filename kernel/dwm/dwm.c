@@ -109,6 +109,8 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("ui_close_purple",  &rc_button_close_purple);
     dwm_resource_sprite_load("ui_minimize",      &rc_button_minimize);
     dwm_resource_sprite_load("ui_back",          &rc_button_back);
+    dwm_resource_sprite_load("ui_new",           &rc_button_plus);
+    dwm_resource_sprite_load("ui_button",        &rc_button);
     
     // Mouse cursors
     dwm_resource_sprite_load("cur_edge",    &rc_cursor_edge);
@@ -122,7 +124,7 @@ void dwm_initiate(void) {
     wclass_taskbar.width  = display_get_width();
     wclass_taskbar.height = taskbar_height;
     
-    w_taskbar = dwm_create_window(wclass_taskbar, WINDOW_STYLE_TOPMOST | WINDOW_STYLE_NOBORDERS | WINDOW_STYLE_NOCLOSEBOX, callback_taskbar_handler);
+    w_taskbar = dwm_create_window(wclass_taskbar, DWM_WSTYLE_TOPMOST | DWM_WSTYLE_NOBORDERS | DWM_WSTYLE_NOCLOSEBOX, callback_taskbar_handler);
     
     // Default mouse cursor
     struct Image* def_cursor = dwm_resource_find("cur_pointer"); 
@@ -136,30 +138,6 @@ void dwm_initiate(void) {
 
 WindowHandle dwm_create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc) {
     struct WindowObject* window = dwm_allocate_window(wclass, wstyle, wproc);
-    
-    if (window == NULL) 
-        return 0;
-    
-    if (!(wstyle & WINDOW_STYLE_NOCLOSEBOX)) {
-        struct Image* button_close = dwm_resource_find("ui_close_red");
-        struct Image* button_minimize  = dwm_resource_find("ui_minimize");
-        
-        int16_t close_x = wclass.width - button_close->width;
-        int16_t close_min = wclass.width - button_close->width - button_minimize->width;
-        int16_t vertical = (window->titlebar_height / button_close->height) - 1;
-        if (button_close != NULL)    window_add_button(window, close_x, vertical, button_close->width, button_close->height, EVENT_CLOSE, button_close);
-        if (button_minimize != NULL) window_add_button(window, close_min, vertical, button_close->width, button_close->height, EVENT_MINIMIZE, button_minimize);
-    }
-    
-    if (wstyle & WINDOW_STYLE_RESIZEABLE) {
-        uint16_t resize_w = 12;
-        uint16_t resize_h = 12;
-        int16_t resize_x = window->w - resize_w;
-        int16_t resize_y = window->h - resize_h;
-        
-        window_add_button(window, resize_x, resize_y, resize_w, resize_h, EVENT_RESIZE, NULL);
-    }
-    
     return window->id;
 }
 
@@ -175,6 +153,9 @@ void dwm_destroy_window(WindowHandle handle) {
         }
     }
     if (window_handle == NULL) return; 
+    
+    // Free associated resources
+    dwm_window_resource_free_all(window_handle->id);
     
     if (dragged_window == window_handle) dragged_window = NULL;
     if (resizing_window == window_handle) resizing_window = NULL;
@@ -225,7 +206,7 @@ void dwm_destroy_window(WindowHandle handle) {
     if (window_tail != NULL) {
         struct WindowObject* tail_win = (struct WindowObject*)window_tail->data;
         dwm_set_focus(tail_win); 
-        tail_win->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
+        tail_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         
         int tail_abs_x, tail_abs_y;
         dwm_get_absolute_position(tail_win, &tail_abs_x, &tail_abs_y);
@@ -301,7 +282,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     uint32_t frame_buffer_sz = w_class.width * w_class.height * sizeof(uint32_t);
     
-    if (w_style & WINDOW_STYLE_CHILD) {
+    if (w_style & DWM_WSTYLE_CHILD) {
         window_object->frame_buffer = NULL; 
     } else {
         window_object->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
@@ -334,7 +315,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     strncpy(window_object->title, w_class.title, DWM_FILENAME_LENGTH);
     
     // Check if the no-borders style is applied
-    if (window_object->style & WINDOW_STYLE_NOBORDERS) {
+    if (window_object->style & DWM_WSTYLE_NOBORDERS) {
         window_object->border_width = 0;
         window_object->titlebar_height = 0;
     } else {
@@ -376,7 +357,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->inactive_color_low   = 0xFF505050;
     window_object->inactive_color_high  = 0xFF101010;
     
-    window_object->flags = WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH;
+    window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH;
     
     window_object->events = 0;
     window_object->event_callback = proc;
@@ -385,7 +366,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         struct WindowObject* old_active = (struct WindowObject*)window_tail->data;
         
         // Force the old window to redraw its borders/titlebar in an inactive state
-        old_active->flags |= WINDOW_FLAG_REDECORATE;
+        old_active->flags |= DWM_WFLAG_REDECORATE;
         
         int old_abs_x, old_abs_y;
         dwm_get_absolute_position(old_active, &old_abs_x, &old_abs_y);
@@ -409,6 +390,28 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
                     window_object->w + (window_object->border_width * 2), 
                     window_object->h + (window_object->border_width * 2));
     
+    // Window styling
+    
+    if (!(w_style & DWM_WSTYLE_NOCLOSEBOX)) {
+        struct Image* button_close = dwm_resource_find("ui_close_red");
+        struct Image* button_minimize  = dwm_resource_find("ui_minimize");
+        
+        int16_t close_x = w_class.width - button_close->width;
+        int16_t close_min = w_class.width - button_close->width - button_minimize->width;
+        int16_t vertical = (window_object->titlebar_height / button_close->height) - 1;
+        if (button_close != NULL)    window_add_button(window_object, close_x, vertical, button_close->width, button_close->height, DWM_EVENT_CLOSE, button_close);
+        if (button_minimize != NULL) window_add_button(window_object, close_min, vertical, button_close->width, button_close->height, DWM_EVENT_MINIMIZE, button_minimize);
+    }
+    
+    if (w_style & DWM_WSTYLE_RESIZEABLE) {
+        uint16_t resize_w = 12;
+        uint16_t resize_h = 12;
+        int16_t resize_x = window_object->w - resize_w;
+        int16_t resize_y = window_object->h - resize_h;
+        
+        window_add_button(window_object, resize_x, resize_y, resize_w, resize_h, DWM_EVENT_RESIZE, NULL);
+    }
+    
     return window_object;
 }
 
@@ -424,6 +427,144 @@ int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name) {
     
     dwm_invalidate_region(x + folder->bounds_x, y + folder->bounds_y, folder->bounds_w, folder->bounds_h);
     return 0;
+}
+
+void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y) {
+    struct WindowObject* w_object = dwm_get_window_by_id((uint32_t)window);
+    if (w_object == NULL) 
+        return;
+    
+    uint16_t posx = w_object->x + x;
+    uint16_t posy = w_object->y + y + w_object->titlebar_height;
+    
+    const char* file_menu_options[] = { "Window", "context", "menu", "text" };
+    
+    dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_ICON, file_menu_options, 4);
+    
+}
+
+WindowHandle dwm_summon_message_box(const char* title, const char* message) {
+    WindowClass wclass_msgbox;
+    uint16_t width  = 300;
+    uint16_t height = 150;
+    
+    // Center the message box on the screen
+    wclass_msgbox.width  = width;
+    wclass_msgbox.height = height;
+    wclass_msgbox.x      = (display_get_width() - width) / 2;
+    wclass_msgbox.y      = (display_get_height() - height) / 2;
+    
+    // Assign boundaries limits
+    wclass_msgbox.max_width  = width;
+    wclass_msgbox.max_height = height;
+    
+    // Copy the title safely over to the class context
+    strncpy(wclass_msgbox.title, title, DWM_FILENAME_LENGTH - 1);
+    wclass_msgbox.title[DWM_FILENAME_LENGTH - 1] = '\0';
+    
+    struct WindowObject* msg_handle = dwm_allocate_window(
+        wclass_msgbox, 
+        0, 
+        (WindowProcedure)callback_message_box_handler
+    );
+    
+    // Add the message text as a window resource
+    size_t message_length = strnlen(message, 32);
+    
+    char* rc_message = (char*)malloc(message_length);
+    strncpy(rc_message, message, message_length);
+    rc_message[message_length] = '\0';
+    
+    dwm_window_resource_add(msg_handle->id, "text", rc_message);
+    
+    dwm_set_focus(msg_handle);
+    
+    return msg_handle->id;
+}
+
+WindowHandle dwm_summon_properties(const char* title, const char* file_path) {
+    WindowClass wclass_props;
+    uint16_t width  = 170;
+    uint16_t height = 350;
+    
+    // Center the message box on the screen
+    wclass_props.width  = width;
+    wclass_props.height = height;
+    wclass_props.x      = (display_get_width() - width) / 2;
+    wclass_props.y      = (display_get_height() - height) / 2;
+    
+    // Assign boundaries limits
+    wclass_props.max_width  = width;
+    wclass_props.max_height = height;
+    
+    // Copy the title over to the class context
+    strncpy(wclass_props.title, title, DWM_FILENAME_LENGTH - 1);
+    wclass_props.title[DWM_FILENAME_LENGTH - 1] = '\0';
+    
+    struct WindowObject* msg_handle = dwm_allocate_window(
+        wclass_props, 
+        0, 
+        (WindowProcedure)callback_message_box_handler
+    );
+    
+    // Add the message text as a window resource
+    //size_t message_length = strnlen(message, 32);
+    
+    //char* rc_message = (char*)malloc(message_length);
+    //strncpy(rc_message, message, message_length);
+    //rc_message[message_length] = '\0';
+    
+    //dwm_window_resource_add(msg_handle->id, rc_message);
+    
+    //dwm_set_focus(msg_handle);
+    
+    return msg_handle->id;
+}
+
+bool dwm_create_context_menu(int x, int y, uint32_t directive, const char* items[], int item_count) {
+    if (item_count <= 0 || item_count > 16) { 
+        return false;
+    }
+    
+    // Reset or start at the root menu layer (layer 0)
+    context_menu_count = 1;
+    struct ContextMenu* menu = &context_menus[0];
+    
+    // Set up standard menu dimensions and styling details
+    menu->visible = true;
+    menu->x = x;
+    menu->y = y;
+    menu->item_height = 22;
+    menu->item_count = item_count;
+    menu->w = 130; // Standard base width, could dynamically scale if needed
+    menu->h = menu->item_height * menu->item_count;
+    menu->hovered_item = -1; // Clear hover state on initial pop
+    
+    context_menu_directive = directive;
+    
+    // Copy item names over safely
+    for (int i = 0; i < item_count; i++) {
+        // Safe string copy limiting to the ContextMenu item array name buffer limits
+        strncpy(menu->item[i].name, items[i], sizeof(menu->item[i].name) - 1);
+        menu->item[i].name[sizeof(menu->item[i].name) - 1] = '\0';
+    }
+    
+    // Clamp the menu coordinates so it doesn't spawn off-screen
+    int display_w = display_get_width();
+    int display_h = display_get_height();
+    
+    // Taskbar height
+    if (menu->x + menu->w > display_w) {
+        menu->x = display_w - menu->w;
+    }
+    if (menu->y + menu->h > display_h - taskbar_height) {
+        menu->y = display_h - taskbar_height - menu->h;
+    }
+    
+    // Redraw the context menu area
+    dwm_invalidate_region(menu->x, menu->y, menu->w, menu->h);
+    
+    return true;
 }
 
 struct WindowObject* dwm_get_window_by_id(uint32_t id) {
@@ -464,7 +605,7 @@ void dwm_set_focus(struct WindowObject* target) {
     
     if (window_tail != NULL) {
         struct WindowObject* old_active = (struct WindowObject*)window_tail->data;
-        old_active->flags |= WINDOW_FLAG_REDECORATE;
+        old_active->flags |= DWM_WFLAG_REDECORATE;
         
     }
     
@@ -550,7 +691,7 @@ void dwm_window_set_parent(WindowHandle child, WindowHandle parent) {
     if (w_parent == NULL || w_child == NULL) 
         return;
     
-    w_child->style |= WINDOW_STYLE_CHILD;
+    w_child->style |= DWM_WSTYLE_CHILD;
     
     if (w_child->parent != NULL) {
         list_remove(&w_child->parent->children_head, &w_child->parent->children_tail, w_child);
@@ -576,7 +717,7 @@ void dwm_window_set_parent(WindowHandle child, WindowHandle parent) {
     w_child->surface_h = w_child->h - w_child->titlebar_height;
     
     // Trigger paint/refresh pipeline using the correct screen coordinates
-    w_child->flags |= (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH);
+    w_child->flags |= (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH);
     
     dwm_invalidate_region(w_child->x - w_child->border_width, 
                           w_child->y - w_child->border_width, 
@@ -608,7 +749,7 @@ void dwm_window_set_focus(WindowHandle handle) {
         list_append(&window_head, &window_tail, window);
         
         // Force the whole group to repaint
-        window->flags |= WINDOW_FLAG_REFRESH;
+        window->flags |= DWM_WFLAG_REFRESH;
         dwm_invalidate_region(window->x - window->border_width, window->y - window->border_width,
                               window->w + (window->border_width * 2), window->h + (window->border_width * 2));
     }

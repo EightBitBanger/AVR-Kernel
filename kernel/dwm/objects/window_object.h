@@ -23,6 +23,10 @@ struct WindowObject {
     struct list_node* buttons_head;
     struct list_node* buttons_tail;
     
+    // Resources
+    struct map_node* resource_head;
+    struct map_node* resource_tail;
+    
     void(*event_callback)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
     
     // Position and size
@@ -51,6 +55,8 @@ struct WindowObject {
     // Layout
     uint8_t border_width;
     uint8_t titlebar_height;
+    
+    // TODO implement color scheming to get rid of these values in this struct
     
     // Colors
     uint32_t border_color;

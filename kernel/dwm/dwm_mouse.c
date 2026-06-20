@@ -43,7 +43,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     if (clicked_win == NULL) return false;
     
     // Assign the mouse event to the specific window that was clicked
-    clicked_win->events |= EVENT_MOUSE;
+    clicked_win->events |= DWM_EVENT_MOUSE;
     
     // Window double click detection
     if (is_new_left_click) {
@@ -77,10 +77,10 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     
     if (old_focused != root_win) {
         dwm_set_focus(root_win);
-        root_win->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE); 
+        root_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE); 
         
         if (old_focused) {
-            old_focused->flags |= (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
+            old_focused->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
             
             int old_abs_x, old_abs_y;
             dwm_get_absolute_position(old_focused, &old_abs_x, &old_abs_y);
@@ -114,7 +114,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         if (ctx->mouse.x >= btn_min_x && ctx->mouse.x <= btn_max_x &&
             ctx->mouse.y >= btn_min_y && ctx->mouse.y <= btn_max_y) {
             
-            if (btn->event == EVENT_RESIZE) {
+            if (btn->event == DWM_EVENT_RESIZE) {
                 resizing_window = clicked_win;
                 // Calculate offset between the cursor and the bottom right corner of the window
                 resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
@@ -137,8 +137,8 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     int title_min_y = clicked_abs_y;
     int title_max_y = clicked_abs_y + clicked_win->titlebar_height - 1;
     
-    // Window dragging
-    if ((!(clicked_win->style & WINDOW_STYLE_NOBORDERS)) && 
+    // Window dragging initiate
+    if ((!(clicked_win->style & DWM_WSTYLE_NOBORDERS)) && 
         ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && 
         ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
         
@@ -155,7 +155,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
 void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
     struct IconObject* clicked_icon = NULL;
     
-    // Get a clicked icon
+    // Get the clicked icon
     
     for (struct list_node* node = icon_head; node != NULL; node = node->next) {
         struct IconObject* icon = (struct IconObject*)node->data;
@@ -173,12 +173,13 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     
     if (clicked_icon != NULL) {
         if (is_new_left_click) {
+            
+            // Double click timer
             uint32_t current_time = timer_get_ms();
+            
             if (clicked_icon == last_clicked_icon && (current_time - last_icon_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
                 last_clicked_icon = NULL;
                 last_icon_click_time = 0;
-                
-                // Left mouse double click
                 
                 kernel_event_send(KEVENT_EXECUTE, "explorer", "/");
                 
@@ -192,31 +193,11 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
             }
         }
         else if (is_new_right_click) {
-            context_menu_count = 1;
-            struct ContextMenu* root_menu = &context_menus[0];
             
-            root_menu->visible = true;
-            root_menu->x = ctx->mouse.x;
-            root_menu->y = ctx->mouse.y;
-            root_menu->item_height = 22;
-            root_menu->item_count = 4;
-            root_menu->w = 130;
-            root_menu->h = root_menu->item_height * root_menu->item_count;
-            root_menu->hovered_item = -1;
+            const char* file_menu_options[] = { "Open", "Copy", "Delete", "Properties" };
             
-            context_menu_directive = CONTEXT_MENU_ICON;
+            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_ICON, file_menu_options, 4);
             
-            strcpy(root_menu->item[0].name, "Open");
-            strcpy(root_menu->item[1].name, "Copy");
-            strcpy(root_menu->item[2].name, "Delete");
-            strcpy(root_menu->item[3].name, "Properties");
-            
-            int display_w = display_get_width();
-            int display_h = display_get_height();
-            if (root_menu->x + root_menu->w > display_w) root_menu->x = display_w - root_menu->w;
-            if (root_menu->y + root_menu->h > display_h - taskbar_height) root_menu->y = display_h - taskbar_height - root_menu->h;
-            
-            dwm_invalidate_region(root_menu->x, root_menu->y, root_menu->w, root_menu->h);
         }
     } else {
         
@@ -227,28 +208,10 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
             last_clicked_icon = NULL;
         }
         else if (is_new_right_click) {
-            context_menu_count = 1;
-            struct ContextMenu* root_menu = &context_menus[0];
             
-            root_menu->visible = true;
-            root_menu->x = ctx->mouse.x;
-            root_menu->y = ctx->mouse.y;
-            root_menu->item_height = 22;
-            root_menu->item_count  = 2;
-            root_menu->w = 120;
-            root_menu->h = root_menu->item_height * root_menu->item_count;
+            const char* desktop_menu_options[] = { "New", "Properties" };
             
-            context_menu_directive = CONTEXT_MENU_DESKTOP;
-            
-            strcpy(root_menu->item[0].name, "New");
-            strcpy(root_menu->item[1].name, "Properties");
-            
-            int display_w = display_get_width();
-            int display_h = display_get_height();
-            if (root_menu->x + root_menu->w > display_w) root_menu->x = display_w - root_menu->w;
-            if (root_menu->y + root_menu->h > display_h - taskbar_height) root_menu->y = display_h - taskbar_height - root_menu->h;
-            
-            dwm_invalidate_region(root_menu->x, root_menu->y, root_menu->w, root_menu->h);
+            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_DESKTOP, desktop_menu_options, 2);
         }
     }
 }
@@ -268,9 +231,11 @@ bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_
                 int item_index = relative_y / menu->item_height;
                 
                 if (item_index >= 0 && item_index < menu->item_count) {
-                    dwm_process_context_menu_events(item_index);
-                    // NOTE: When implementing submenus later, you can intercept here:
+                    dwm_process_context_menu_events(ctx, item_index);
+                    
+                    // TODO When implementing submenus later, you can intercept here:
                     // If this item opens a submenu, call a push_submenu routine and return true!
+                    
                 }
             }
             

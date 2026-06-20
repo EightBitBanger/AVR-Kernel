@@ -3,11 +3,6 @@
 
 #include <kernel/dwm/objects/window_button.h>
 
-#define CONTEXT_MENU_DESKTOP  0x01
-#define CONTEXT_MENU_ICON     0x02
-
-#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS 300
-
 extern uint32_t bg_color;
 
 // Drag movement
@@ -57,10 +52,18 @@ extern struct Image current_cursor;
 
 extern const uint8_t char_rom[];
 
+// UI
+
+bool dwm_create_context_menu(int x, int y, uint32_t directive, const char* items[], int item_count);
+
+void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16_t width, uint16_t height, 
+                       uint16_t event, struct Image* sprite);
+
 // Built in event handlers
 
 void callback_button_close_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 // Internal routines
 
@@ -86,17 +89,16 @@ void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h);
 void dwm_get_absolute_position(struct WindowObject* window, int* out_x, int* out_y);
 void dwm_cascade_child_positions(struct WindowObject* parent);
 void dwm_process_window_events(struct WindowObject* window);
-void dwm_process_context_menu_events(uint16_t index);
+void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index);
 
 void dwm_set_focus(struct WindowObject* target);
 void dwm_calculate_flush_region(struct WindowContext* ctx);
+
+struct WindowObject* dwm_get_window_by_id(uint32_t id);
 
 struct WindowObject* dwm_get_root_parent(struct WindowObject* window);
 
 void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_t* frame_buffer, uint32_t screen_stride, 
                                             int clip_x, int clip_y, int clip_w, int clip_h);
-
-void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16_t width, uint16_t height, 
-                       uint16_t event, struct Image* sprite);
 
 #endif

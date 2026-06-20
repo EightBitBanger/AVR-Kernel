@@ -19,6 +19,7 @@ struct Image* icon_system = NULL;
 struct Image* icon_storage = NULL;
 
 struct Image* ui_button_back;
+struct Image* ui_button_new;
 
 uint32_t background  = 0xFF08080F;
 uint32_t path_bg     = 0xFF202020;
@@ -30,11 +31,7 @@ uint32_t item_text   = 0xFFD0D0DF;
 
 struct ExplorerWindowState* window_list_head = NULL;
 
-//
-// Entry point
-
 void explorer_main(const char* arguments) {
-    
     if (!icon_folder)     icon_folder      = dwm_resource_find("icon_folder");
     if (!icon_file)       icon_file        = dwm_resource_find("icon_file");
     if (!icon_system)     icon_system      = dwm_resource_find("icon_system");
@@ -42,8 +39,8 @@ void explorer_main(const char* arguments) {
     if (!icon_storage)    icon_storage     = dwm_resource_find("icon_storage");
     
     if (!ui_button_back)  ui_button_back  = dwm_resource_find("ui_back");
+    if (!ui_button_new)   ui_button_new   = dwm_resource_find("ui_new");
     
-    // Get system root directory
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
@@ -136,7 +133,7 @@ WindowHandle explorer_create_instance(const char* title, uint32_t target_directo
     wclass.max_height = 0;
     wclass.title = state->window_title;
     
-    WindowHandle window = dwm_create_window(wclass, WINDOW_STYLE_RESIZEABLE, callback_handler_explorer);
+    WindowHandle window = dwm_create_window(wclass, DWM_WSTYLE_RESIZEABLE, callback_handler_explorer);
     state->handle = window;
     
     dwm_window_set_name(window, state->window_title);
@@ -158,7 +155,6 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     memset(state->items, 0, sizeof(state->items));
     state->total_items = 0;
     
-    // Parse individual filesystems
     char fs_path_accum[MAX_PATH_LEN];
     memset(fs_path_accum, 0, MAX_PATH_LEN);
     
@@ -199,7 +195,6 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         depth_counter++;
     }
     
-    // Trace back up virtual kernel nodes (Stop right before processing the mount knode)
     char base_knode_path[MAX_PATH_LEN];
     memset(base_knode_path, 0, MAX_PATH_LEN);
     
@@ -208,11 +203,9 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     uint32_t root_node = knode_get_root();
     depth_counter = 0;
     
-    // We fetch the mount node metadata here so we can append it directly to the filesystem portion instead
     struct KernelDirectory mount_dir_meta;
     kmem_read(&mount_dir_meta, knode_climb, sizeof(struct KernelDirectory));
     
-    // Climb starting from the parent of the mount point
     while (parent_node != root_node && parent_node != KNODE_NULL && parent_node != 0) {
         if (depth_counter >= MAX_PATH_DEPTH) break;
         
@@ -242,12 +235,11 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         strncpy(base_knode_path, "/", MAX_PATH_LEN - 1);
     }
     
-    // Save the split point boundary length
     state->knode_path_len = (uint16_t)strlen(base_knode_path);
     
     char mount_segment[32];
     mount_segment[0] = '\0';
-    if (base_knode_path[1] != '\0') { // if parent isn't root, prepend a leading slash
+    if (base_knode_path[1] != '\0') { 
         strncpy(mount_segment, "/", sizeof(mount_segment) - 1);
     }
     strncat(mount_segment, mount_dir_meta.name, sizeof(mount_segment) - strlen(mount_segment) - 1);
@@ -256,7 +248,6 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     strncpy(full_fs_path, mount_segment, MAX_PATH_LEN - 1);
     strncat(full_fs_path, fs_path_accum, MAX_PATH_LEN - strlen(full_fs_path) - 1);
     
-    // Concatenate strings together safely
     strncpy(state->path, base_knode_path, MAX_PATH_LEN - 1);
     size_t current_len = strlen(state->path);
     if (current_len < MAX_PATH_LEN - 1) {
@@ -384,21 +375,16 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
         state->items[collected_count].knode = reference_address;
         state->items[collected_count].fs_dir = 0; 
         
-        // Check knode directory
         if (flags & KMALLOC_FLAG_DIRECTORY) {
             if (flags & KMALLOC_FLAG_MOUNT) {
                 state->items[collected_count].icon_index = ICON_STORAGE;
             } else {
                 state->items[collected_count].icon_index = ICON_FOLDER;
             }
-        } else { // Determine file type
-            
-            // System files
+        } else { 
             if ((type & KMALLOC_TYPE_DEVICE) | (type & KMALLOC_TYPE_DRIVER)) {
                 state->items[collected_count].icon_index = ICON_SYSTEM;
             } else {
-                
-                // Unknown file type
                 state->items[collected_count].icon_index = ICON_FILE;
             }
         }

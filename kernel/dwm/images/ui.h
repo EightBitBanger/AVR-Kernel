@@ -17,5 +17,8 @@ extern const struct Sprite rc_button_arrow_down;
 extern const struct Sprite rc_button_arrow_up;
 
 extern const struct Sprite rc_button_back;
+extern const struct Sprite rc_button_new;
+
+extern const struct Sprite rc_button;
 
 #endif

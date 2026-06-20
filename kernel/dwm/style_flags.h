@@ -3,11 +3,11 @@
 
 #include <stdint.h>
 
-#define WINDOW_STYLE_TOPMOST         0x0001   // Always on top of other windows
-#define WINDOW_STYLE_NOBORDERS       0x0002   // Borderless window (good for fullscreen games)
-#define WINDOW_STYLE_CHILD           0x0004   // Contained within a parent window
-#define WINDOW_STYLE_RESIZEABLE      0x0008   // Thicker border that allows dragging to resize
-#define WINDOW_STYLE_NOCLOSEBOX      0x0010   // Removes the close button
+#define DWM_WSTYLE_TOPMOST         0x0001   // Always on top of other windows
+#define DWM_WSTYLE_NOBORDERS       0x0002   // Borderless window (good for fullscreen games)
+#define DWM_WSTYLE_CHILD           0x0004   // Contained within a parent window
+#define DWM_WSTYLE_RESIZEABLE      0x0008   // Thicker border that allows dragging to resize
+#define DWM_WSTYLE_NOCLOSEBOX      0x0010   // Removes the close button
 
 
 //
@@ -18,7 +18,7 @@
 #define WINDOW_STYLE_MODAL           0x0010   // Blocks interaction with parent window until closed
 
 #define WINDOW_STYLE_BORDER         0x0040 // Standard thin border
-#define WINDOW_STYLE_RESIZEABLE     0x0080 // Thick border that allows dragging to resize
+#define DWM_WSTYLE_RESIZEABLE     0x0080 // Thick border that allows dragging to resize
 #define WINDOW_STYLE_TITLEBAR       0x0100 // Includes a title bar area for dragging
 #define WINDOW_STYLE_SHADOW         0x0200 // Drops a shadow underneath the window
 

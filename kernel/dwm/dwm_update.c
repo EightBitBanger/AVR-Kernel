@@ -34,9 +34,9 @@ void dwm_update(void) {
         struct list_node* next_node = current->next;
         struct WindowObject* window = (struct WindowObject*)current->data;
         
-        if (window->events & EVENT_CLOSE) {
+        if (window->events & DWM_EVENT_CLOSE) {
             
-            window->event_callback(window->id, EVENT_DESTROY, 0, 0);
+            window->event_callback(window->id, DWM_EVENT_DESTROY, 0, 0);
             
             dwm_destroy_window(window->id);
         }

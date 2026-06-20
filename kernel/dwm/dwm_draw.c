@@ -46,8 +46,8 @@ void dwm_sync_child_positions(struct WindowObject* parent) {
 void dwm_render_window_recursive(struct WindowObject* window, const struct WindowContext* ctx, uint32_t* frame_buffer, uint32_t screen_stride) {
     if (window == NULL) return;
     
-    if (window->flags & WINDOW_FLAG_REDRAW) { 
-        window->flags &= ~WINDOW_FLAG_REDRAW;
+    if (window->flags & DWM_WFLAG_REDRAW) { 
+        window->flags &= ~DWM_WFLAG_REDRAW;
         
         // Clip explicitly to the current buffer sizes
         draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
@@ -55,7 +55,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
         
         event_window = window;
         if (window->event_callback != NULL) {
-            window->event_callback(window->id, EVENT_REDRAW, 0, 0);
+            window->event_callback(window->id, DWM_EVENT_REDRAW, 0, 0);
         }
         event_window = NULL;
         
@@ -79,7 +79,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
         }
     }
     
-    int do_redraw = dirty_intersection || (window->flags & (WINDOW_FLAG_REDRAW | WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE));
+    int do_redraw = dirty_intersection || (window->flags & (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE));
     
     // Process window events
     
@@ -88,15 +88,15 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
     if (do_redraw) {
         
         // Handle application-level redraw request
-        if (window->flags & WINDOW_FLAG_REDRAW) { 
-            window->flags &= ~WINDOW_FLAG_REDRAW;
+        if (window->flags & DWM_WFLAG_REDRAW) { 
+            window->flags &= ~DWM_WFLAG_REDRAW;
             
             draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
             draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
             
             event_window = window;
             if (window->event_callback != NULL) {
-                window->event_callback(window->id, EVENT_REDRAW, 0, 0);
+                window->event_callback(window->id, DWM_EVENT_REDRAW, 0, 0);
             }
             event_window = NULL;
             
@@ -104,7 +104,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
             draw_set_buffer_default();
         }
         
-        if ((window->flags & (WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE)) || dirty_intersection) {
+        if ((window->flags & (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE)) || dirty_intersection) {
             
             // Draw decorations (borders/titlebars)
             dwm_draw_window(window);
@@ -141,7 +141,7 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
                 }
             }
             
-            window->flags &= ~(WINDOW_FLAG_REFRESH | WINDOW_FLAG_REDECORATE);
+            window->flags &= ~(DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         }
     }
     
@@ -229,7 +229,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         struct WindowObject* window = (struct WindowObject*)node->data;
         
         // Only process root windows that are NOT topmost and NOT children
-        if ((window->style & WINDOW_STYLE_TOPMOST) || (window->parent != NULL) || (window->style & WINDOW_STYLE_CHILD)) 
+        if ((window->style & DWM_WSTYLE_TOPMOST) || (window->parent != NULL) || (window->style & DWM_WSTYLE_CHILD)) 
             continue;
         
         dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
@@ -241,7 +241,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         struct WindowObject* window = (struct WindowObject*)node->data;
         
         // Only process root windows that ARE topmost and NOT children
-        if (!(window->style & WINDOW_STYLE_TOPMOST) || (window->parent != NULL) || (window->style & WINDOW_STYLE_CHILD)) {
+        if (!(window->style & DWM_WSTYLE_TOPMOST) || (window->parent != NULL) || (window->style & DWM_WSTYLE_CHILD)) {
             continue;
         }
         
@@ -289,7 +289,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
 }
 
 void dwm_draw_window(struct WindowObject* window_handle) {
-    if (window_handle->style & WINDOW_STYLE_NOBORDERS) 
+    if (window_handle->style & DWM_WSTYLE_NOBORDERS) 
         return;
     
     int32_t wx = window_handle->x;

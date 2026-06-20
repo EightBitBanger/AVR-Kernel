@@ -10,6 +10,7 @@ extern struct Image* icon_system;
 extern struct Image* icon_storage;
 
 extern struct Image* ui_button_back;
+extern struct Image* ui_button_new;
 
 extern uint32_t background;
 extern uint32_t path_bg;

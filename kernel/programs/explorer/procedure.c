@@ -14,20 +14,25 @@
 static struct ExplorerWindowState* get_window_state(WindowHandle handle);
 
 static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowState* state, uint32_t wparam, int32_t lparam) {
-    if (lparam & EVENT_STATE_MOUSE_BTN_RIGHT) 
-        return;
-    
     uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
     uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
     
-    // Back button bounding box detection
+    if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
+        
+        dwm_summon_context_menu(handle, click_x, click_y);
+        
+        return;
+    }
+    
+    // Back button hit detection using sprite coordinates directly
     if (ui_button_back != NULL) {
-        uint16_t btn_x1 = BUTTON_BACK_X;
-        uint16_t btn_y1 = BUTTON_BACK_Y;
+        uint16_t btn_x1 = BACK_BTN_SPRITE_X;
+        uint16_t btn_y1 = BACK_BTN_SPRITE_Y;
         uint16_t btn_x2 = btn_x1 + ui_button_back->width;
         uint16_t btn_y2 = btn_y1 + ui_button_back->height;
         
         if (click_x >= btn_x1 && click_x < btn_x2 && click_y >= btn_y1 && click_y < btn_y2) {
+            
             // Inside a mounted filesystem
             if (state->fs_current != 0) {
                 uint32_t device_mount_address = knode_get_reference(state->knode_current, 0);
@@ -52,13 +57,13 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
                 }
             }
             
-            dwm_window_send_event(handle, EVENT_REDRAW);
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
             return;
         }
     }
     
     // Window icon double click
-    if (!(lparam & EVENT_STATE_MOUSE_DOUBLE_CLK)) 
+    if (!(lparam & DWM_STATE_MOUSE_DOUBLE_CLK)) 
         return;
     
     uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
@@ -92,7 +97,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
                 }
             }
             
-            dwm_window_send_event(handle, EVENT_REDRAW);
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
             break;
         }
     }
@@ -110,23 +115,21 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
     // Blank to a background color
     dwm_draw_rect_filled(EXPLORER_BG_X, EXPLORER_BG_Y, window_width, window_height, background);
     
-    int16_t path_text_x = 0;
+    // Draw back button container components explicitly
     if (ui_button_back != NULL) {
-        path_text_x = BUTTON_BACK_X + ui_button_back->width + BACK_BTN_PADDING_RIGHT;
-    }
-    
-    if (ui_button_back != NULL) {
-        dwm_draw_rect_filled(BACK_BTN_CONTAINER_X, BACK_BTN_CONTAINER_Y, BACK_BTN_CONTAINER_W(path_text_x), BACK_BTN_CONTAINER_H, path_bg);
-        dwm_draw_rect(BACK_BTN_BORDER_X, BACK_BTN_BORDER_Y, BACK_BTN_BORDER_W(path_text_x), BACK_BTN_BORDER_H, path_border);
+        dwm_draw_rect_filled(BACK_BTN_CONTAINER_X, BACK_BTN_CONTAINER_Y, BACK_BTN_CONTAINER_W, BACK_BTN_CONTAINER_H, path_bg);
+        dwm_draw_rect(BACK_BTN_BORDER_X, BACK_BTN_BORDER_Y, BACK_BTN_BORDER_W, BACK_BTN_BORDER_H, path_border);
         dwm_draw_sprite(BACK_BTN_SPRITE_X, BACK_BTN_SPRITE_Y, ui_button_back);
     }
     
-    dwm_draw_rect_filled(PATH_FIELD_BG_X(path_text_x), PATH_FIELD_BG_Y, PATH_FIELD_W(path_text_x, window_width), PATH_FIELD_BG_H, path_bg);
-    dwm_draw_rect(PATH_FIELD_BORDER_X(path_text_x), PATH_FIELD_BORDER_Y, PATH_FIELD_W(path_text_x, window_width), PATH_FIELD_BORDER_H, path_border);
+    // Draw path input field background frame (Using window_width minus text offset minus safe margin edge padding)
+    uint16_t path_field_width = window_width - PATH_FIELD_BG_X - 10;
+    dwm_draw_rect_filled(PATH_FIELD_BG_X, PATH_FIELD_BG_Y, path_field_width, PATH_FIELD_BG_H, path_bg);
+    dwm_draw_rect(PATH_FIELD_BORDER_X, PATH_FIELD_BORDER_Y, path_field_width + 2, PATH_FIELD_BORDER_H, path_border);
     
     // Color segmented path rendering mechanics
     if (state->fs_current == 0 || state->knode_path_len >= strlen(state->path)) {
-        dwm_draw_text(path_text_x, PATH_TEXT_Y, state->path, text_knode);
+        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, state->path, text_knode);
     } else {
         // Split View: Read slice limits to split string processing
         char base_buffer[MAX_PATH_LEN];
@@ -134,16 +137,16 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         strncpy(base_buffer, state->path, state->knode_path_len);
         
         // Draw Virtual KNode sequence
-        dwm_draw_text(path_text_x, PATH_TEXT_Y, base_buffer, text_knode);
+        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, base_buffer, text_knode);
         
-        // Calculate pixel offset (assuming standard 6px per char font width)
-        int16_t mount_offset_x = path_text_x + (state->knode_path_len * PATH_FONT_CHAR_WIDTH);
+        // Calculate pixel offset (using clean static base destination position)
+        int16_t mount_offset_x = PATH_TEXT_X + (state->knode_path_len * PATH_FONT_CHAR_WIDTH);
         
         // Draw the rest of the file system path
         dwm_draw_text(mount_offset_x, PATH_TEXT_Y, state->path + state->knode_path_len, text_mount);
     }
     
-    // Navigation bar divider
+    // Navigation bar divider line
     dwm_draw_line(NAV_DIVIDER_X, NAV_DIVIDER_Y, window_width, NAV_DIVIDER_H, navbar_div);
     
     uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
@@ -192,19 +195,19 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
     if (!state) return;
     
     switch (event) {
-    case EVENT_MOUSE:
+    case DWM_EVENT_MOUSE:
         handle_explorer_mouse(handle, state, wparam, lparam);
         break;
         
-    case EVENT_RESIZE:
+    case DWM_EVENT_RESIZE:
         handle_explorer_resize(state, wparam);
         break;
         
-    case EVENT_REDRAW:
+    case DWM_EVENT_REDRAW:
         handle_explorer_redraw(handle, state);
         break;
         
-    case EVENT_DESTROY:
+    case DWM_EVENT_DESTROY:
         free_window_state(handle);
         return; 
     }

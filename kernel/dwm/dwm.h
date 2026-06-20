@@ -1,5 +1,5 @@
-#ifndef WINDOW_MANAGER_H
-#define WINDOW_MANAGER_H
+#ifndef _WINDOW_MANAGER_H_
+#define _WINDOW_MANAGER_H_
 
 #include <stdbool.h>
 
@@ -22,7 +22,13 @@
 #include <kernel/dwm/flags.h>
 #include <kernel/dwm/style_flags.h>
 
+
+#define DWM_CONTEXT_MENU_DESKTOP  0x01
+#define DWM_CONTEXT_MENU_ICON     0x02
+
 #define DOUBLE_CLICK_THRESHOLD_MS   500
+
+#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS 300
 
 #define DWM_FILENAME_LENGTH   16
 
@@ -38,23 +44,41 @@ typedef struct {
     char* title;
 } WindowClass;
 
-
-void* dwm_resource_find(const char* name);
-
 void dwm_initiate(void);
 void dwm_update(void);
+
+// Windows
 
 WindowHandle dwm_create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc);
 void dwm_destroy_window(WindowHandle window_handle);
 
+// Icons
+
 int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name);
 int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name);
 
-void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
-WindowHandle dwm_window_get_parent(WindowHandle window);
-
 struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite);
 void dwm_destroy_icon(struct IconObject* icon);
+
+// Builtin context functions
+
+void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y);
+
+WindowHandle dwm_summon_message_box(const char* title, const char* message);
+WindowHandle dwm_summon_properties(const char* title, const char* file_path);
+
+// Resource management
+
+void* dwm_resource_find(const char* name);
+
+// Window resource management
+
+uint8_t dwm_window_resource_add(WindowHandle handle, const char* name, void* resource);
+uint8_t dwm_window_resource_remove(WindowHandle handle, void* resource);
+uint32_t dwm_window_resource_get_count(WindowHandle handle);
+void* dwm_window_resource_get_by_index(WindowHandle handle, uint32_t index);
+void* dwm_window_resource_get_by_name(WindowHandle handle, const char* name);
+void dwm_window_resource_free_all(WindowHandle handle);
 
 // Primitive drawing
 
@@ -66,6 +90,11 @@ void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, u
 void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
 void dwm_draw_sprite(int16_t x, int16_t y, struct Image* sprite_image);
+
+// Window settings
+
+void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
+WindowHandle dwm_window_get_parent(WindowHandle window);
 
 uint16_t dwm_window_get_width(WindowHandle handle);
 uint16_t dwm_window_get_height(WindowHandle handle);
