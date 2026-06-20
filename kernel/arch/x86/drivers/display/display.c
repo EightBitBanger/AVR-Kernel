@@ -4,6 +4,7 @@
 
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/drivers/display/char_rom.h>
+#include <kernel/arch/x86/drivers/display/draw.h>
 #include <kernel/arch/x86/drivers/multiboot_info.h>
 
 #include <kernel/console/print.h>
@@ -31,6 +32,11 @@ extern struct MultibootInfo* vinfo;
 extern uint32_t foreground_color;
 extern uint32_t background_color;
 extern uint32_t transparent_color;
+
+extern uint16_t cursor_position; 
+extern uint16_t cursor_line;
+extern uint8_t console_glyph_width;
+extern uint8_t console_glyph_height;
 
 uint32_t make_color(float a, float r, float g, float b);
 void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg);
@@ -87,10 +93,6 @@ void display_putc(const char ch) {
     draw_rect_filled(cursor_position * console_glyph_width, cursor_line * console_glyph_height, 6, 8, background_color);
     draw_glyph(char_rom, ch, cursor_position * console_glyph_width, cursor_line * console_glyph_height, foreground_color, background_color, transparent_color);
     
-    extern uint16_t cursor_position; 
-    extern uint16_t cursor_line;
-    extern uint8_t console_glyph_width;
-    extern uint8_t console_glyph_height;
     int cursor_x = (int)(cursor_position * console_glyph_width);
     int cursor_y = (int)(cursor_line * console_glyph_height);
     
@@ -116,6 +118,7 @@ void display_newline(void) {
             row_pixels[x] = background_color;
         }
     }
+    draw_flush_display();
 }
 
 void display_cursor_set_position(uint16_t position) {

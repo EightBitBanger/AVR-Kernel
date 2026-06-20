@@ -27,6 +27,15 @@ char* strcpy(char* dest, const char* src) {
     return ptr;
 }
 
+size_t strnlen(const char *str, size_t maxlen) {
+    const char *s = str;
+    while (maxlen > 0 && *s != '\0') {
+        s++;
+        maxlen--;
+    }
+    return (size_t)(s - str);
+}
+
 char* strncpy(char* dest, const char* src, size_t n) {
     size_t i;
     for (i = 0; i < n && src[i] != '\0'; i++) {
@@ -138,6 +147,20 @@ char* strchr(const char* str, int character) {
         str++;
     }
     return (char*)str;
+}
+
+char* strnchr(const char* str, size_t n, int character) {
+    while (n > 0) {
+        if (*str == (char)character) {
+            return (char*)str;
+        }
+        if (*str == '\0') {
+            return NULL;
+        }
+        str++;
+        n--;
+    }
+    return NULL;
 }
 
 char* strstr(const char* haystack, const char* needle) {

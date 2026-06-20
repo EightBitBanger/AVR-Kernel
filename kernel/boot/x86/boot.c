@@ -43,14 +43,7 @@ bool ps2_check_keyboard(void);
 void flush_keyboard_buffer(void);
 void ps2_route_console(void);
 
-void run_kernel_memory_hammer_test(void);
-
-
-
-
-
-
-
+void kernel_heap_hammer(void);
 
 
 void test_slab_malloc(void) {
@@ -275,6 +268,24 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         dwm_update();
         kernel_event_update();
         
+        
+        
+        WindowClass wClass;
+        wClass.x = 100;
+        wClass.y = 100;
+        wClass.width  = 200;
+        wClass.height = 200;
+        
+        WindowHandle handle = dwm_create_window(wClass, 0, NULL);
+        
+        void* recc = malloc(1024000);
+        
+        dwm_window_resource_add(handle, "test", recc);
+        
+        dwm_destroy_window(handle);
+        
+        //kernel_heap_hammer();
+        
         //__asm__ volatile ("hlt");
         
         // TODO move to interrupt handlers later on
@@ -315,5 +326,65 @@ void ps2_route_console(void) {
             draw_flush_display();
         }
     }
+}
+
+
+static unsigned long next_random(unsigned long *seed) {
+    *seed = *seed * 1103515245 + 12345;
+    return (unsigned int)(*seed / 65536) % 32768;
+}
+
+#define MAX_TRACKED_ALLOCS 256
+#define MAX_ALLOC_SIZE 4096
+
+WindowClass wclass;
+void* allocs[MAX_TRACKED_ALLOCS] = {0};
+unsigned long seed = 42; // Fixed seed for reproducibility, or pass in a timer tick
+unsigned long iteration = 0;
+unsigned long counter=0;
+
+WindowHandle whndl[4];
+
+void kernel_heap_hammer(void) {
+    counter++;
+    
+    wclass.x      = 100;
+    wclass.y      = 100;
+    wclass.width  = 800;
+    wclass.height = 600;
+    
+    unsigned long slot = next_random(&seed) % MAX_TRACKED_ALLOCS;
+    if (counter == 2) {whndl[0] = dwm_create_window(wclass, 0, NULL);}
+    if (counter == 4) {whndl[1] = dwm_create_window(wclass, 0, NULL);}
+    
+    if (allocs[slot] == NULL) {
+        // Slot is empty, let's allocate a random size
+        // Adding 1 to ensure we don't request 0 bytes
+        unsigned long size = (next_random(&seed) % MAX_ALLOC_SIZE) + 1;
+        
+        allocs[slot] = malloc(size);
+        
+        print_hex32( (uint32_t)allocs[slot] );
+        print("  ");
+        print_int( size );
+        print("\n");
+        
+        // Optional: You can write data to the block here to test for 
+        // page faults or memory corruption.
+    } else {
+        // Slot is occupied, let's free it
+        free(allocs[slot]);
+        allocs[slot] = NULL;
+    }
+    
+    if (counter == 6) {whndl[2] = dwm_create_window(wclass, 0, NULL);}
+    if (counter == 8) {whndl[3] = dwm_create_window(wclass, 0, NULL);}
+    
+    if (counter == 16) {dwm_destroy_window(whndl[0]);}
+    if (counter == 18) {dwm_destroy_window(whndl[1]);}
+    if (counter == 20) {dwm_destroy_window(whndl[2]);}
+    if (counter == 22) {dwm_destroy_window(whndl[3]);}
+    if (counter > 28) {counter = 0;}
+    
 }
 

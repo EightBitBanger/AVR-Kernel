@@ -4,6 +4,8 @@
 // Strings
 
 size_t strlen(const char* str);
+size_t strnlen(const char *str, size_t maxlen);
+
 char* strcpy(char* dest, const char* src);
 char* strncpy(char* dest, const char* src, size_t n);
 size_t strncat(char* dest, const char* src, size_t n);
@@ -13,6 +15,8 @@ int strncmp(const char *s1, const char *s2, size_t n);
 char* strtok(char* str, const char* delim);
 
 char* strchr(const char* str, int character);
+char* strnchr(const char* str, size_t n, int character);
+
 char* strstr(const char* haystack, const char* needle);
 
 // Memory
