@@ -73,7 +73,7 @@ void draw_circle(int xc, int yc, int r, uint32_t color);
 
 void draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 
-void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg);
+void draw_glyph(const uint8_t* glyph_map, int glyph_index, uint16_t glyph_width, uint16_t glyph_height, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg);
 void draw_sprite(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x, int y, uint32_t colorkey);
 void draw_sprite_blend(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x, int y, uint32_t colorkey);
 

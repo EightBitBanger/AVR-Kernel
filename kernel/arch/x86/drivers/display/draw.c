@@ -439,23 +439,20 @@ extern const uint8_t char_rom[];
 void draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
     size_t length = strlen(text);
     for (unsigned int i=0; i < length; i++) 
-        draw_glyph(char_rom, text[i], x + (i * 6), y, color, 0xFF000000, 1); // Set background transparency parameter to 1
+        draw_glyph(char_rom, text[i], 6, 8, x + (i * 6), y, color, 0xFF000000, 1);
 }
 
-void draw_glyph(const uint8_t* glyph_map, int glyph_index, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg) {
+void draw_glyph(const uint8_t* glyph_map, int glyph_index, uint16_t glyph_width, uint16_t glyph_heigh, int x, int y, uint32_t fg_color, uint32_t bg_color, int transparent_bg) {
     x += display_base_x; y += display_base_y;
-    
-    const int GLYPH_W = 6;
-    const int GLYPH_H = 8;
     
     int src_x_start = (x < clipping_plain.min_x) ? clipping_plain.min_x - x : 0;
     int src_y_start = (y < clipping_plain.min_y) ? clipping_plain.min_y - y : 0;
-    int src_x_end = (x + GLYPH_W > clipping_plain.max_x) ? clipping_plain.max_x - x : GLYPH_W;
-    int src_y_end = (y + GLYPH_H > clipping_plain.max_y) ? clipping_plain.max_y - y : GLYPH_H;
+    int src_x_end = (x + glyph_width > clipping_plain.max_x) ? clipping_plain.max_x - x : glyph_width;
+    int src_y_end = (y + glyph_heigh > clipping_plain.max_y) ? clipping_plain.max_y - y : glyph_heigh;
     
     if (src_x_start >= src_x_end || src_y_start >= src_y_end) return;
     
-    const uint8_t* glyph_data = &glyph_map[glyph_index * GLYPH_W];
+    const uint8_t* glyph_data = &glyph_map[glyph_index * glyph_width];
     for (int src_x = src_x_start; src_x < src_x_end; src_x++) {
         uint8_t column_byte = glyph_data[src_x];
         int dest_x = x + src_x;

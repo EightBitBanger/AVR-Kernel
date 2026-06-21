@@ -255,21 +255,45 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     dwm_initiate();
     
-    dwm_create_folder(30, 30, "system");
+    uint16_t sep = 80;
+    uint16_t posx = 30;
+    uint16_t posy = 30;
     
-    // Event system
+    dwm_create_folder(posx, posy, "mount",      "/mnt"); posx += sep;
+    dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
+    dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
+    dwm_create_folder(posx, posy, "ssd0",       "/mnt/ssd0");
+    
+    File file = vfs_open("/mnt/ssd0/ass", VFS_OPEN_READ | VFS_OPEN_WRITE | VFS_OPEN_CREATE);
+    
+    //char buffer[8];
+    //memset(buffer, 'A', sizeof(buffer));
+    //vfs_write(file, buffer, sizeof(buffer));
+    //vfs_close(file);
+    
+    //char buffer[9];
+    //memset(buffer, 'B', sizeof(buffer));
+    //vfs_read(file, buffer, sizeof(buffer));
+    //vfs_close(file);
+    
+    //buffer[8] = '\0';
+    //print(buffer);
+    
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
     
     // Scalable vector font or MSDF
     
+    // Color themes to handle color
+    
+    // Key combination binding
     
     while(1) {
         dwm_update();
         kernel_event_update();
         
         
-        
+        /*
         WindowClass wClass;
         wClass.x = 100;
         wClass.y = 100;
@@ -284,9 +308,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
         dwm_destroy_window(handle);
         
-        //kernel_heap_hammer();
+        kernel_heap_hammer();
+        */
         
-        //__asm__ volatile ("hlt");
         
         // TODO move to interrupt handlers later on
         if (ps2_check_keyboard()) {
