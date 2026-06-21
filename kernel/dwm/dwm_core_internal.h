@@ -2,6 +2,10 @@
 #define DWM_INTERNAL_CORE_CONPONENTS_H
 
 #include <kernel/dwm/objects/window_button.h>
+#include <kernel/dwm/dwm_context_menu.h>
+
+#include <kernel/dwm/dwm_platform.h>
+#include <kernel/dwm/flags.h>
 
 extern uint32_t bg_color;
 
@@ -33,6 +37,8 @@ extern bool old_right_button_pressed;
 
 extern struct WindowObject* event_window;
 
+extern struct IconObject* focused_icon;
+
 // Double click timing
 extern struct IconObject* last_clicked_icon;
 extern uint32_t last_icon_click_time;
@@ -41,6 +47,7 @@ extern uint32_t last_icon_click_time;
 extern struct ContextMenu context_menus[];
 extern uint8_t context_menu_count;
 extern uint16_t context_menu_directive;
+extern struct WindowObject* context_handle;
 
 // Taskbar
 extern WindowHandle w_taskbar;
@@ -61,9 +68,9 @@ void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16
 
 // Built in event handlers
 
-void callback_button_close_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
-void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 // Internal routines
 

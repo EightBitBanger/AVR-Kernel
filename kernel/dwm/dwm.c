@@ -1,6 +1,9 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/arch/x86/virtual/vmm.h>
 #include <kernel/dwm/dwm_core_internal.h>
+#include <kernel/dwm/dwm_context_menu.h>
+
+#include <kernel/vfs/vfs.h>
 
 #include <kernel/console/mouse.h>
 #include <kernel/console/display.h>
@@ -36,6 +39,8 @@ struct IconObject* dragged_icon = NULL;
 int icon_drag_offset_x = 0;
 int icon_drag_offset_y = 0;
 
+struct IconObject* focused_icon = NULL;
+
 struct IconObject* last_clicked_icon = NULL;
 uint32_t last_icon_click_time = 0;
 
@@ -49,7 +54,7 @@ Point mouse_old;
 struct ContextMenu context_menus[MAX_CONTEXT_MENUS];
 uint8_t context_menu_count = 0;
 uint16_t context_menu_directive = 0;
-
+struct WindowObject* context_handle;
 
 struct WindowContext window_context;
 
@@ -415,17 +420,43 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     return window_object;
 }
 
-int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name) {
+int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name, const char* path) {
     struct Image* folder_sprite = dwm_resource_find("icon_folder");
     if (folder_sprite == NULL) 
         return -1;
     
     struct IconObject* folder = dwm_create_icon(x, y, folder_sprite->width, folder_sprite->height, folder_sprite);
+    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
+    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
     
-    strncpy(folder->name, name, sizeof(folder->name) - 1);
+    strncpy(folder->name, name, name_length);
+    strncpy(folder->path, path, path_length);
+    folder->name[name_length] = '\0';
+    folder->path[path_length] = '\0';
+    
     dwm_calculate_icon_bounds(folder);
     
     dwm_invalidate_region(x + folder->bounds_x, y + folder->bounds_y, folder->bounds_w, folder->bounds_h);
+    return 0;
+}
+
+int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* path) {
+    struct Image* file_sprite = dwm_resource_find("icon_file");
+    if (file_sprite == NULL) 
+        return -1;
+    
+    struct IconObject* file = dwm_create_icon(x, y, file_sprite->width, file_sprite->height, file_sprite);
+    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
+    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
+    
+    strncpy(file->name, name, name_length);
+    strncpy(file->path, path, path_length);
+    file->name[name_length] = '\0';
+    file->path[path_length] = '\0';
+    
+    dwm_calculate_icon_bounds(file);
+    
+    dwm_invalidate_region(x + file->bounds_x, y + file->bounds_y, file->bounds_w, file->bounds_h);
     return 0;
 }
 
@@ -437,10 +468,16 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y) {
     uint16_t posx = w_object->x + x;
     uint16_t posy = w_object->y + y + w_object->titlebar_height;
     
+    // Check window bounds
+    if ((posx > w_object->x + w_object->w) || (posy > w_object->y + w_object->h)) 
+        return;
+    
+    // Set the window who called this context menu
+    context_handle = w_object;
+    
     const char* file_menu_options[] = { "Window", "context", "menu", "text" };
     
-    dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_ICON, file_menu_options, 4);
-    
+    dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, file_menu_options, 4);
 }
 
 WindowHandle dwm_summon_message_box(const char* title, const char* message) {
@@ -484,7 +521,7 @@ WindowHandle dwm_summon_message_box(const char* title, const char* message) {
 
 WindowHandle dwm_summon_properties(const char* title, const char* file_path) {
     WindowClass wclass_props;
-    uint16_t width  = 170;
+    uint16_t width  = 280;
     uint16_t height = 350;
     
     // Center the message box on the screen
@@ -504,19 +541,30 @@ WindowHandle dwm_summon_properties(const char* title, const char* file_path) {
     struct WindowObject* msg_handle = dwm_allocate_window(
         wclass_props, 
         0, 
-        (WindowProcedure)callback_message_box_handler
+        (WindowProcedure)callback_properties_handler
     );
     
-    // Add the message text as a window resource
-    //size_t message_length = strnlen(message, 32);
+    // Add file path resource
+    size_t path_length = strnlen(file_path, DWM_PATH_LENGTH);
     
-    //char* rc_message = (char*)malloc(message_length);
-    //strncpy(rc_message, message, message_length);
-    //rc_message[message_length] = '\0';
+    char* path_str = (char*)malloc(path_length);
+    strncpy(path_str, file_path, path_length);
+    path_str[path_length] = '\0';
     
-    //dwm_window_resource_add(msg_handle->id, rc_message);
     
-    //dwm_set_focus(msg_handle);
+    uint32_t target = resolve_path_to_address(file_path);
+    char* target_name = (char*)malloc( DWM_FILENAME_LENGTH );
+    
+    //knode_get_name(target, target_name);
+    
+    //if (target != KNODE_NULL) {
+        //knode_is_valid_address();
+    //}
+    
+    dwm_window_resource_add(msg_handle->id, "path", path_str);
+    dwm_window_resource_add(msg_handle->id, "name", target_name);
+    
+    dwm_set_focus(msg_handle);
     
     return msg_handle->id;
 }
@@ -622,7 +670,7 @@ void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
     if (event_window == NULL) return;
     size_t length = strlen(text);
     for (unsigned int i=0; i < length; i++) 
-        draw_glyph(char_rom, text[i], x + (i * 6), y, color, 0xFF000000, 0xFF000000);
+        draw_glyph(char_rom, text[i], 6, 8, x + (i * 6), y, color, 0xFF000000, 0xFF000000);
 }
 
 void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {

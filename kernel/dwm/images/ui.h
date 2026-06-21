@@ -1,9 +1,8 @@
 #ifndef UI_IMAGE_LIBRARY_H
 #define UI_IMAGE_LIBRARY_H
 
-#include <kernel/arch/x86/drivers/display/draw.h>
-
 #include <stdint.h>
+#include <kernel/arch/x86/drivers/display/draw.h>
 
 extern const struct Sprite rc_button_minimize;
 extern const struct Sprite rc_button_close;

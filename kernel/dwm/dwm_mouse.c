@@ -50,7 +50,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         uint64_t current_time = timer_get_ms();
         
         if (clicked_win == last_clicked_window && 
-            (current_time - last_window_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
+            (current_time - last_window_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
             
             // Mark a flag on the window context or environment that a double click occurred
             window_context.is_double_click = true; 
@@ -105,7 +105,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     for (struct list_node* node = clicked_win->buttons_head; node != NULL; node = node->next) {
         struct WindowButton* btn = (struct WindowButton*)node->data;
         
-        // Compute the absolute viewport position of the button bounds
+        // Compute button bounds
         int btn_min_x = clicked_win->x + btn->x;
         int btn_max_x = btn_min_x + btn->width;
         int btn_min_y = clicked_win->y + btn->y;
@@ -116,7 +116,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
             
             if (btn->event == DWM_EVENT_RESIZE) {
                 resizing_window = clicked_win;
-                // Calculate offset between the cursor and the bottom right corner of the window
+                // Calculate offset between the cursor and the button
                 resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
                 resize_offset_y = (clicked_win->y + clicked_win->h) - ctx->mouse.y;
                 return true;
@@ -172,16 +172,21 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     }
     
     if (clicked_icon != NULL) {
+        
+        focused_icon = clicked_icon;
+        
         if (is_new_left_click) {
             
             // Double click timer
             uint32_t current_time = timer_get_ms();
             
-            if (clicked_icon == last_clicked_icon && (current_time - last_icon_click_time) <= DOUBLE_CLICK_THRESHOLD_MS) {
+            if (clicked_icon == last_clicked_icon && (current_time - last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
+                
+                kernel_event_send(KEVENT_EXECUTE, "explorer", focused_icon->path);
+                
+                focused_icon = NULL;
                 last_clicked_icon = NULL;
                 last_icon_click_time = 0;
-                
-                kernel_event_send(KEVENT_EXECUTE, "explorer", "/");
                 
             } else {
                 dragged_icon = clicked_icon;
@@ -194,24 +199,27 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
         }
         else if (is_new_right_click) {
             
+            // Icon right click context menu
+            
+            uint16_t number_of_items = 4;
             const char* file_menu_options[] = { "Open", "Copy", "Delete", "Properties" };
             
-            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_ICON, file_menu_options, 4);
-            
+            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_ICON, file_menu_options, number_of_items);
         }
     } else {
         
         // Desktop click
         
         if (is_new_left_click) {
-            
             last_clicked_icon = NULL;
-        }
-        else if (is_new_right_click) {
+        } else if (is_new_right_click) {
             
+            // Desktop right click context menu
+            
+            uint16_t number_of_items = 2;
             const char* desktop_menu_options[] = { "New", "Properties" };
             
-            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_DESKTOP, desktop_menu_options, 2);
+            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_DESKTOP, desktop_menu_options, number_of_items);
         }
     }
 }

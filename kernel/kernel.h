@@ -14,6 +14,7 @@
 #include <kernel/console/display.h>
 
 #include <kernel/fs/fs.h>
+#include <kernel/vfs/vfs.h>
 
 #include <kernel/knode.h>
 #include <kernel/events.h>

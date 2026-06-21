@@ -78,6 +78,22 @@ void explorer_main(const char* arguments) {
         }
     }
     
+    // Check if the final destination knode is a mounted storage directory
+    if (current_knode_addr != KNODE_NULL && current_knode_addr != 0) {
+        uint8_t flags = kmalloc_get_flags(current_knode_addr);
+        if ((flags & KMALLOC_FLAG_DIRECTORY) && (flags & KMALLOC_FLAG_MOUNT)) {
+            // Get the partition block base address attached to this knode
+            uint32_t device_mount_address = knode_get_reference(current_knode_addr, 0);
+            if (device_mount_address != 0) {
+                struct FSPartitionBlock partition;
+                fs_device_open(device_mount_address, &partition);
+                
+                // Point to the actual internal root directory of that storage file system
+                current_fs_addr = partition.root_directory;
+            }
+        }
+    }
+    
     explorer_create_instance(window_title, current_knode_addr, current_fs_addr);
 }
 
@@ -131,12 +147,15 @@ WindowHandle explorer_create_instance(const char* title, uint32_t target_directo
     wclass.height = 340;
     wclass.max_width  = 0;
     wclass.max_height = 0;
-    wclass.title = state->window_title;
+    
+    size_t title_length = strnlen(title, DWM_FILENAME_LENGTH);
+    
+    strncpy(wclass.title, title, title_length);
+    wclass.title[title_length] = '\0';
     
     WindowHandle window = dwm_create_window(wclass, DWM_WSTYLE_RESIZEABLE, callback_handler_explorer);
     state->handle = window;
     
-    dwm_window_set_name(window, state->window_title);
     dwm_window_set_focus(window);
     return window;
 }

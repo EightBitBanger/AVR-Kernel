@@ -24,7 +24,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         return;
     }
     
-    // Back button hit detection using sprite coordinates directly
+    // Back button hit detection
     if (ui_button_back != NULL) {
         uint16_t btn_x1 = BACK_BTN_SPRITE_X;
         uint16_t btn_y1 = BACK_BTN_SPRITE_Y;
@@ -51,6 +51,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
                     }
                 }
             } else {
+                // Kernel memory directory node structure (ram disk)
                 uint32_t parent_dir = knode_get_parent(state->knode_current);
                 if (parent_dir != KNODE_NULL && parent_dir != 0 && state->knode_current != knode_get_root()) {
                     populate_state_from_knode(state, parent_dir);
@@ -66,18 +67,18 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     if (!(lparam & DWM_STATE_MOUSE_DOUBLE_CLK)) 
         return;
     
-    uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
+    uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
     if (max_cols == 0) max_cols = 1;
     
     for (unsigned int i = 0; i < state->total_items; i++) {
         uint16_t col = i % max_cols;
         uint16_t row = i / max_cols;
         
-        uint16_t tile_start_x = NAVBAR_X + (col * NAVBAR_WIDTH);
-        uint16_t tile_start_y = NAVBAR_Y + (row * NAVBAR_HEIGHT);
+        uint16_t tile_start_x = NAV_X + (col * ITEM_WIDTH);
+        uint16_t tile_start_y = NAV_Y + (row * ITEM_HEIGHT);
         
-        if (click_x >= tile_start_x && click_x < (tile_start_x + NAVBAR_WIDTH) &&
-            click_y >= tile_start_y && click_y < (tile_start_y + NAVBAR_HEIGHT)) {
+        if (click_x >= tile_start_x && click_x < (tile_start_x + ITEM_WIDTH) &&
+            click_y >= tile_start_y && click_y < (tile_start_y + ITEM_HEIGHT)) {
             
             if (state->fs_current == 0) {
                 if (state->items[i].icon_index == ICON_FOLDER) {
@@ -149,35 +150,35 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
     // Navigation bar divider line
     dwm_draw_line(NAV_DIVIDER_X, NAV_DIVIDER_Y, window_width, NAV_DIVIDER_H, navbar_div);
     
-    uint16_t max_cols = (state->win_width - NAVBAR_X) / NAVBAR_WIDTH;
+    uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
     if (max_cols == 0) max_cols = 1;
     
     for (unsigned int i = 0; i < state->total_items; i++) {
         uint16_t col = i % max_cols;
         uint16_t row = i / max_cols;
         
-        uint16_t sp_x = NAVBAR_X + (col * NAVBAR_WIDTH);
-        uint16_t sp_y = NAVBAR_Y + (row * NAVBAR_HEIGHT);
+        uint16_t sp_x = NAV_X + (col * ITEM_WIDTH);
+        uint16_t sp_y = NAV_Y + (row * ITEM_HEIGHT);
         
         struct Image* current_icon;
         switch (state->items[i].icon_index) {
-            case 0: current_icon = icon_folder; break;
-            case 1: current_icon = icon_file; break;
-            case 2: current_icon = icon_document; break;
-            case 3: current_icon = icon_system; break;
-            case 4: current_icon = icon_storage; break;
+            case ICON_FOLDER:    current_icon = icon_folder; break;
+            case ICON_FILE:      current_icon = icon_file; break;
+            case ICON_DOCUMENT:  current_icon = icon_document; break;
+            case ICON_SYSTEM:    current_icon = icon_system; break;
+            case ICON_STORAGE:   current_icon = icon_storage; break;
             default: current_icon = 0; break;
         }
         
         if (current_icon != NULL) {
-            uint16_t icon_offset_x = (NAVBAR_WIDTH - current_icon->width) / 2; 
+            uint16_t icon_offset_x = (ITEM_WIDTH - current_icon->width) / 2; 
             dwm_draw_sprite(sp_x + icon_offset_x, sp_y, current_icon);
         }
         
         size_t length = strlen(state->items[i].name);
         uint16_t string_width = length * ITEM_FONT_CHAR_WIDTH;
-        int16_t text_start_x = sp_x + ((NAVBAR_WIDTH - string_width) / 2);
-        dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_Y_OFF, state->items[i].name, item_text);
+        int16_t text_start_x = sp_x + ((ITEM_WIDTH - string_width) / 2);
+        dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_HEIGHT_OFF, state->items[i].name, item_text);
     }
 }
 
@@ -195,6 +196,7 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
     if (!state) return;
     
     switch (event) {
+        
     case DWM_EVENT_MOUSE:
         handle_explorer_mouse(handle, state, wparam, lparam);
         break;
@@ -209,6 +211,15 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         
     case DWM_EVENT_DESTROY:
         free_window_state(handle);
+        return;
+        
+    case DWM_EVENT_CONTEXT_MENU:
+        char string[16];
+        itos(wparam, string);
+        
+        dwm_summon_message_box("Context menu string of wtf", string);
+        
         return; 
     }
+    
 }

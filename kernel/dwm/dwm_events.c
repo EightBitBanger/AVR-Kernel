@@ -76,15 +76,20 @@ void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) 
     
     switch (context_menu_directive) {
         
-    case DWM_CONTEXT_MENU_DESKTOP:
-        extern void trigger_test_page_fault(void);
+    case DWM_CONTEXT_MENU_USER:
         
+        // Inform the user of the selected context menu item
+        context_handle->event_callback(context_handle->id, DWM_EVENT_CONTEXT_MENU, index, 0);
+        
+        break;
+        
+    case DWM_CONTEXT_MENU_DESKTOP:
         switch (index) {
         case 0:
             
             //dwm_create_folder(ctx->mouse.x, ctx->mouse.y, "system");
             
-            dwm_summon_message_box("window title", "Error message");
+            dwm_summon_message_box("Message", "Desktop hit");
             
             break;
         }
@@ -96,7 +101,8 @@ void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) 
         switch (index) {
         case 3:
             
-            dwm_summon_properties("Properties", "/mnt");
+            if (focused_icon != NULL) 
+                dwm_summon_properties("Properties", focused_icon->path);
             
             break;
         }

@@ -2,11 +2,14 @@
 #define ICON_OBJECT_H
 
 #include <stdint.h>
+#include <kernel/dwm/configuration.h>
 
 struct IconObject {
     uint8_t flags;
     
-    char name[16];
+    char name[DWM_FILENAME_LENGTH];
+    
+    char path[DWM_PATH_LENGTH];
     
     // Position and size
     

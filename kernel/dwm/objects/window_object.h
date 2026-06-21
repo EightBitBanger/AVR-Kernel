@@ -1,7 +1,8 @@
-#ifndef WINDOW_OBJECT_H
-#define WINDOW_OBJECT_H
+#ifndef _WINDOW_OBJECT_H_
+#define _WINDOW_OBJECT_H_
 
 #include <stdint.h>
+#include <kernel/dwm/configuration.h>
 #include <kernel/dwm/objects/window_handle.h>
 #include <kernel/dwm/dwm_events.h>
 
@@ -12,7 +13,7 @@ struct WindowObject {
     uint16_t style;
     uint16_t events;
     
-    char title[16];
+    char title[DWM_FILENAME_LENGTH];
     
     // Child windows
     struct WindowObject* parent;

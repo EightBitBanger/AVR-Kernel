@@ -1,9 +1,8 @@
 #ifndef ICON_IMAGE_LIBRARY_H
 #define ICON_IMAGE_LIBRARY_H
 
-#include <kernel/arch/x86/drivers/display/draw.h>
-
 #include <stdint.h>
+#include <kernel/arch/x86/drivers/display/draw.h>
 
 extern const struct Sprite rc_icon_storage;
 extern const struct Sprite rc_icon_system;

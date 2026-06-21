@@ -208,10 +208,9 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
             uint16_t string_width = length * 6;
             int16_t text_start_x = current_icon->x + ((current_icon->width - string_width) / 2);
             
-            for (unsigned int i = 0; i < length; i++) {
-                draw_glyph(char_rom, current_icon->name[i], text_start_x + (i * 6), text_y, 0xFFFFFFFF, 0xFF000000, 0xFF000000);
-            }
+            draw_text(text_start_x, text_y, current_icon->name, 0xFFFFFFFF);
         }
+        
         current_node = current_node->next;
     }
     
@@ -277,10 +276,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
                 draw_line(menu_x, menu_y, menu_x + menu_w, menu_y, menu->color_separator);
             }
             
-            size_t length = strlen(menu->item[i].name);
-            for (unsigned int s = 0; s < length; s++) {
-                draw_glyph(char_rom, menu->item[i].name[s], text_x + (s * 6), text_y, menu->color_text, 0xFF000000, 0xFF000000);
-            }
+            draw_text(text_x, text_y, menu->item[i].name, menu->color_text);
         }
     }
     

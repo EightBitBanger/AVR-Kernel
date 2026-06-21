@@ -16,8 +16,10 @@ typedef uint16_t wEvent;
 #define DWM_EVENT_HIDE                      0x0020
 #define DWM_EVENT_MINIMIZE                  0x0040
 #define DWM_EVENT_RESIZE                    0x0080
-
 #define DWM_EVENT_DESTROY                   0x0100
+
+#define DWM_EVENT_CONTEXT_MENU              0x0200
+
 
 // Event status
 

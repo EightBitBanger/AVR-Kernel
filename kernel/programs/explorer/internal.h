@@ -32,7 +32,7 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
 void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 struct Item {
-    char name[16];
+    char name[MAX_TITLE_LEN];
     uint16_t icon_index;
     uint32_t knode;     // Kernel directory address
     uint32_t fs_dir;    // Internal File system directory address

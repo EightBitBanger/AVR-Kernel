@@ -6,3 +6,4 @@
 #include <kernel/util/timer.h>
 #include <kernel/util/string.h>
 
+#include <kernel/dwm/dwm_context_menu.h>

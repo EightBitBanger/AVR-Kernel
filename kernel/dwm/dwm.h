@@ -3,8 +3,6 @@
 
 #include <stdbool.h>
 
-#include <kernel/dwm/dwm_platform.h>
-
 #include <kernel/dwm/rendering/image.h>
 
 #include <kernel/dwm/images/icon.h>
@@ -16,33 +14,15 @@
 #include <kernel/dwm/objects/window_context.h>
 #include <kernel/dwm/objects/window_object.h>
 #include <kernel/dwm/objects/window_handle.h>
+#include <kernel/dwm/objects/window_class.h>
+
 #include <kernel/dwm/objects/context_menu.h>
 #include <kernel/dwm/rendering/sprite.h>
 
-#include <kernel/dwm/flags.h>
 #include <kernel/dwm/style_flags.h>
-
-
-#define DWM_CONTEXT_MENU_DESKTOP  0x01
-#define DWM_CONTEXT_MENU_ICON     0x02
-
-#define DOUBLE_CLICK_THRESHOLD_MS   500
-
-#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS 300
-
-#define DWM_FILENAME_LENGTH   16
+#include <kernel/dwm/configuration.h>
 
 typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
-
-typedef struct {
-    uint16_t x;
-    uint16_t y;
-    uint16_t width;
-    uint16_t height;
-    uint16_t max_width;
-    uint16_t max_height;
-    char* title;
-} WindowClass;
 
 void dwm_initiate(void);
 void dwm_update(void);
@@ -54,8 +34,8 @@ void dwm_destroy_window(WindowHandle window_handle);
 
 // Icons
 
-int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name);
-int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name);
+int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name, const char* path);
+int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* path);
 
 struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite);
 void dwm_destroy_icon(struct IconObject* icon);
