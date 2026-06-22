@@ -263,13 +263,13 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
             uint16_t intersector_height = menu->item_height * i;
             uint16_t menu_x = menu->x + 1;
             uint16_t menu_y = menu->y + intersector_height;
-            uint16_t menu_w = menu->w - 2;
+            uint16_t menu_w = menu->w - 3;
             uint16_t menu_h = menu->item_height;
             uint16_t text_x = menu_x + 3;
             uint16_t text_y = menu_y + 7;
             
             if ((int)i == menu->hovered_item) {
-                draw_rect_filled(menu_x, menu_y + 1, menu_w, menu_h - 1, menu->color_highlight);
+                draw_rect_filled(menu_x, menu_y + 1, menu_w + 1, menu_h - 2, menu->color_highlight);
             }
             
             if (i > 0 && (int)i != menu->hovered_item && (int)(i - 1) != menu->hovered_item) {

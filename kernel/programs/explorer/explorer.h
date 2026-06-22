@@ -5,7 +5,7 @@
 
 #define MAX_ITEMS                   64
 #define MAX_TITLE_LEN               32
-#define MAX_PATH_LEN               256
+#define MAX_PATH_LEN               128
 
 #define ICON_FOLDER                  0
 #define ICON_FILE                    1

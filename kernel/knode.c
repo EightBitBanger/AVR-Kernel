@@ -51,6 +51,14 @@ void knode_set_name(uint32_t address, const char* name) {
     }
 }
 
+void knode_get_permissions(uint32_t address, uint8_t* permissions) {
+    *permissions = kmalloc_get_permissions(address);
+}
+
+void knode_set_permissions(uint32_t address, uint8_t permissions) {
+    kmalloc_set_permissions(address, permissions);
+}
+
 uint32_t create_extent(void) {
     struct KernelDirectoryExtent kextent;
     memset(&kextent, 0x00, sizeof(struct KernelDirectoryExtent));

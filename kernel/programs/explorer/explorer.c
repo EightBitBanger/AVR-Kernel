@@ -99,12 +99,14 @@ void explorer_main(const char* arguments) {
 
 struct ExplorerWindowState* allocate_window_state(WindowHandle handle) {
     struct ExplorerWindowState* new_node = (struct ExplorerWindowState*)malloc(sizeof(struct ExplorerWindowState));
-    if (!new_node) return NULL; 
+    if (!new_node) return NULL;
     
     memset(new_node, 0, sizeof(struct ExplorerWindowState));
     new_node->handle = handle;
     new_node->win_width = 400; 
     new_node->next = window_list_head;
+    new_node->context_item_index = -1;
+    
     window_list_head = new_node;
     
     return new_node;
@@ -174,8 +176,9 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     memset(state->items, 0, sizeof(state->items));
     state->total_items = 0;
     
-    char fs_path_accum[MAX_PATH_LEN];
-    memset(fs_path_accum, 0, MAX_PATH_LEN);
+    // --- 1. BUILD FILE SYSTEM PATH SEGMENTS ---
+    char fs_path_display[MAX_PATH_LEN] = {0};
+    char fs_path_absolute[MAX_PATH_LEN] = {0};
     
     uint32_t fs_climb = fs_dir_addr;
     uint32_t depth_counter = 0;
@@ -195,18 +198,38 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
             strncpy(&segment[1], dir_name, MAX_TITLE_LEN - 1);
             segment[MAX_TITLE_LEN + 1] = '\0';
             
-            char transient[MAX_PATH_LEN];
-            memset(transient, 0, MAX_PATH_LEN);
-            strncpy(transient, fs_path_accum, MAX_PATH_LEN - 1);
+            // Un-truncated absolute path accumulation (Prepend logic)
+            char trans_abs[MAX_PATH_LEN];
+            strncpy(trans_abs, fs_path_absolute, MAX_PATH_LEN - 1);
+            trans_abs[MAX_PATH_LEN - 1] = '\0';
             
-            strncpy(fs_path_accum, segment, MAX_PATH_LEN - 1);
+            strncpy(fs_path_absolute, segment, MAX_PATH_LEN - 1);
             size_t seg_len = strlen(segment);
             if (seg_len < MAX_PATH_LEN - 1) {
-                strncpy(fs_path_accum + seg_len, transient, MAX_PATH_LEN - 1 - seg_len);
+                strncat(fs_path_absolute, trans_abs, MAX_PATH_LEN - 1 - seg_len);
+            }
+            
+            // Truncated display path accumulation (Prepend logic)
+            if (depth_counter < MAX_PATH_DEPTH) {
+                char trans_disp[MAX_PATH_LEN];
+                strncpy(trans_disp, fs_path_display, MAX_PATH_LEN - 1);
+                trans_disp[MAX_PATH_LEN - 1] = '\0';
+                
+                strncpy(fs_path_display, segment, MAX_PATH_LEN - 1);
+                if (seg_len < MAX_PATH_LEN - 1) {
+                    strncat(fs_path_display, trans_disp, MAX_PATH_LEN - 1 - seg_len);
+                }
+            } else if (depth_counter == MAX_PATH_DEPTH) {
+                char trans_disp[MAX_PATH_LEN];
+                strncpy(trans_disp, fs_path_display, MAX_PATH_LEN - 1);
+                trans_disp[MAX_PATH_LEN - 1] = '\0';
+                
+                strncpy(fs_path_display, "/...", MAX_PATH_LEN - 1);
+                strncat(fs_path_display, trans_disp, MAX_PATH_LEN - 1 - 4);
             }
         }
         
-        if (fs_climb == partition.root_directory || depth_counter >= MAX_PATH_DEPTH) {
+        if (fs_climb == partition.root_directory) {
             break;
         }
         
@@ -214,8 +237,9 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         depth_counter++;
     }
     
-    char base_knode_path[MAX_PATH_LEN];
-    memset(base_knode_path, 0, MAX_PATH_LEN);
+    // --- 2. BUILD VIRTUAL KNODE BASE PATHS ---
+    char base_knode_display[MAX_PATH_LEN] = {0};
+    char base_knode_absolute[MAX_PATH_LEN] = {0};
     
     uint32_t knode_climb = knode_addr;
     uint32_t parent_node = knode_get_parent(knode_climb);
@@ -226,8 +250,6 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     kmem_read(&mount_dir_meta, knode_climb, sizeof(struct KernelDirectory));
     
     while (parent_node != root_node && parent_node != KNODE_NULL && parent_node != 0) {
-        if (depth_counter >= MAX_PATH_DEPTH) break;
-        
         struct KernelDirectory current_dir_meta;
         kmem_read(&current_dir_meta, parent_node, sizeof(struct KernelDirectory));
         
@@ -235,44 +257,79 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         segment[0] = '/';
         strncpy(&segment[1], current_dir_meta.name, sizeof(segment) - 2);
         segment[sizeof(segment) - 1] = '\0';
-        
-        char transient[MAX_PATH_LEN];
-        memset(transient, 0, MAX_PATH_LEN);
-        strncpy(transient, base_knode_path, MAX_PATH_LEN - 1);
-        
-        strncpy(base_knode_path, segment, MAX_PATH_LEN - 1);
         size_t seg_len = strlen(segment);
+        
+        // Absolute Knode path (Prepend)
+        char trans_abs[MAX_PATH_LEN];
+        strncpy(trans_abs, base_knode_absolute, MAX_PATH_LEN - 1);
+        trans_abs[MAX_PATH_LEN - 1] = '\0';
+        
+        strncpy(base_knode_absolute, segment, MAX_PATH_LEN - 1);
         if (seg_len < MAX_PATH_LEN - 1) {
-            strncpy(base_knode_path + seg_len, transient, MAX_PATH_LEN - 1 - seg_len);
+            strncat(base_knode_absolute, trans_abs, MAX_PATH_LEN - 1 - seg_len);
+        }
+        
+        // Display Knode path (Prepend)
+        if (depth_counter < MAX_PATH_DEPTH) {
+            char trans_disp[MAX_PATH_LEN];
+            strncpy(trans_disp, base_knode_display, MAX_PATH_LEN - 1);
+            trans_disp[MAX_PATH_LEN - 1] = '\0';
+            
+            strncpy(base_knode_display, segment, MAX_PATH_LEN - 1);
+            if (seg_len < MAX_PATH_LEN - 1) {
+                strncat(base_knode_display, trans_disp, MAX_PATH_LEN - 1 - seg_len);
+            }
+        } else if (depth_counter == MAX_PATH_DEPTH) {
+            char trans_disp[MAX_PATH_LEN];
+            strncpy(trans_disp, base_knode_display, MAX_PATH_LEN - 1);
+            trans_disp[MAX_PATH_LEN - 1] = '\0';
+            
+            strncpy(base_knode_display, "/...", MAX_PATH_LEN - 1);
+            strncat(base_knode_display, trans_disp, MAX_PATH_LEN - 1 - 4);
         }
         
         parent_node = knode_get_parent(parent_node);
         depth_counter++;
     }
     
-    if (base_knode_path[0] == '\0') {
-        strncpy(base_knode_path, "/", MAX_PATH_LEN - 1);
-    }
+    if (base_knode_display[0] == '\0')  strncpy(base_knode_display, "/", MAX_PATH_LEN - 1);
+    if (base_knode_absolute[0] == '\0') strncpy(base_knode_absolute, "/", MAX_PATH_LEN - 1);
     
-    state->knode_path_len = (uint16_t)strlen(base_knode_path);
+    state->knode_path_len = (uint16_t)strlen(base_knode_display);
     
     char mount_segment[32];
     mount_segment[0] = '\0';
-    if (base_knode_path[1] != '\0') { 
+    if (base_knode_display[1] != '\0' || base_knode_absolute[1] != '\0') { 
         strncpy(mount_segment, "/", sizeof(mount_segment) - 1);
     }
     strncat(mount_segment, mount_dir_meta.name, sizeof(mount_segment) - strlen(mount_segment) - 1);
     
-    char full_fs_path[MAX_PATH_LEN];
-    strncpy(full_fs_path, mount_segment, MAX_PATH_LEN - 1);
-    strncat(full_fs_path, fs_path_accum, MAX_PATH_LEN - strlen(full_fs_path) - 1);
+    // --- 3. MERGE PARTS INTO STATE BUFFERS (Sequential Concatenation) ---
+    // UI String Assembly
+    strncpy(state->path, base_knode_display, MAX_PATH_LEN - 1);
+    state->path[MAX_PATH_LEN - 1] = '\0';
+    size_t cur_len = strlen(state->path);
+    if (cur_len < MAX_PATH_LEN - 1) {
+        strncat(state->path, mount_segment, MAX_PATH_LEN - 1 - cur_len);
+    }
+    cur_len = strlen(state->path);
+    if (cur_len < MAX_PATH_LEN - 1) {
+        strncat(state->path, fs_path_display, MAX_PATH_LEN - 1 - cur_len);
+    }
     
-    strncpy(state->path, base_knode_path, MAX_PATH_LEN - 1);
-    size_t current_len = strlen(state->path);
-    if (current_len < MAX_PATH_LEN - 1) {
-        strncat(state->path, full_fs_path, MAX_PATH_LEN - current_len - 1);
+    // Factual Code String Assembly
+    strncpy(state->full_path, base_knode_absolute, MAX_PATH_LEN - 1);
+    state->full_path[MAX_PATH_LEN - 1] = '\0';
+    cur_len = strlen(state->full_path);
+    if (cur_len < MAX_PATH_LEN - 1) {
+        strncat(state->full_path, mount_segment, MAX_PATH_LEN - 1 - cur_len);
+    }
+    cur_len = strlen(state->full_path);
+    if (cur_len < MAX_PATH_LEN - 1) {
+        strncat(state->full_path, fs_path_absolute, MAX_PATH_LEN - 1 - cur_len);
     }
 
+    // --- 4. COLLECT DIRECTORY ENTRIES ---
     uint32_t ref_count = fs_directory_get_reference_count(fs_dir_addr);
     uint16_t collected = 0;
 
@@ -294,6 +351,19 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
             state->items[collected].icon_index = ICON_FILE;
             state->items[collected].fs_dir = 0;
         }
+
+        // Build item route contexts accurately
+        strncpy(state->items[collected].path, state->full_path, MAX_PATH_LEN - 1);
+        state->items[collected].path[MAX_PATH_LEN - 1] = '\0';
+        
+        size_t path_len = strlen(state->items[collected].path);
+        if (path_len > 0 && state->items[collected].path[path_len - 1] != '/') {
+            strncat(state->items[collected].path, "/", MAX_PATH_LEN - path_len - 1);
+            path_len++;
+        }
+        if (path_len < MAX_PATH_LEN - 1) {
+            strncat(state->items[collected].path, state->items[collected].name, MAX_PATH_LEN - path_len - 1);
+        }
         
         collected++;
     }
@@ -311,70 +381,78 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
     
     memset(state->items, 0, sizeof(state->items));
     memset(state->path, 0, MAX_PATH_LEN);
-    
+    memset(state->full_path, 0, MAX_PATH_LEN);
+
     uint32_t current_climb = dir_addr;
     uint32_t root_node = knode_get_root();
     
     if (current_climb == root_node) {
         strncpy(state->path, "/", MAX_PATH_LEN - 1);
+        strncpy(state->full_path, "/", MAX_PATH_LEN - 1);
         if (state->handle != 0) {
             dwm_window_set_name(state->handle, "/");
         }
     } else {
-        char temp_path[MAX_PATH_LEN];
-        memset(temp_path, 0, MAX_PATH_LEN);
+        char display_path[MAX_PATH_LEN] = {0};
+        char absolute_path[MAX_PATH_LEN] = {0};
         
         uint32_t depth_counter = 0;
-        bool truncated = false;
         bool is_target_dir = true;
         
         while (current_climb != root_node && current_climb != KNODE_NULL && current_climb != 0) {
-            if (depth_counter >= MAX_PATH_DEPTH) {
-                truncated = true;
-                break;
-            }
-            
             struct KernelDirectory current_dir_meta;
             memset(&current_dir_meta, 0, sizeof(struct KernelDirectory));
             kmem_read(&current_dir_meta, current_climb, sizeof(struct KernelDirectory));
             
             char segment[32];
-            memset(segment, 0, sizeof(segment));
-            
             segment[0] = '/';
             strncpy(&segment[1], current_dir_meta.name, sizeof(segment) - 2);
+            segment[sizeof(segment) - 1] = '\0';
+            size_t seg_len = strlen(segment);
             
             if (is_target_dir && state->handle != 0) {
                 dwm_window_set_name(state->handle, current_dir_meta.name);
                 is_target_dir = false;
             }
             
-            char transient[MAX_PATH_LEN];
-            memset(transient, 0, MAX_PATH_LEN);
-            strncpy(transient, temp_path, MAX_PATH_LEN - 1);
+            // 1. Un-truncated absolute path accumulation (Prepend logic)
+            char trans_abs[MAX_PATH_LEN];
+            strncpy(trans_abs, absolute_path, MAX_PATH_LEN - 1);
+            trans_abs[MAX_PATH_LEN - 1] = '\0';
             
-            strncpy(temp_path, segment, MAX_PATH_LEN - 1);
-            size_t seg_len = strlen(segment);
+            strncpy(absolute_path, segment, MAX_PATH_LEN - 1);
             if (seg_len < MAX_PATH_LEN - 1) {
-                strncpy(temp_path + seg_len, transient, MAX_PATH_LEN - 1 - seg_len);
+                strncat(absolute_path, trans_abs, MAX_PATH_LEN - 1 - seg_len);
+            }
+            
+            // 2. Truncated display path accumulation (Prepend logic)
+            if (depth_counter < MAX_PATH_DEPTH) {
+                char trans_disp[MAX_PATH_LEN];
+                strncpy(trans_disp, display_path, MAX_PATH_LEN - 1);
+                trans_disp[MAX_PATH_LEN - 1] = '\0';
+                
+                strncpy(display_path, segment, MAX_PATH_LEN - 1);
+                if (seg_len < MAX_PATH_LEN - 1) {
+                    strncat(display_path, trans_disp, MAX_PATH_LEN - 1 - seg_len);
+                }
+            } else if (depth_counter == MAX_PATH_DEPTH) {
+                char trans_disp[MAX_PATH_LEN];
+                strncpy(trans_disp, display_path, MAX_PATH_LEN - 1);
+                trans_disp[MAX_PATH_LEN - 1] = '\0';
+                
+                strncpy(display_path, "/...", MAX_PATH_LEN - 1);
+                strncat(display_path, trans_disp, MAX_PATH_LEN - 1 - 4);
             }
             
             depth_counter++;
             current_climb = knode_get_parent(current_climb);
         }
         
-        if (truncated) {
-            char final_truncated_path[MAX_PATH_LEN];
-            memset(final_truncated_path, 0, MAX_PATH_LEN);
-            strncpy(final_truncated_path, "/...", MAX_PATH_LEN - 1);
-            size_t prefix_len = strlen(final_truncated_path);
-            strncpy(final_truncated_path + prefix_len, temp_path, MAX_PATH_LEN - 1 - prefix_len);
-            strncpy(state->path, final_truncated_path, MAX_PATH_LEN - 1);
-        } else {
-            strncpy(state->path, temp_path, MAX_PATH_LEN - 1);
-        }
+        strncpy(state->path, display_path, MAX_PATH_LEN - 1);
+        strncpy(state->full_path, absolute_path, MAX_PATH_LEN - 1);
     }
     
+    // --- 3. COLLECT KNODE ENTRIES WITH ACCURATE UNTRUNCATED ROUTES ---
     for (uint32_t reference_index = 0; collected_count < MAX_ITEMS; reference_index++) {
         uint32_t reference_address = knode_get_reference(dir_addr, reference_index);
         if (reference_address == KNODE_NULL || reference_address == 0) 
@@ -392,7 +470,7 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
         strncpy(state->items[collected_count].name, kdir.name, MAX_TITLE_LEN-1);
         state->items[collected_count].name[MAX_TITLE_LEN-1] = '\0';
         state->items[collected_count].knode = reference_address;
-        state->items[collected_count].fs_dir = 0; 
+        state->items[collected_count].fs_dir = 0;
         
         if (flags & KMALLOC_FLAG_DIRECTORY) {
             if (flags & KMALLOC_FLAG_MOUNT) {
@@ -406,6 +484,20 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
             } else {
                 state->items[collected_count].icon_index = ICON_FILE;
             }
+        }
+        
+        // Build path context relative to state->full_path directly
+        strncpy(state->items[collected_count].path, state->full_path, MAX_PATH_LEN - 1);
+        state->items[collected_count].path[MAX_PATH_LEN - 1] = '\0';
+        
+        size_t path_len = strlen(state->items[collected_count].path);
+        if (path_len > 0 && state->items[collected_count].path[path_len - 1] != '/') {
+            strncat(state->items[collected_count].path, "/", MAX_PATH_LEN - path_len - 1);
+            path_len++;
+        }
+        
+        if (path_len < MAX_PATH_LEN - 1) {
+            strncat(state->items[collected_count].path, state->items[collected_count].name, MAX_PATH_LEN - path_len - 1);
         }
         
         collected_count++;

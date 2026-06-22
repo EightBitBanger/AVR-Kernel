@@ -17,13 +17,6 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
     uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
     
-    if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
-        
-        dwm_summon_context_menu(handle, click_x, click_y);
-        
-        return;
-    }
-    
     // Back button hit detection
     if (ui_button_back != NULL) {
         uint16_t btn_x1 = BACK_BTN_SPRITE_X;
@@ -32,6 +25,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         uint16_t btn_y2 = btn_y1 + ui_button_back->height;
         
         if (click_x >= btn_x1 && click_x < btn_x2 && click_y >= btn_y1 && click_y < btn_y2) {
+            if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) return; // Ignore right click on back button
             
             // Inside a mounted filesystem
             if (state->fs_current != 0) {
@@ -63,12 +57,11 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         }
     }
     
-    // Window icon double click
-    if (!(lparam & DWM_STATE_MOUSE_DOUBLE_CLK)) 
-        return;
-    
+    // Grid item collision loop (Handles both Double-Click selection and Right-Click item menus)
     uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
     if (max_cols == 0) max_cols = 1;
+    
+    bool item_hit = false;
     
     for (unsigned int i = 0; i < state->total_items; i++) {
         uint16_t col = i % max_cols;
@@ -80,27 +73,50 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         if (click_x >= tile_start_x && click_x < (tile_start_x + ITEM_WIDTH) &&
             click_y >= tile_start_y && click_y < (tile_start_y + ITEM_HEIGHT)) {
             
-            if (state->fs_current == 0) {
-                if (state->items[i].icon_index == ICON_FOLDER) {
-                    populate_state_from_knode(state, state->items[i].knode);
-                } 
-                else if (state->items[i].icon_index == ICON_STORAGE) {
-                    uint32_t device_mount_address = knode_get_reference(state->items[i].knode, 0);
-                    struct FSPartitionBlock partition;
-                    fs_device_open(device_mount_address, &partition);
-                    
-                    populate_state_from_file_system(state, state->items[i].knode, partition.root_directory);
-                }
-            } 
-            else {
-                if (state->items[i].icon_index == ICON_FOLDER) {
-                    populate_state_from_file_system(state, state->knode_current, state->items[i].fs_dir);
-                }
+            item_hit = true;
+            
+            // --- CONTEXT MENU FOR AN ITEM ---
+            if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
+                state->context_item_index = (int32_t)i;
+                
+                const char* item_menu_options[] = { "Open", "Copy", "Delete", "Properties" };
+                dwm_summon_context_menu(handle, click_x, click_y, item_menu_options, 4);
+                return;
             }
             
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-            break;
+            // --- DOUBLE CLICK SELECTION ON AN ITEM ---
+            if (lparam & DWM_STATE_MOUSE_DOUBLE_CLK) {
+                if (state->fs_current == 0) {
+                    if (state->items[i].icon_index == ICON_FOLDER) {
+                        populate_state_from_knode(state, state->items[i].knode);
+                    } 
+                    else if (state->items[i].icon_index == ICON_STORAGE) {
+                        uint32_t device_mount_address = knode_get_reference(state->items[i].knode, 0);
+                        struct FSPartitionBlock partition;
+                        fs_device_open(device_mount_address, &partition);
+                        
+                        populate_state_from_file_system(state, state->items[i].knode, partition.root_directory);
+                    }
+                } 
+                else {
+                    if (state->items[i].icon_index == ICON_FOLDER) {
+                        populate_state_from_file_system(state, state->knode_current, state->items[i].fs_dir);
+                    }
+                }
+                
+                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+            }
+            break; 
         }
+    }
+    
+    // --- CONTEXT MENU FOR OPEN WINDOW AREA ---
+    // If it was a right click, but the loop above did not hit any files/folders
+    if (!item_hit && (lparam & DWM_STATE_MOUSE_BTN_RIGHT)) {
+        const char* window_menu_options[] = { "Refresh", "New Folder", "New File", "Paste" };
+        state->context_item_index = -1;
+        dwm_summon_context_menu(handle, click_x, click_y, window_menu_options, 4);
+        return;
     }
 }
 
@@ -123,7 +139,7 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         dwm_draw_sprite(BACK_BTN_SPRITE_X, BACK_BTN_SPRITE_Y, ui_button_back);
     }
     
-    // Draw path input field background frame (Using window_width minus text offset minus safe margin edge padding)
+    // Draw path input field background frame
     uint16_t path_field_width = window_width - PATH_FIELD_BG_X - 10;
     dwm_draw_rect_filled(PATH_FIELD_BG_X, PATH_FIELD_BG_Y, path_field_width, PATH_FIELD_BG_H, path_bg);
     dwm_draw_rect(PATH_FIELD_BORDER_X, PATH_FIELD_BORDER_Y, path_field_width + 2, PATH_FIELD_BORDER_H, path_border);
@@ -132,18 +148,12 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
     if (state->fs_current == 0 || state->knode_path_len >= strlen(state->path)) {
         dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, state->path, text_knode);
     } else {
-        // Split View: Read slice limits to split string processing
         char base_buffer[MAX_PATH_LEN];
         memset(base_buffer, 0, MAX_PATH_LEN);
         strncpy(base_buffer, state->path, state->knode_path_len);
         
-        // Draw Virtual KNode sequence
         dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, base_buffer, text_knode);
-        
-        // Calculate pixel offset (using clean static base destination position)
         int16_t mount_offset_x = PATH_TEXT_X + (state->knode_path_len * PATH_FONT_CHAR_WIDTH);
-        
-        // Draw the rest of the file system path
         dwm_draw_text(mount_offset_x, PATH_TEXT_Y, state->path + state->knode_path_len, text_mount);
     }
     
@@ -196,7 +206,6 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
     if (!state) return;
     
     switch (event) {
-        
     case DWM_EVENT_MOUSE:
         handle_explorer_mouse(handle, state, wparam, lparam);
         break;
@@ -214,12 +223,16 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         return;
         
     case DWM_EVENT_CONTEXT_MENU:
-        char string[16];
-        itos(wparam, string);
-        
-        dwm_summon_message_box("Context menu string of wtf", string);
-        
-        return; 
+        switch (wparam) {
+        case 3: // "Properties" clicked
+            if (state->context_item_index != -1 && state->context_item_index < state->total_items) {
+                struct Item* clicked_item = &state->items[state->context_item_index];
+                
+                // Send the properties popup down to the window manager using clean parameters
+                dwm_summon_properties("Properties", clicked_item->name, clicked_item->path, clicked_item->icon_index);
+            }
+            break;
+        }
+        return;
     }
-    
 }

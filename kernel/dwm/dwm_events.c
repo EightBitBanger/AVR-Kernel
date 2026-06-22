@@ -102,7 +102,7 @@ void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) 
         case 3:
             
             if (focused_icon != NULL) 
-                dwm_summon_properties("Properties", focused_icon->path);
+                dwm_summon_properties("Properties", focused_icon->name, focused_icon->path, focused_icon->icon_index);
             
             break;
         }

@@ -12,6 +12,9 @@ void destroy_knode(uint32_t address, uint32_t parent_address);
 void knode_get_name(uint32_t address, char* name);
 void knode_set_name(uint32_t address, const char* name);
 
+void knode_get_permissions(uint32_t address, uint8_t* permissions);
+void knode_set_permissions(uint32_t address, uint8_t permissions);
+
 uint32_t knode_get_root(void);
 void knode_set_root(uint32_t address);
 

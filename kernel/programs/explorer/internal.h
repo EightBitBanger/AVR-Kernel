@@ -32,10 +32,11 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
 void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 struct Item {
-    char name[MAX_TITLE_LEN];
-    uint16_t icon_index;
-    uint32_t knode;     // Kernel directory address
-    uint32_t fs_dir;    // Internal File system directory address
+    char name[MAX_TITLE_LEN];         // File/alias name
+    char path[MAX_PATH_LEN];          // Truncated path for show
+    uint16_t icon_index;              // Icon representing this item
+    uint32_t knode;                   // Kernel directory address
+    uint32_t fs_dir;                  // Internal File system directory address
 };
 
 struct ExplorerWindowState {
@@ -46,6 +47,8 @@ struct ExplorerWindowState {
     
     uint16_t total_items;
     
+    int32_t context_item_index; // Tracks right-clicked item (-1 means none/blank area)
+    
     uint32_t knode_current; // Current kernel directory (knode)
     uint32_t fs_current;    // Current internal FS directory (0 if browsing knodes)
     
@@ -55,7 +58,8 @@ struct ExplorerWindowState {
     
     char window_title[MAX_TITLE_LEN];
     char path[MAX_PATH_LEN];
-    uint16_t knode_path_len; // Stores length of virtual base path for split rendering
+    char full_path[MAX_PATH_LEN];      // Absolute path
+    uint16_t knode_path_len;           // Stores length of virtual base path for split rendering
 };
 
 

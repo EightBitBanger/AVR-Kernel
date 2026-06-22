@@ -8,7 +8,7 @@
 #define DWM_WSTYLE_CHILD           0x0004   // Contained within a parent window
 #define DWM_WSTYLE_RESIZEABLE      0x0008   // Thicker border that allows dragging to resize
 #define DWM_WSTYLE_NOCLOSEBOX      0x0010   // Removes the close button
-
+#define DWM_WSTYLE_CASCADE         0x0020   // Spawns window in a incrementally cascaded formation
 
 //
 // Considering for implementation

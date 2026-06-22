@@ -28,6 +28,8 @@ struct IconObject {
     int16_t bounds_w;
     int16_t bounds_h;
     
+    uint16_t icon_index;
+    
     struct Image* icon_sprite;
 };
 

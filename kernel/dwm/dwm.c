@@ -48,6 +48,14 @@ struct WindowObject* resizing_window = NULL;
 int resize_offset_x = 0;
 int resize_offset_y = 0;
 
+uint16_t cascade_h = 17;
+uint16_t cascade_w = 20;
+
+uint16_t cascade_x = 0;
+uint16_t cascade_y = 0;
+
+uint16_t cascade_max = 400;
+
 Point mouse_old;
 
 #define MAX_CONTEXT_MENUS 8
@@ -67,6 +75,9 @@ void dwm_initiate(void) {
     window_context.cursor_height  = 0;
     window_context.mouse = mouse_get_position();
     window_context.dirty_count = 0;
+    
+    cascade_x = cascade_w * 3;
+    cascade_y = cascade_h * 3;
     
     context_menu_count = 0;
     
@@ -96,6 +107,8 @@ void dwm_initiate(void) {
     Point display_center;
     display_center.x = display_get_width() / 2;
     display_center.y = display_get_height() / 2;
+    
+    cascade_max = display_center.x;
     
     mouse_set_position(display_center.x, display_center.y);
     mouse_old = (Point){display_get_width(), display_get_height()};
@@ -227,7 +240,7 @@ void dwm_destroy_window(WindowHandle handle) {
     free(window_handle);
 }
 
-struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite) {
+struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite, uint16_t icon_index) {
     struct IconObject* icon = malloc(sizeof(struct IconObject));
     if (icon == NULL) return NULL;
     
@@ -335,6 +348,20 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->w = w_class.width;
     window_object->h = w_class.height;
     
+    // Window cascading
+    if (w_style & DWM_WSTYLE_CASCADE) {
+        window_object->x = cascade_x;
+        window_object->y = cascade_y;
+        
+        cascade_x += cascade_w;
+        cascade_y += cascade_h;
+        
+        if (cascade_x > cascade_max) {
+            cascade_x = cascade_w;
+            cascade_y = cascade_h;
+        }
+    }
+    
     window_object->local_x = 0;
     window_object->local_y = 0;
     int border_offset = 0;
@@ -425,7 +452,27 @@ int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name, const char* p
     if (folder_sprite == NULL) 
         return -1;
     
-    struct IconObject* folder = dwm_create_icon(x, y, folder_sprite->width, folder_sprite->height, folder_sprite);
+    struct IconObject* folder = dwm_create_icon(x, y, folder_sprite->width, folder_sprite->height, folder_sprite, 0);
+    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
+    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
+    
+    strncpy(folder->name, name, name_length);
+    strncpy(folder->path, path, path_length);
+    folder->name[name_length] = '\0';
+    folder->path[path_length] = '\0';
+    
+    dwm_calculate_icon_bounds(folder);
+    
+    dwm_invalidate_region(x + folder->bounds_x, y + folder->bounds_y, folder->bounds_w, folder->bounds_h);
+    return 0;
+}
+
+int8_t dwm_create_mount(uint16_t x, uint16_t y, const char* name, const char* path) {
+    struct Image* mount_sprite = dwm_resource_find("icon_storage");
+    if (mount_sprite == NULL) 
+        return -1;
+    
+    struct IconObject* folder = dwm_create_icon(x, y, mount_sprite->width, mount_sprite->height, mount_sprite, 0);
     size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
     size_t path_length = strnlen(path, DWM_PATH_LENGTH);
     
@@ -445,7 +492,7 @@ int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* pat
     if (file_sprite == NULL) 
         return -1;
     
-    struct IconObject* file = dwm_create_icon(x, y, file_sprite->width, file_sprite->height, file_sprite);
+    struct IconObject* file = dwm_create_icon(x, y, file_sprite->width, file_sprite->height, file_sprite, 1);
     size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
     size_t path_length = strnlen(path, DWM_PATH_LENGTH);
     
@@ -460,7 +507,8 @@ int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* pat
     return 0;
 }
 
-void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y) {
+
+void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const char** options, uint16_t number_of_items) {
     struct WindowObject* w_object = dwm_get_window_by_id((uint32_t)window);
     if (w_object == NULL) 
         return;
@@ -475,9 +523,7 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y) {
     // Set the window who called this context menu
     context_handle = w_object;
     
-    const char* file_menu_options[] = { "Window", "context", "menu", "text" };
-    
-    dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, file_menu_options, 4);
+    dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, options, number_of_items);
 }
 
 WindowHandle dwm_summon_message_box(const char* title, const char* message) {
@@ -519,10 +565,10 @@ WindowHandle dwm_summon_message_box(const char* title, const char* message) {
     return msg_handle->id;
 }
 
-WindowHandle dwm_summon_properties(const char* title, const char* file_path) {
+WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index) {
     WindowClass wclass_props;
-    uint16_t width  = 280;
-    uint16_t height = 350;
+    uint16_t width  = 300;
+    uint16_t height = 360;
     
     // Center the message box on the screen
     wclass_props.width  = width;
@@ -544,28 +590,80 @@ WindowHandle dwm_summon_properties(const char* title, const char* file_path) {
         (WindowProcedure)callback_properties_handler
     );
     
-    // Add file path resource
+    // Instance metadata
+    char* instance = (char*)malloc(16);
+    dwm_window_resource_add(msg_handle->id, "instance", instance);
+    instance[0] = 0;
+    
+    // General - file metadata
+    {
     size_t path_length = strnlen(file_path, DWM_PATH_LENGTH);
+    size_t name_length = strnlen(name, DWM_PATH_LENGTH);
     
-    char* path_str = (char*)malloc(path_length);
-    strncpy(path_str, file_path, path_length);
-    path_str[path_length] = '\0';
+    char* target_path = (char*)malloc(DWM_PATH_LENGTH);
+    char* target_name = (char*)malloc(DWM_PATH_LENGTH);
+    char* target_type = (char*)malloc(DWM_PATH_LENGTH);
     
+    strncpy(target_path, file_path, path_length);
+    target_path[path_length] = '\0';
     
-    uint32_t target = resolve_path_to_address(file_path);
-    char* target_name = (char*)malloc( DWM_FILENAME_LENGTH );
+    strncpy(target_name, name, name_length);
+    target_name[name_length] = '\0';
     
-    //knode_get_name(target, target_name);
+    if (vfs_is_directory(file_path)) {
+        
+        if (vfs_is_directory_mounted(file_path)) {
+            
+            strncpy(target_type, "Storage", DWM_PATH_LENGTH);
+        } else {
+            strncpy(target_type, "Folder", DWM_PATH_LENGTH);
+        }
+        
+    } else {
+        
+        switch (icon_index) {
+        
+        case 1: strncpy(target_type, "File", DWM_PATH_LENGTH); break;
+        case 2: strncpy(target_type, "Document", DWM_PATH_LENGTH); break;
+        case 3: strncpy(target_type, "System", DWM_PATH_LENGTH); break;
+        
+        }
+        
+    }
     
-    //if (target != KNODE_NULL) {
-        //knode_is_valid_address();
-    //}
-    
-    dwm_window_resource_add(msg_handle->id, "path", path_str);
+    dwm_window_resource_add(msg_handle->id, "path", target_path);
     dwm_window_resource_add(msg_handle->id, "name", target_name);
+    dwm_window_resource_add(msg_handle->id, "type", target_type);
+    }
+    
+    // Attributes
+    {
+    char* target_attrib = (char*)malloc(16);
+    memset(target_attrib, ' ', 16);
+    
+    uint32_t address = resolve_path_to_address(file_path);
+    
+    uint8_t permissions;
+    if (fs_check_directory_valid(address) || fs_file_check(address)) {
+        
+        fs_file_get_permissions(address, &permissions);
+        
+    } else {
+        
+        knode_get_permissions(address, &permissions);
+    }
+    
+    if (permissions & VFS_PERMISSION_EXECUTE) target_attrib[0] = 'x';
+    if (permissions & VFS_PERMISSION_READ)    target_attrib[1] = 'r';
+    if (permissions & VFS_PERMISSION_WRITE)   target_attrib[2] = 'w';
+    
+    dwm_window_resource_add(msg_handle->id, "perms", target_attrib);
+    
+    }
+    
+    
     
     dwm_set_focus(msg_handle);
-    
     return msg_handle->id;
 }
 
@@ -688,9 +786,9 @@ void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, u
     draw_rect_gradient_vertical_blend(x, y, w, h, color_high, color_low);
 }
 
-void dwm_draw_sprite(int16_t x, int16_t y, struct Image* sprite_image) {
+void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image) {
     if (event_window == NULL) return;
-    draw_sprite_blend(sprite_image->data, sprite_image->width, sprite_image->height, x, y, 0x00000000);
+    draw_sprite_blend(image->data, image->width, image->height, x, y, 0x00000000);
 }
 
 void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {

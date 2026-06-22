@@ -36,16 +36,17 @@ void dwm_destroy_window(WindowHandle window_handle);
 
 int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name, const char* path);
 int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* path);
+int8_t dwm_create_mount(uint16_t x, uint16_t y, const char* name, const char* path);
 
-struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite);
+struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite, uint16_t icon_index);
 void dwm_destroy_icon(struct IconObject* icon);
 
 // Builtin context functions
 
-void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y);
+void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const char** options, uint16_t number_of_items);
 
 WindowHandle dwm_summon_message_box(const char* title, const char* message);
-WindowHandle dwm_summon_properties(const char* title, const char* file_path);
+WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index);
 
 // Resource management
 
@@ -69,7 +70,7 @@ void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, u
 
 void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
-void dwm_draw_sprite(int16_t x, int16_t y, struct Image* sprite_image);
+void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image);
 
 // Window settings
 
