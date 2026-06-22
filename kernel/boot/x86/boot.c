@@ -201,15 +201,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     print("kernel v0.0.0\n");
     draw_flush_display();
     
-    extern uint16_t cursor_position; 
-    extern uint16_t cursor_line;
-    extern uint8_t console_glyph_width;
-    extern uint8_t console_glyph_height;
-    int cursor_x = (int)(cursor_position * console_glyph_width) - console_glyph_width;
-    int cursor_y = (int)(cursor_line * console_glyph_height) - console_glyph_height;
-    
-    draw_flush_region(cursor_x, cursor_y, console_glyph_width + 32, console_glyph_height + 32);
-    
     
     //
     // Command console boot options
@@ -262,22 +253,40 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     dwm_create_folder(posx, posy, "mount",      "/mnt"); posx += sep;
     dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
     dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
-    dwm_create_folder(posx, posy, "ssd0",       "/mnt/ssd0");
+    dwm_create_mount(posx, posy,  "ssd0",       "/mnt/ssd0");
     
-    File file = vfs_open("/mnt/ssd0/ass", VFS_OPEN_READ | VFS_OPEN_WRITE | VFS_OPEN_CREATE);
     
-    //char buffer[8];
-    //memset(buffer, 'A', sizeof(buffer));
-    //vfs_write(file, buffer, sizeof(buffer));
-    //vfs_close(file);
+    /*
+    {
+    File file = vfs_open("/mnt/ssd0/test", VFS_OPEN_WRITE);
+    if (file == INVALID_FILE_ID) {
+        print("fuck \n");
+    }
     
-    //char buffer[9];
-    //memset(buffer, 'B', sizeof(buffer));
-    //vfs_read(file, buffer, sizeof(buffer));
-    //vfs_close(file);
+    char buffer[] = "wtf";
+    vfs_write(file, buffer, sizeof(buffer));
+    vfs_close(file);
+    }
     
-    //buffer[8] = '\0';
-    //print(buffer);
+    
+    {
+    File file = vfs_open("/mnt/ssd0/test", VFS_OPEN_READ);
+    if (file == INVALID_FILE_ID) {
+        print("fuck \n");
+    }
+    
+    char buffer[16];
+    memset(buffer, ' ', sizeof(buffer));
+    vfs_read(file, buffer, sizeof(buffer));
+    vfs_close(file);
+    
+    buffer[sizeof(buffer)-1] = '\0';
+    print(buffer);
+    
+    }
+    */
+    
+    
     
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
@@ -288,9 +297,15 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // Key combination binding
     
+    // Get rid of those strtok calls...
+    
+    
+    
     while(1) {
         dwm_update();
         kernel_event_update();
+        
+        //dwm_summon_properties("wtf", "test", "/mnt");
         
         
         /*

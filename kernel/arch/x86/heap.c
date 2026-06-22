@@ -1,5 +1,3 @@
-#include <stdint.h>
-#include <stdbool.h>
 #include <kernel/util/string.h>
 #include <kernel/panic/panic_error.h>
 

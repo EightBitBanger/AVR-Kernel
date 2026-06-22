@@ -39,7 +39,7 @@ File vfs_open(const char* path, uint16_t flags) {
     strncpy(path_scratch, path, sizeof(path_scratch) - 1);
     path_scratch[sizeof(path_scratch) - 1] = '\0';
     
-    // We need to keep track of the parent directory in case we need to create the file
+    // Track parent directory context and the filename token
     uint32_t parent_fs_node = 0;
     char last_token[16] = {0};
     
@@ -51,8 +51,9 @@ File vfs_open(const char* path, uint16_t flags) {
             continue;
         }
         
-        // Save the current token as the potential filename if it's the last one
+        // Keep track of the current segment name
         strncpy(last_token, token, sizeof(last_token) - 1);
+        last_token[sizeof(last_token) - 1] = '\0';
         
         if (!in_file_system) {
             if (strcmp(token, "..") == 0) {
@@ -66,7 +67,7 @@ File vfs_open(const char* path, uint16_t flags) {
             }
             
             // Detect mount point boundaries
-            uint8_t k_flags = kmalloc_get_flags(current_knode); // renamed from 'flags' to avoid shadowing parameter
+            uint8_t k_flags = kmalloc_get_flags(current_knode);
             if (k_flags & KMALLOC_FLAG_MOUNT) {
                 uint32_t device_address = knode_get_reference(current_knode, 0);
                 if (device_address != KNODE_NULL && device_address != 0) {
@@ -108,15 +109,13 @@ File vfs_open(const char* path, uint16_t flags) {
                     }
                 }
                 
-                // Track parent context right before hopping into the next child node
                 parent_fs_node = current_fs_node;
                 
                 if (found_ref == 0 || found_ref == FS_NULL) {
-                    // Peek ahead: Is this the final missing file component?
+                    // Peek ahead to check if this is the final missing component
                     char* next_token = strtok(NULL, "/");
                     if (next_token == NULL && in_file_system && (flags & VFS_OPEN_CREATE)) {
-                        // Handle VFS_OPEN_CREATE: missing target file, instantiate it!
-                        // Default size 0, default permissions matching standard user reads/writes
+                        // Handle file creation within physical file system
                         uint8_t default_perms = FS_PERMISSION_READ | FS_PERMISSION_WRITE;
                         uint32_t new_file_address = fs_file_create(last_token, default_perms, 0, parent_fs_node);
                         
@@ -124,7 +123,7 @@ File vfs_open(const char* path, uint16_t flags) {
                             return INVALID_FILE_ID;
                         }
                         current_fs_node = new_file_address;
-                        break; // Successfully broke out, path is now resolved
+                        break; 
                     }
                     
                     return INVALID_FILE_ID; 
@@ -133,6 +132,20 @@ File vfs_open(const char* path, uint16_t flags) {
             }
         }
         token = strtok(NULL, "/");
+    }
+    
+    // Directory check
+    if (in_file_system) {
+        // fs_file_check returns false if target node has directory attributes
+        if (!fs_file_check(current_fs_node)) {
+            return INVALID_FILE_ID;
+        }
+    } else {
+        // Query the heap allocator tags for the raw knode
+        uint8_t k_flags = kmalloc_get_flags(current_knode);
+        if (k_flags & KMALLOC_FLAG_DIRECTORY) {
+            return INVALID_FILE_ID;
+        }
     }
     
     // Allocate our unique File Descriptor structure
@@ -150,24 +163,22 @@ File vfs_open(const char* path, uint16_t flags) {
     
     // If it's a file system node, bind and open the concrete backend handler
     if (desc->in_file_system) {
-        // Map VFS flags directly down into your physical FS implementation's modes
         uint8_t target_mode = 0;
         if (flags & VFS_OPEN_READ)   target_mode |= FS_FILE_MODE_READ;
         if (flags & VFS_OPEN_WRITE)  target_mode |= FS_FILE_MODE_WRITE;
-        if (flags & VFS_OPEN_APPEND) target_mode |= FS_FILE_MODE_APPEND;
         
-        // Default catch-all if zero flags are specified 
+        // Fallback baseline mode if zero options specified
         if (target_mode == 0) {
             target_mode = FS_FILE_MODE_READ;
         }
-
+        
         if (!fs_file_open(&desc->handle, desc->address, target_mode)) {
             free(desc);
             return INVALID_FILE_ID;
         }
     }
     
-    // Register with the linked list tracker
+    // Register with the link list tracker
     if (!list_append(&open_files_head, &open_files_tail, desc)) {
         if (desc->in_file_system) {
             fs_file_close(&desc->handle);
@@ -216,6 +227,110 @@ void vfs_write(File file, const void* buffer, uint32_t size) {
         kmem_write(desc->address + desc->offset, buffer, size);
         desc->offset += size;
     }
+}
+
+bool vfs_set_permissions(File file, uint8_t perm) {
+    OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
+    if (!desc) return false;
+    
+    uint8_t permissions = 0;
+    if (desc->in_file_system) {
+        if (perm & VFS_PERMISSION_EXECUTE)  permissions |= FS_PERMISSION_EXECUTE;
+        if (perm & VFS_PERMISSION_READ)     permissions |= FS_PERMISSION_READ;
+        if (perm & VFS_PERMISSION_WRITE)    permissions |= FS_PERMISSION_WRITE;
+        
+        fs_file_set_permissions(desc->address, permissions);
+    } else {
+        if (perm & VFS_PERMISSION_EXECUTE)  permissions |= KMALLOC_PERMISSION_EXECUTABLE;
+        if (perm & VFS_PERMISSION_READ)     permissions |= KMALLOC_PERMISSION_READ;
+        if (perm & VFS_PERMISSION_WRITE)    permissions |= KMALLOC_PERMISSION_WRITE;
+        
+        kmalloc_set_permissions(desc->address, permissions); 
+    }
+    
+    return true; 
+}
+
+bool vfs_get_permissions(File file, uint8_t* perm) {
+    OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
+    if (!desc) return false;
+    
+    *perm = 0;
+    uint8_t permissions=0;
+    if (desc->in_file_system) {
+        fs_file_get_permissions(desc->address, &permissions);
+        
+        *perm = 0;
+        if (permissions & FS_PERMISSION_EXECUTE) *perm |= VFS_PERMISSION_EXECUTE;
+        if (permissions & FS_PERMISSION_READ)    *perm |= VFS_PERMISSION_READ;
+        if (permissions & FS_PERMISSION_WRITE)   *perm |= VFS_PERMISSION_WRITE;
+        
+    } else {
+        permissions = kmalloc_get_permissions(desc->address);
+        
+        if (permissions & KMALLOC_PERMISSION_EXECUTABLE) *perm |= VFS_PERMISSION_EXECUTE;
+        if (permissions & KMALLOC_PERMISSION_READ)       *perm |= VFS_PERMISSION_READ;
+        if (permissions & KMALLOC_PERMISSION_WRITE)      *perm |= VFS_PERMISSION_WRITE;
+        
+    }
+    
+    return true;
+}
+
+bool vfs_is_directory(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == KNODE_NULL || address == FS_NULL) {
+        return false;
+    }
+    
+    // Check if it's a raw virtual memory node (Knode space)
+    if (kmalloc_is_valid(address)) {
+        uint8_t k_flags = kmalloc_get_flags(address);
+        // It IS a directory if either the directory flag OR mount flag is set
+        if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) {
+            return true;
+        }
+    }
+    
+    // Check if it's an underlying physical file system node
+    if (fs_check_directory_valid(address)) {
+        return true;
+    }
+    
+    return false;
+}
+
+bool vfs_is_directory_mounted(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == KNODE_NULL || address == FS_NULL) 
+        return false;
+    
+    // The path pointed to a raw knode mount point that wasn't fully entered
+    if (kmalloc_is_valid(address)) {
+        uint8_t k_flags = kmalloc_get_flags(address);
+        if (k_flags & KMALLOC_FLAG_MOUNT) {
+            return true;
+        }
+    }
+    
+    // The path pointed to a resolved filesystem node.
+    // Check if this address matches the root directory of its device partition.
+    if (fs_check_directory_valid(address)) {
+        // If the filesystem directory's parent goes above the root, 
+        // or if it matches its partition block root directory:
+        uint32_t parent = fs_directory_get_parent(address);
+        if (parent == address || parent == FS_NULL) { 
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 uint32_t resolve_path_to_address(const char* path) {

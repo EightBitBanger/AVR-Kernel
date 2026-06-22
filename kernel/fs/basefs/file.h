@@ -10,6 +10,8 @@ typedef struct {
     uint8_t  is_open;
 } FileHandle;
 
+bool fs_file_check(uint32_t address);
+
 uint32_t fs_file_create(const char* name, uint8_t permissions, uint32_t size, uint32_t parent_directory);
 void fs_file_delete(uint32_t address);
 

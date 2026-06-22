@@ -17,7 +17,7 @@ bool fs_file_check(uint32_t address) {
     
     fs_mem_read(address, &file, sizeof(struct FSFileHeader));
     
-    if (file.block.attributes & FS_ATTRIBUTE_DIRECTORY)
+    if (file.block.attributes & FS_ATTRIBUTE_DIRECTORY) 
         return false;
     
     return true;

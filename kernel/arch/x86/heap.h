@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define KMALLOC_NULL         0xFFFFFFFF
 
@@ -60,6 +61,8 @@ void kmalloc_bitmap_read(void);
 
 uint32_t heap_get_block_size(void);
 uint32_t heap_get_total_memory(void);
+
+bool kmalloc_is_valid(uint32_t address);
 
 void heap_set_base_address(uint32_t base);
 uint32_t heap_get_base_address(void);

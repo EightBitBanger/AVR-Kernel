@@ -218,6 +218,9 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             const char* type_name = pci_get_class_name(class_code);
             uint32_t type_knode = create_knode(type_name, device_knode);
             
+            knode_set_permissions(device_knode, KMALLOC_PERMISSION_READ);
+            knode_set_permissions(type_knode, KMALLOC_PERMISSION_READ);
+            
 #ifdef PCI_DEBUG_HARDWARE_DUMP
             
             char base_address[16];
@@ -301,30 +304,39 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             format_hex32_string(value_buffer, (uint32_t)base_virtual_address);
             uint32_t device_bar = create_device(value_buffer);
             knode_add_reference(prop_dir, device_bar);
+            knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+            knode_set_permissions(device_bar, KMALLOC_PERMISSION_READ);
             
             prop_dir = create_knode("vendor", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_hex16_string(value_buffer, v_id);
             uint32_t device_vendor = create_device(value_buffer);
             knode_add_reference(prop_dir, device_vendor);
+            knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+            knode_set_permissions(device_vendor, KMALLOC_PERMISSION_READ);
             
             prop_dir = create_knode("device", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_hex16_string(value_buffer, d_id);
             uint32_t device_dev = create_device(value_buffer);
             knode_add_reference(prop_dir, device_dev);
+            knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+            knode_set_permissions(device_dev, KMALLOC_PERMISSION_READ);
             
             prop_dir = create_knode("class", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_dec8_string(value_buffer, class_code);
             uint32_t device_class = create_device(value_buffer);
             knode_add_reference(prop_dir, device_class);
+            knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+            knode_set_permissions(device_class, KMALLOC_PERMISSION_READ);
             
             prop_dir = create_knode("subclass", type_knode);
             memset(value_buffer, 0, sizeof(value_buffer));
             format_dec8_string(value_buffer, subclass);
             uint32_t device_subclass = create_device(value_buffer);
             knode_add_reference(prop_dir, device_subclass);
+            knode_set_permissions(device_subclass, KMALLOC_PERMISSION_READ);
             
             // Subsystem Properties (Only if valid/assigned)
             if (sub_v_id != 0x0000 && sub_v_id != 0xFFFF) {
@@ -333,11 +345,16 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                 format_hex16_string(value_buffer, sub_v_id);
                 uint32_t sub_vendor = create_device(value_buffer);
                 knode_add_reference(prop_dir, sub_vendor);
+                knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+                knode_set_permissions(sub_vendor, KMALLOC_PERMISSION_READ);
                 
                 prop_dir = create_knode("sub_id", type_knode);
                 format_hex16_string(value_buffer, sub_id);
                 uint32_t sub_id_address = create_device(value_buffer);
                 knode_add_reference(prop_dir, sub_id_address);
+                knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+                knode_set_permissions(sub_id_address, KMALLOC_PERMISSION_READ);
+                
             }
             
             // Interrupt Pin & Line Configuration Context
@@ -346,12 +363,17 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                 format_dec8_string(value_buffer, irq_pin);
                 uint32_t device_address = create_device(value_buffer);
                 knode_add_reference(prop_dir, device_address);
+                knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+                knode_set_permissions(device_address, KMALLOC_PERMISSION_READ);
                 
                 if (irq_line != 0xFF) {
                     prop_dir = create_knode("irq", type_knode);
                     format_dec8_string(value_buffer, irq_line);
                     uint32_t device_address = create_device(value_buffer);
                     knode_add_reference(prop_dir, device_address);
+                    knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
+                    knode_set_permissions(device_address, KMALLOC_PERMISSION_READ);
+                    
                 }
             }
             
@@ -365,6 +387,8 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                 format_bus_string(sub_bus_name, secondary_bus);
                 
                 uint32_t secondary_bus_directory = create_knode(sub_bus_name, type_knode);
+                
+                knode_set_permissions(secondary_bus_directory, KMALLOC_PERMISSION_READ);
                 
                 pci_scan_bus(secondary_bus, secondary_bus_directory, mnt_directory);
             }
@@ -380,6 +404,9 @@ void pci_init(void) {
     uint32_t pci_directory = create_knode("pci", dev_directory);
     
     uint32_t bus0_directory = create_knode("bus0", pci_directory);
+    
+    knode_set_permissions(pci_directory, KMALLOC_PERMISSION_READ);
+    knode_set_permissions(bus0_directory, KMALLOC_PERMISSION_READ);
     
     pci_scan_bus(0, bus0_directory, mnt_directory);
 }

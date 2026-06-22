@@ -27,6 +27,10 @@ void kernel_init(void) {
     uint32_t dev  = create_knode("dev", root_node);
     uint32_t mnt  = create_knode("mnt", root_node);
     
+    knode_set_permissions(proc, KMALLOC_PERMISSION_READ);
+    knode_set_permissions(dev,  KMALLOC_PERMISSION_READ);
+    knode_set_permissions(mnt,  KMALLOC_PERMISSION_READ);
+    
     hardware_identify_devices(dev, mnt, dev);
     
     kernel_set_local_paths(&fs_paths);
