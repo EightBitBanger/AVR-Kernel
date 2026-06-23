@@ -53,11 +53,11 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
         draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
         draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
         
-        event_window = window;
+        context.event_window = window;
         if (window->event_callback != NULL) {
             window->event_callback(window->id, DWM_EVENT_REDRAW, 0, 0);
         }
-        event_window = NULL;
+        context.event_window = NULL;
         
         // Restore layout state safely
         draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
@@ -94,11 +94,11 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
             draw_set_clip_rect(0, 0, window->buffer_w, window->buffer_h);
             draw_set_buffer(window->frame_buffer, window->buffer_w, window->buffer_h);
             
-            event_window = window;
+            context.event_window = window;
             if (window->event_callback != NULL) {
                 window->event_callback(window->id, DWM_EVENT_REDRAW, 0, 0);
             }
-            event_window = NULL;
+            context.event_window = NULL;
             
             draw_set_clip_rect(0, 0, display_get_width(), display_get_height());
             draw_set_buffer_default();
@@ -162,25 +162,25 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     // Clear out background pixels for all localized dirty regions
     for (int i = 0; i < ctx->dirty_count; i++) {
         struct Rect r = ctx->dirty_regions[i];
-        draw_rect_filled(r.x, r.y, r.w, r.h, bg_color);
+        draw_rect_filled(r.x, r.y, r.w, r.h, theme.bg_color);
     }
     
     uint16_t bar_x = 0;
-    uint16_t bar_y = display_get_height() - taskbar_height;
+    uint16_t bar_y = display_get_height() - taskbar.height;
     uint16_t bar_w = display_get_width();
-    uint16_t bar_h = taskbar_height;
+    uint16_t bar_h = taskbar.height;
     
     for (int i = 0; i < ctx->dirty_count; i++) {
         struct Rect r = ctx->dirty_regions[i];
         if (rects_intersect(r.x, r.y, r.w, r.h, bar_x, bar_y, bar_w, bar_h)) {
-            draw_rect_filled(bar_x, bar_y, bar_w, bar_h, bg_color);
+            draw_rect_filled(bar_x, bar_y, bar_w, bar_h, theme.bg_color);
             break;
         }
     }
     
     // Draw desktop icons
     
-    struct list_node* current_node = icon_head;
+    struct list_node* current_node = workspace.icon_head;
     while (current_node != NULL) {
         struct IconObject* current_icon = (struct IconObject*)current_node->data;
         
@@ -215,7 +215,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     }
     
     // Sync positions before drawing
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
         struct WindowObject* window = (struct WindowObject*)node->data;
         if (window->parent == NULL) {
             dwm_sync_child_positions(window);
@@ -224,7 +224,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     
     // Draw windows
     
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
         struct WindowObject* window = (struct WindowObject*)node->data;
         
         // Only process root windows that are NOT topmost and NOT children
@@ -236,7 +236,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     
     // Draw top most windows
     
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
         struct WindowObject* window = (struct WindowObject*)node->data;
         
         // Only process root windows that ARE topmost and NOT children
@@ -249,8 +249,8 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     
     // Context menus
     
-    for (uint8_t m = 0; m < context_menu_count; m++) {
-        struct ContextMenu* menu = &context_menus[m];
+    for (uint8_t m = 0; m < ctxmenu.menu_count; m++) {
+        struct ContextMenu* menu = &ctxmenu.menus[m];
         if (!menu->visible) continue;
         
         uint16_t menu_height = menu->item_height * menu->item_count;
@@ -281,7 +281,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     }
     
     // Redraw cursor sprite
-    draw_sprite_blend(current_cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
+    draw_sprite_blend(images.current_cursor.data, ctx->cursor_width, ctx->cursor_height, ctx->mouse.x, ctx->mouse.y, 0xFF000000);
 }
 
 void dwm_draw_window(struct WindowObject* window_handle) {
@@ -293,7 +293,7 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     int32_t ww = window_handle->w;
     int32_t wh = window_handle->h;
     
-    struct WindowObject* focused_window = (window_tail != NULL) ? (struct WindowObject*)window_tail->data : NULL;
+    struct WindowObject* focused_window = (workspace.window_tail != NULL) ? (struct WindowObject*)workspace.window_tail->data : NULL;
     
     uint32_t current_title_color_low = (window_handle == focused_window) ? window_handle->title_color_low : window_handle->inactive_color_low;
     uint32_t current_title_color_high = (window_handle == focused_window) ? window_handle->title_color_high : window_handle->inactive_color_high;
@@ -329,4 +329,48 @@ void dwm_draw_window(struct WindowObject* window_handle) {
         
         draw_sprite_blend(btn->sprite.data, btn->sprite.width, btn->sprite.height, btn_abs_x, btn_abs_y, 0xFF000000);
     }
+}
+
+
+//
+// Low level drawing
+//
+
+extern const uint8_t char_rom[];
+
+void dwm_draw_line(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
+    draw_line(x, y, x + w, y + h, color);
+}
+
+void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
+    if (context.event_window == NULL) return;
+    size_t length = strlen(text);
+    for (unsigned int i=0; i < length; i++) 
+        draw_glyph(char_rom, text[i], 6, 8, x + (i * 6), y, color, 0xFF000000, 0xFF000000);
+}
+
+void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
+    if (context.event_window == NULL) return;
+    draw_rect(x, y, w, h, color);
+}
+
+void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
+    if (context.event_window == NULL) return;
+    draw_rect_filled(x, y, w, h, color);
+}
+
+void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
+    if (context.event_window == NULL) return;
+    draw_rect_gradient_vertical_blend(x, y, w, h, color_high, color_low);
+}
+
+void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image) {
+    if (context.event_window == NULL) return;
+    draw_sprite_blend(image->data, image->width, image->height, x, y, 0x00000000);
+}
+
+void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {
+    images.current_cursor.data = sprite;
+    images.current_cursor.width = width;
+    images.current_cursor.height = height;
 }

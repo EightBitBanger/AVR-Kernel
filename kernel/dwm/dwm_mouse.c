@@ -20,15 +20,14 @@ void dwm_update_mouse(struct WindowContext* ctx) {
     // Check for hover states first (always runs regardless of clicks)
     dwm_handle_context_menu_hover(ctx);
 
-    bool is_new_left_click = ctx->left_button_pressed && !old_left_button_pressed;
-    bool is_new_right_click = ctx->right_button_pressed && !old_right_button_pressed;
+    bool is_new_left_click = ctx->left_button_pressed && !input.last_left_button_pressed;
+    bool is_new_right_click = ctx->right_button_pressed && !input.last_right_button_pressed;
     
     if (!is_new_left_click && !is_new_right_click) return;
     
     // Check context menu FIRST before windows grab focus
-    if (dwm_handle_context_menu_clicks(ctx, is_new_left_click, is_new_right_click)) {
+    if (dwm_handle_context_menu_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
-    }
     
     if (dwm_handle_window_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
@@ -38,7 +37,7 @@ void dwm_update_mouse(struct WindowContext* ctx) {
 
 bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
     // Kick off the recursive search starting from the top-most desktop window
-    struct WindowObject* clicked_win = dwm_find_clicked_window(window_tail, ctx->mouse.x, ctx->mouse.y);
+    struct WindowObject* clicked_win = dwm_find_clicked_window(workspace.window_tail, ctx->mouse.x, ctx->mouse.y);
     
     if (clicked_win == NULL) return false;
     
@@ -53,18 +52,18 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
             (current_time - last_window_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
             
             // Mark a flag on the window context or environment that a double click occurred
-            window_context.is_double_click = true; 
+            context.window_context.is_double_click = true; 
             
             // Reset tracking so a third click isn't automatically a double click
             last_clicked_window = NULL;
             last_window_click_time = 0;
         } else {
-            window_context.is_double_click = false;
+            context.window_context.is_double_click = false;
             last_clicked_window = clicked_win;
             last_window_click_time = current_time;
         }
     } else {
-        window_context.is_double_click = false;
+        context.window_context.is_double_click = false;
     }
     
     // Shift focus/z-order tracking to its top-level root parent
@@ -73,7 +72,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         root_win = root_win->parent;
     }
     
-    struct WindowObject* old_focused = (window_tail != NULL) ? (struct WindowObject*)window_tail->data : NULL;
+    struct WindowObject* old_focused = (workspace.window_tail != NULL) ? (struct WindowObject*)workspace.window_tail->data : NULL;
     
     if (old_focused != root_win) {
         dwm_set_focus(root_win);
@@ -115,10 +114,10 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
             ctx->mouse.y >= btn_min_y && ctx->mouse.y <= btn_max_y) {
             
             if (btn->event == DWM_EVENT_RESIZE) {
-                resizing_window = clicked_win;
+                dragdrop.dragged_resizing = clicked_win;
                 // Calculate offset between the cursor and the button
-                resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
-                resize_offset_y = (clicked_win->y + clicked_win->h) - ctx->mouse.y;
+                dragdrop.resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
+                dragdrop.resize_offset_y = (clicked_win->y + clicked_win->h) - ctx->mouse.y;
                 return true;
             } else {
                 clicked_win->events |= btn->event;
@@ -142,11 +141,11 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && 
         ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
         
-        drag_offset_x = ctx->mouse.x - clicked_win->x;
-        drag_offset_y = ctx->mouse.y - clicked_win->y;
+        dragdrop.drag_offset_x = ctx->mouse.x - clicked_win->x;
+        dragdrop.drag_offset_y = ctx->mouse.y - clicked_win->y;
         
         if (is_new_left_click) 
-            dragged_window = clicked_win;
+            dragdrop.dragged_window = clicked_win;
     }
     
     return true; 
@@ -157,7 +156,7 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     
     // Get the clicked icon
     
-    for (struct list_node* node = icon_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.icon_head; node != NULL; node = node->next) {
         struct IconObject* icon = (struct IconObject*)node->data;
         int icon_min_x = icon->x + icon->bounds_x;
         int icon_max_x = icon->x + icon->bounds_x + icon->bounds_w;
@@ -173,63 +172,58 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     
     if (clicked_icon != NULL) {
         
-        focused_icon = clicked_icon;
+        context.focused_icon = clicked_icon;
         
         if (is_new_left_click) {
             
             // Double click timer
             uint32_t current_time = timer_get_ms();
             
-            if (clicked_icon == last_clicked_icon && (current_time - last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
+            if (clicked_icon == context.last_focused_icon && (current_time - context.last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
                 
-                kernel_event_send(KEVENT_EXECUTE, "explorer", focused_icon->path);
+                kernel_event_send(KEVENT_EXECUTE, "explorer", context.focused_icon->path);
                 
-                focused_icon = NULL;
-                last_clicked_icon = NULL;
-                last_icon_click_time = 0;
+                context.focused_icon = NULL;
+                context.last_focused_icon = NULL;
+                context.last_icon_click_time = 0;
                 
             } else {
-                dragged_icon = clicked_icon;
+                dragdrop.dragged_icon = clicked_icon;
                 
-                icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
-                icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
-                last_clicked_icon = clicked_icon;
-                last_icon_click_time = current_time;
+                dragdrop.icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
+                dragdrop.icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
+                context.last_focused_icon = clicked_icon;
+                context.last_icon_click_time = current_time;
             }
         }
         else if (is_new_right_click) {
             
             // Icon right click context menu
             
-            uint16_t number_of_items = 4;
-            const char* file_menu_options[] = { "Open", "Copy", "Delete", "Properties" };
-            
-            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_ICON, file_menu_options, number_of_items);
+            dwm_icon_right_click(ctx);
         }
     } else {
         
         // Desktop click
         
         if (is_new_left_click) {
-            last_clicked_icon = NULL;
+            context.last_focused_icon = NULL;
         } else if (is_new_right_click) {
             
             // Desktop right click context menu
             
-            uint16_t number_of_items = 2;
-            const char* desktop_menu_options[] = { "New", "Properties" };
+            dwm_desktop_right_click(ctx);
             
-            dwm_create_context_menu(ctx->mouse.x, ctx->mouse.y, DWM_CONTEXT_MENU_DESKTOP, desktop_menu_options, number_of_items);
         }
     }
 }
 
 bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
-    if (context_menu_count == 0) return false;
+    if (ctxmenu.menu_count == 0) return false;
     
     // Check backwards from the top-most submenu down to root menu
-    for (int m = (int)context_menu_count - 1; m >= 0; m--) {
-        struct ContextMenu* menu = &context_menus[m];
+    for (int m = (int)ctxmenu.menu_count - 1; m >= 0; m--) {
+        struct ContextMenu* menu = &ctxmenu.menus[m];
         
         if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&
             ctx->mouse.y >= menu->y && ctx->mouse.y <= (menu->y + menu->h)) {
@@ -248,29 +242,29 @@ bool dwm_handle_context_menu_clicks(struct WindowContext* ctx, bool is_new_left_
             }
             
             // If an option was processed (and it didn't generate a new submenu layer), collapse everything
-            for (int i = 0; i < context_menu_count; i++) {
-                context_menus[i].visible = false;
-                dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+            for (int i = 0; i < ctxmenu.menu_count; i++) {
+                ctxmenu.menus[i].visible = false;
+                dwm_invalidate_region(ctxmenu.menus[i].x, ctxmenu.menus[i].y, ctxmenu.menus[i].w, ctxmenu.menus[i].h);
             }
-            context_menu_count = 0;
+            ctxmenu.menu_count = 0;
             return true;
         }
     }
     
     // Clicked outside all currently open context menus - dismiss everything
-    for (int i = 0; i < context_menu_count; i++) {
-        context_menus[i].visible = false;
-        dwm_invalidate_region(context_menus[i].x, context_menus[i].y, context_menus[i].w, context_menus[i].h);
+    for (int i = 0; i < ctxmenu.menu_count; i++) {
+        ctxmenu.menus[i].visible = false;
+        dwm_invalidate_region(ctxmenu.menus[i].x, ctxmenu.menus[i].y, ctxmenu.menus[i].w, ctxmenu.menus[i].h);
     }
-    context_menu_count = 0;
+    ctxmenu.menu_count = 0;
     return false;
 }
 
 void dwm_handle_context_menu_hover(struct WindowContext* ctx) {
-    if (context_menu_count == 0) return;
+    if (ctxmenu.menu_count == 0) return;
     
-    for (int m = 0; m < context_menu_count; m++) {
-        struct ContextMenu* menu = &context_menus[m];
+    for (int m = 0; m < ctxmenu.menu_count; m++) {
+        struct ContextMenu* menu = &ctxmenu.menus[m];
         if (!menu->visible) continue;
         
         if (ctx->mouse.x >= menu->x && ctx->mouse.x <= (menu->x + menu->w) &&

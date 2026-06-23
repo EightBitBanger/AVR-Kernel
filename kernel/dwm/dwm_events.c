@@ -5,8 +5,8 @@ void dwm_process_window_events(struct WindowObject* window) {
     if (window == NULL) return;
     
     // Keep global mouse coordinates for the hit-test bounds check
-    int mouse_world_x = window_context.mouse.x;
-    int mouse_world_y = window_context.mouse.y;
+    int mouse_world_x = context.window_context.mouse.x;
+    int mouse_world_y = context.window_context.mouse.y;
     
     int win_x = window->x;
     int win_y = window->y;
@@ -51,11 +51,11 @@ void dwm_process_window_events(struct WindowObject* window) {
     
     uint32_t mouse_data = ((uint32_t)(uint16_t)my << 16) | ((uint32_t)(uint16_t)mx & 0xFFFF);
     int32_t mouse_state = 0;
-    if (window_context.left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
-    if (window_context.right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
+    if (context.window_context.left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
+    if (context.window_context.right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
     
     // On double click event (UPDATED)
-    if (window_context.is_double_click) {
+    if (context.window_context.is_double_click) {
         mouse_state |= DWM_STATE_MOUSE_DOUBLE_CLK;
     }
     
@@ -74,39 +74,21 @@ void dwm_process_window_events(struct WindowObject* window) {
 
 void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) {
     
-    switch (context_menu_directive) {
+    switch (ctxmenu.menu_directive) {
         
-    case DWM_CONTEXT_MENU_USER:
+    case DWM_CONTEXT_MENU_USER: // Inform the user of the selected context menu item
         
-        // Inform the user of the selected context menu item
-        context_handle->event_callback(context_handle->id, DWM_EVENT_CONTEXT_MENU, index, 0);
-        
+        ctxmenu.handle->event_callback(ctxmenu.handle->id, DWM_EVENT_CONTEXT_MENU, index, 0);
         break;
         
-    case DWM_CONTEXT_MENU_DESKTOP:
-        switch (index) {
-        case 0:
-            
-            //dwm_create_folder(ctx->mouse.x, ctx->mouse.y, "system");
-            
-            dwm_summon_message_box("Message", "Desktop hit");
-            
-            break;
-        }
+    case DWM_CONTEXT_MENU_DESKTOP: // Desktop context menu callback
         
+        dwm_desktop_context_callback(ctx, index);
         break;
         
-    case DWM_CONTEXT_MENU_ICON:
+    case DWM_CONTEXT_MENU_ICON: // Icon context menu callback
         
-        switch (index) {
-        case 3:
-            
-            if (focused_icon != NULL) 
-                dwm_summon_properties("Properties", focused_icon->name, focused_icon->path, focused_icon->icon_index);
-            
-            break;
-        }
-        
+        dwm_icon_context_callback(ctx, index);
         break;
     }
     

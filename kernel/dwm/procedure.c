@@ -12,7 +12,7 @@ void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam
         break;
         
     case DWM_EVENT_REDRAW:
-        dwm_draw_rect_filled_gradient(0, -3, display_get_width(), taskbar_height + 7, 0xFF000000, 0xFF00C000);
+        dwm_draw_rect_filled_gradient(0, -3, display_get_width(), taskbar.height + 7, 0xFF000000, 0xFF00C000);
         break;
     }
 }

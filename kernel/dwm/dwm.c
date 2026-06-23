@@ -12,108 +12,121 @@
 #include <kernel/util/list.h>
 #include <kernel/util/map.h>
 
-extern const uint8_t char_rom[];
-uint32_t bg_color = 0xFF0E0E1A;
+struct DWMTheme theme;
 
-struct Image current_cursor;
-
-struct list_node* window_head = NULL;
-struct list_node* window_tail = NULL;
-
-struct list_node* icon_head = NULL;
-struct list_node* icon_tail = NULL;
-
-struct map_node* resource_head = NULL;
-struct map_node* resource_tail = NULL;
-
-struct WindowObject* dragged_window = NULL;
-int drag_offset_x = 0;
-int drag_offset_y = 0;
-bool old_left_button_pressed = false;
-bool old_right_button_pressed = false;
-
-struct WindowObject* event_window = NULL;
-uint32_t next_window_id;
-
-struct IconObject* dragged_icon = NULL;
-int icon_drag_offset_x = 0;
-int icon_drag_offset_y = 0;
-
-struct IconObject* focused_icon = NULL;
-
-struct IconObject* last_clicked_icon = NULL;
-uint32_t last_icon_click_time = 0;
-
-struct WindowObject* resizing_window = NULL;
-int resize_offset_x = 0;
-int resize_offset_y = 0;
-
-uint16_t cascade_h = 17;
-uint16_t cascade_w = 20;
-
-uint16_t cascade_x = 0;
-uint16_t cascade_y = 0;
-
-uint16_t cascade_max = 400;
-
-Point mouse_old;
-
-#define MAX_CONTEXT_MENUS 8
-struct ContextMenu context_menus[MAX_CONTEXT_MENUS];
-uint8_t context_menu_count = 0;
-uint16_t context_menu_directive = 0;
-struct WindowObject* context_handle;
-
-struct WindowContext window_context;
-
-WindowHandle w_taskbar;
-uint16_t taskbar_height = 28;
-
+struct DWMWorkspace    workspace;
+struct DWMContext      context;
+struct DWMTaskbar      taskbar;
+struct DWMDragDrop     dragdrop;
+struct DWMInput        input;
+struct DWMContextMenu  ctxmenu;
+struct DWMImages       images;
+struct DWMCascade      cascade;
 
 void dwm_initiate(void) {
-    window_context.cursor_width   = 0;
-    window_context.cursor_height  = 0;
-    window_context.mouse = mouse_get_position();
-    window_context.dirty_count = 0;
-    
-    cascade_x = cascade_w * 3;
-    cascade_y = cascade_h * 3;
-    
-    context_menu_count = 0;
     
     // Setup global default look for the root menu container slot
     for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
-        context_menus[i].visible = false;
+        ctxmenu.menus[i].visible = false;
         
-        context_menus[i].x = 0;
-        context_menus[i].y = 0;
-        context_menus[i].w = 0;
-        context_menus[i].h = 0;
+        ctxmenu.menus[i].x = 0;
+        ctxmenu.menus[i].y = 0;
+        ctxmenu.menus[i].w = 0;
+        ctxmenu.menus[i].h = 0;
         
-        context_menus[i].color_bg         = 0x8F222222;
-        context_menus[i].color_border     = 0x8F444444;
-        context_menus[i].color_separator  = 0x8F111111;
-        context_menus[i].color_highlight  = 0x8F777777;
-        context_menus[i].color_text       = 0x8FE0E0E0;
-        context_menus[i].hovered_item     = -1;
-        context_menus[i].item_height      = 0;
-        context_menus[i].item_count       = 0;
+        ctxmenu.menus[i].color_bg         = 0x8F222222;
+        ctxmenu.menus[i].color_border     = 0x8F444444;
+        ctxmenu.menus[i].color_separator  = 0x8F111111;
+        ctxmenu.menus[i].color_highlight  = 0x8F777777;
+        ctxmenu.menus[i].color_text       = 0x8FE0E0E0;
+        ctxmenu.menus[i].hovered_item     = -1;
+        ctxmenu.menus[i].item_height      = 0;
+        ctxmenu.menus[i].item_count       = 0;
     }
     
-    next_window_id = 0;
-    window_head = NULL;
-    window_tail = NULL;
+    // Theme
+    
+    theme.bg_color = 0xFF0E0E1A;
+    
+    // Workspace
+    
+    workspace.next_window_id = 0;
+    workspace.window_head = NULL;
+    workspace.window_tail = NULL;
+    
+    // Context
+    context.event_window = NULL;
+    context.focused_icon = NULL;
+    context.last_focused_icon = NULL;
+    
+    context.last_icon_click_time = 0;
+    
+    memset(&context.window_context, 0x00, sizeof(struct WindowContext));
+    context.window_context.cursor_width = 0;
+    context.window_context.cursor_height  = 0;
+    context.window_context.mouse = mouse_get_position();
+    context.window_context.dirty_count = 0;
+    
+    // Taskbar
+    taskbar.height = 28;
+    
+    WindowClass wclass_taskbar;
+    wclass_taskbar.x = 0;
+    wclass_taskbar.y = display_get_height() - taskbar.height;
+    wclass_taskbar.width  = display_get_width();
+    wclass_taskbar.height = taskbar.height;
+    taskbar.window = dwm_create_window(wclass_taskbar, DWM_WSTYLE_TOPMOST | DWM_WSTYLE_NOBORDERS | DWM_WSTYLE_NOCLOSEBOX, callback_taskbar_handler);
+    
+    // Drag and drop
+    
+    dragdrop.dragged_window = NULL;
+    dragdrop.drag_offset_x = 0;
+    dragdrop.drag_offset_y = 0;
+    
+    dragdrop.dragged_icon = NULL;
+    dragdrop.icon_drag_offset_x = 0;
+    dragdrop.icon_drag_offset_y = 0;
+    
+    dragdrop.dragged_resizing = NULL;
+    dragdrop.resize_offset_x = 0;
+    dragdrop.resize_offset_y = 0;
+    
+    // Input
+    
+    input.mouse_last.x = 0;
+    input.mouse_last.y = 0;
+    
+    input.last_left_button_pressed = false;
+    input.last_right_button_pressed = false;
+    
+    // Context menu
+    
+    ctxmenu.menu_count = 0;
+    ctxmenu.menu_directive = 0;
+    ctxmenu.handle = NULL;
+    
+    // Cascade
+    uint16_t cascade_mul = 3;
+    
+    cascade.h = 17;
+    cascade.w = 20;
+    cascade.x = cascade.h * cascade_mul;
+    cascade.y = cascade.w * cascade_mul;
+    cascade.max = 400;
+    
+    // Display
     
     Point display_center;
     display_center.x = display_get_width() / 2;
     display_center.y = display_get_height() / 2;
     
-    cascade_max = display_center.x;
+    // Mouse
     
     mouse_set_position(display_center.x, display_center.y);
-    mouse_old = (Point){display_get_width(), display_get_height()};
+    input.mouse_last = (Point){display_get_width(), display_get_height()};
     
     // Load resources
+    
     // Icons
     dwm_resource_sprite_load("icon_folder",    &rc_icon_folder);
     dwm_resource_sprite_load("icon_file",      &rc_icon_file);
@@ -135,22 +148,13 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("cur_pointer", &rc_cursor_pointer);
     dwm_resource_sprite_load("cur_angle",   &rc_cursor_angle);
     
-    // Taskbar
-    WindowClass wclass_taskbar;
-    wclass_taskbar.x = 0;
-    wclass_taskbar.y = display_get_height() - taskbar_height;
-    wclass_taskbar.width  = display_get_width();
-    wclass_taskbar.height = taskbar_height;
-    
-    w_taskbar = dwm_create_window(wclass_taskbar, DWM_WSTYLE_TOPMOST | DWM_WSTYLE_NOBORDERS | DWM_WSTYLE_NOCLOSEBOX, callback_taskbar_handler);
-    
     // Default mouse cursor
     struct Image* def_cursor = dwm_resource_find("cur_pointer"); 
     if (def_cursor) {
         dwm_set_cursor(def_cursor->data, def_cursor->width, def_cursor->height);
     }
     
-    draw_rect_filled(0, 0, display_get_width(), display_get_height(), bg_color);
+    draw_rect_filled(0, 0, display_get_width(), display_get_height(), theme.bg_color);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
 }
 
@@ -163,7 +167,7 @@ void dwm_destroy_window(WindowHandle handle) {
     if (handle == 0) return;
     
     struct WindowObject* window_handle = NULL;
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
         struct WindowObject* win = (struct WindowObject*)node->data;
         if (win->id == handle) {
             window_handle = win;
@@ -175,8 +179,8 @@ void dwm_destroy_window(WindowHandle handle) {
     // Free associated resources
     dwm_window_resource_free_all(window_handle->id);
     
-    if (dragged_window == window_handle) dragged_window = NULL;
-    if (resizing_window == window_handle) resizing_window = NULL;
+    if (dragdrop.dragged_window == window_handle) dragdrop.dragged_window = NULL;
+    if (dragdrop.dragged_resizing == window_handle) dragdrop.dragged_resizing = NULL;
     
     int abs_x, abs_y;
     dwm_get_absolute_position(window_handle, &abs_x, &abs_y);
@@ -186,7 +190,7 @@ void dwm_destroy_window(WindowHandle handle) {
     int destroyed_min_y = abs_y - window_handle->border_width;
     int destroyed_max_y = abs_y + window_handle->h + window_handle->border_width;
     
-    list_remove(&window_head, &window_tail, window_handle);
+    list_remove(&workspace.window_head, &workspace.window_tail, window_handle);
     
     // Unchain from parent safely if it has one
     if (window_handle->parent != NULL) {
@@ -221,8 +225,8 @@ void dwm_destroy_window(WindowHandle handle) {
                           destroyed_max_y - destroyed_min_y);
     
     // Shift focus and force repaint of newly active window
-    if (window_tail != NULL) {
-        struct WindowObject* tail_win = (struct WindowObject*)window_tail->data;
+    if (workspace.window_tail != NULL) {
+        struct WindowObject* tail_win = (struct WindowObject*)workspace.window_tail->data;
         dwm_set_focus(tail_win); 
         tail_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         
@@ -256,7 +260,7 @@ struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint1
     icon->bounds_w = width + 2;
     icon->bounds_h = height + 2;
     
-    if (!list_append(&icon_head, &icon_tail, icon)) {
+    if (!list_append(&workspace.icon_head, &workspace.icon_tail, icon)) {
         free(icon);
         return NULL;
     }
@@ -279,7 +283,7 @@ void dwm_destroy_icon(struct IconObject* icon) {
     dwm_invalidate_region(min_x, icon->y, max_x - min_x, icon->height + 40);
     
     bool explicitly_found = false;
-    for (struct list_node* node = icon_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.icon_head; node != NULL; node = node->next) {
         if (node->data == icon) {
             explicitly_found = true;
             break;
@@ -287,7 +291,7 @@ void dwm_destroy_icon(struct IconObject* icon) {
     }
     if (!explicitly_found) return;
     
-    list_remove(&icon_head, &icon_tail, icon);
+    list_remove(&workspace.icon_head, &workspace.icon_tail, icon);
     free(icon);
 }
 
@@ -311,18 +315,18 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         memset(window_object->frame_buffer, 0x11, frame_buffer_sz);
     }
     
-    uint32_t candidate_id = next_window_id++;
-    if (candidate_id == 0) candidate_id = next_window_id++;
+    uint32_t candidate_id = workspace.next_window_id++;
+    if (candidate_id == 0) candidate_id = workspace.next_window_id++;
     
     bool id_check = true;
     while (id_check) {
         id_check = false;
-        for (struct list_node* node = window_head; node != NULL; node = node->next) {
+        for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
             struct WindowObject* window = (struct WindowObject*)node->data;
             if (window->id == candidate_id) {
                 id_check = true;
-                candidate_id = next_window_id++;
-                if (candidate_id == 0) candidate_id = next_window_id++;
+                candidate_id = workspace.next_window_id++;
+                if (candidate_id == 0) candidate_id = workspace.next_window_id++;
                 break;
             }
         }
@@ -350,15 +354,15 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     // Window cascading
     if (w_style & DWM_WSTYLE_CASCADE) {
-        window_object->x = cascade_x;
-        window_object->y = cascade_y;
+        window_object->x = cascade.x;
+        window_object->y = cascade.y;
         
-        cascade_x += cascade_w;
-        cascade_y += cascade_h;
+        cascade.x += cascade.w;
+        cascade.y += cascade.h;
         
-        if (cascade_x > cascade_max) {
-            cascade_x = cascade_w;
-            cascade_y = cascade_h;
+        if (cascade.x > cascade.max) {
+            cascade.x = cascade.w;
+            cascade.y = cascade.h;
         }
     }
     
@@ -367,7 +371,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     int border_offset = 0;
     
     window_object->surface_w = window_object->w;
-    window_object->surface_h = dragged_window->h - dragged_window->titlebar_height;
+    window_object->surface_h = dragdrop.dragged_window->h - dragdrop.dragged_window->titlebar_height;
     window_object->buffer_w  = w_class.width; 
     window_object->buffer_h  = w_class.height - window_object->titlebar_height - border_offset;
     
@@ -394,8 +398,8 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->events = 0;
     window_object->event_callback = proc;
     
-    if (window_tail != NULL) {
-        struct WindowObject* old_active = (struct WindowObject*)window_tail->data;
+    if (workspace.window_tail != NULL) {
+        struct WindowObject* old_active = (struct WindowObject*)workspace.window_tail->data;
         
         // Force the old window to redraw its borders/titlebar in an inactive state
         old_active->flags |= DWM_WFLAG_REDECORATE;
@@ -408,7 +412,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
                               old_active->h + (old_active->border_width * 2));
     }
     
-    if (!list_append(&window_head, &window_tail, window_object)) {
+    if (!list_append(&workspace.window_head, &workspace.window_tail, window_object)) {
         free(window_object->frame_buffer); // Clean up buffer on failure
         free(window_object);
         return 0;
@@ -521,7 +525,7 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const 
         return;
     
     // Set the window who called this context menu
-    context_handle = w_object;
+    ctxmenu.handle = w_object;
     
     dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, options, number_of_items);
 }
@@ -665,294 +669,4 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     
     dwm_set_focus(msg_handle);
     return msg_handle->id;
-}
-
-bool dwm_create_context_menu(int x, int y, uint32_t directive, const char* items[], int item_count) {
-    if (item_count <= 0 || item_count > 16) { 
-        return false;
-    }
-    
-    // Reset or start at the root menu layer (layer 0)
-    context_menu_count = 1;
-    struct ContextMenu* menu = &context_menus[0];
-    
-    // Set up standard menu dimensions and styling details
-    menu->visible = true;
-    menu->x = x;
-    menu->y = y;
-    menu->item_height = 22;
-    menu->item_count = item_count;
-    menu->w = 130; // Standard base width, could dynamically scale if needed
-    menu->h = menu->item_height * menu->item_count;
-    menu->hovered_item = -1; // Clear hover state on initial pop
-    
-    context_menu_directive = directive;
-    
-    // Copy item names over safely
-    for (int i = 0; i < item_count; i++) {
-        // Safe string copy limiting to the ContextMenu item array name buffer limits
-        strncpy(menu->item[i].name, items[i], sizeof(menu->item[i].name) - 1);
-        menu->item[i].name[sizeof(menu->item[i].name) - 1] = '\0';
-    }
-    
-    // Clamp the menu coordinates so it doesn't spawn off-screen
-    int display_w = display_get_width();
-    int display_h = display_get_height();
-    
-    // Taskbar height
-    if (menu->x + menu->w > display_w) {
-        menu->x = display_w - menu->w;
-    }
-    if (menu->y + menu->h > display_h - taskbar_height) {
-        menu->y = display_h - taskbar_height - menu->h;
-    }
-    
-    // Redraw the context menu area
-    dwm_invalidate_region(menu->x, menu->y, menu->w, menu->h);
-    
-    return true;
-}
-
-struct WindowObject* dwm_get_window_by_id(uint32_t id) {
-    if (id == 0) return NULL;
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
-        struct WindowObject* window = (struct WindowObject*)node->data;
-        if (window->id == id) return window;
-    }
-    return NULL;
-}
-
-uint16_t dwm_window_get_width(WindowHandle handle) {
-    struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) 
-        return 0;
-    return window->w;
-}
-
-uint16_t dwm_window_get_height(WindowHandle handle) {
-    struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) 
-        return 0;
-    return window->h;
-}
-
-uint8_t dwm_window_set_name(WindowHandle handle, const char* name) {
-    struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) 
-        return 0;
-    strncpy(window->title, name, DWM_FILENAME_LENGTH);
-    return 1;
-}
-
-void dwm_set_focus(struct WindowObject* target) {
-    if (target == NULL || (window_tail != NULL && window_tail->data == target)) {
-        return; 
-    }
-    
-    if (window_tail != NULL) {
-        struct WindowObject* old_active = (struct WindowObject*)window_tail->data;
-        old_active->flags |= DWM_WFLAG_REDECORATE;
-        
-    }
-    
-    if (list_remove(&window_head, &window_tail, target)) {
-        list_append(&window_head, &window_tail, target);
-    }
-}
-
-void dwm_draw_line(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
-    draw_line(x, y, x + w, y + h, color);
-}
-
-void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color) {
-    if (event_window == NULL) return;
-    size_t length = strlen(text);
-    for (unsigned int i=0; i < length; i++) 
-        draw_glyph(char_rom, text[i], 6, 8, x + (i * 6), y, color, 0xFF000000, 0xFF000000);
-}
-
-void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
-    if (event_window == NULL) return;
-    draw_rect(x, y, w, h, color);
-}
-
-void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
-    if (event_window == NULL) return;
-    draw_rect_filled(x, y, w, h, color);
-}
-
-void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
-    if (event_window == NULL) return;
-    draw_rect_gradient_vertical_blend(x, y, w, h, color_high, color_low);
-}
-
-void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image) {
-    if (event_window == NULL) return;
-    draw_sprite_blend(image->data, image->width, image->height, x, y, 0x00000000);
-}
-
-void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {
-    current_cursor.data = sprite;
-    current_cursor.width = width;
-    current_cursor.height = height;
-}
-
-void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_t* frame_buffer, uint32_t screen_stride,
-                                            int clip_x, int clip_y, int clip_w, int clip_h) {
-    int client_start_x = window->x;
-    int client_start_y = window->y + window->titlebar_height;
-    
-    int local_start_x = clip_x - client_start_x;
-    int local_start_y = clip_y - client_start_y;
-    
-    if (local_start_x < 0) { clip_w += local_start_x; local_start_x = 0; }
-    if (local_start_y < 0) { clip_h += local_start_y; local_start_y = 0; }
-    
-    if (local_start_x + clip_w > (int)window->buffer_w) clip_w = (int)window->buffer_w - local_start_x;
-    if (local_start_y + clip_h > (int)window->buffer_h) clip_h = (int)window->buffer_h - local_start_y;
-    
-    if (clip_w <= 0 || clip_h <= 0) return;
-    
-    for (int i = 0; i < clip_h; i++) {
-        int current_local_y  = local_start_y + i;
-        int current_screen_y = clip_y + i;
-        uint32_t* src  = &window->frame_buffer[(current_local_y * window->buffer_w) + local_start_x];
-        uint32_t* dest = &frame_buffer[(current_screen_y * screen_stride) + clip_x];
-        int count = clip_w;
-        
-        asm volatile (
-            "cld;\n\t"
-            "rep movsd;\n\t"
-            : "+S"(src), "+D"(dest), "+c"(count)
-            :
-            : "memory"
-        );
-    }
-}
-
-void dwm_window_set_parent(WindowHandle child, WindowHandle parent) {
-    struct WindowObject* w_parent = dwm_get_window_by_id(parent);
-    struct WindowObject* w_child  = dwm_get_window_by_id(child);
-    
-    if (w_parent == NULL || w_child == NULL) 
-        return;
-    
-    w_child->style |= DWM_WSTYLE_CHILD;
-    
-    if (w_child->parent != NULL) {
-        list_remove(&w_child->parent->children_head, &w_child->parent->children_tail, w_child);
-    }
-    
-    // If local offsets are 0, migrate the window's original creation coordinates
-    // to serve as the local relative offsets inside the parent canvas.
-    if (w_child->local_x == 0 && w_child->local_y == 0) {
-        w_child->local_x = w_child->x;
-        w_child->local_y = w_child->y;
-    }
-    
-    w_child->parent = w_parent;
-    list_append(&w_parent->children_head, &w_parent->children_tail, w_child);
-    
-    w_child->x = w_parent->surface_x + w_child->local_x;
-    w_child->y = w_parent->surface_y + w_child->local_y;
-    
-    // Recalculate child's own drawing canvas metrics based on its updated global position
-    w_child->surface_x = w_child->x;
-    w_child->surface_y = w_child->y + w_child->titlebar_height + (w_child->border_width ? 1 : 0);
-    w_child->surface_w = w_child->w;
-    w_child->surface_h = w_child->h - w_child->titlebar_height;
-    
-    // Trigger paint/refresh pipeline using the correct screen coordinates
-    w_child->flags |= (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH);
-    
-    dwm_invalidate_region(w_child->x - w_child->border_width, 
-                          w_child->y - w_child->border_width, 
-                          w_child->w + (w_child->border_width * 2), 
-                          w_child->h + (w_child->border_width * 2));
-}
-
-WindowHandle dwm_window_get_parent(WindowHandle window) {
-    struct WindowObject* handle = dwm_get_window_by_id(window);
-    if (handle == NULL) 
-        return 0;
-    if (handle->parent == NULL) 
-        return 0;
-    return handle->parent->id;
-}
-
-void dwm_window_set_focus(WindowHandle handle) {
-    struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) return;
-    
-    // If someone clicks a child window directly, focus its top-level parent instead
-    if (window->parent != NULL) {
-        window = window->parent;
-    }
-    
-    // Move the parent to the end of the top-level z-order list
-    if (window_tail != NULL && (struct WindowObject*)window_tail->data != window) {
-        list_remove(&window_head, &window_tail, window);
-        list_append(&window_head, &window_tail, window);
-        
-        // Force the whole group to repaint
-        window->flags |= DWM_WFLAG_REFRESH;
-        dwm_invalidate_region(window->x - window->border_width, window->y - window->border_width,
-                              window->w + (window->border_width * 2), window->h + (window->border_width * 2));
-    }
-}
-
-void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sprite) {
-    struct Image* img = malloc(sizeof(struct Image));
-    if (!img) return;
-    
-    img->width = sprite->width;
-    img->height = sprite->height;
-    
-    img->data = malloc(sizeof(uint32_t) * img->width * img->height);
-    if (!img->data) {
-        free(img);
-        return;
-    }
-    
-    sprite_get_bitmap(img->data, sprite);
-    dwm_resource_load(resource_name, img);
-}
-
-void dwm_window_send_event(WindowHandle handle, wEvent event) {
-    struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) return;
-    
-    window->events |= event;
-}
-
-uint32_t dwm_window_get_count(void) {
-    uint32_t count = 0;
-    
-    // Iterate through the master window linked list starting at the head
-    for (struct list_node* node = window_head; node != NULL; node = node->next) {
-        count++;
-    }
-    
-    return count;
-}
-
-void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16_t width, uint16_t height, uint16_t event, struct Image* sprite) {
-    if (window == NULL) return;
-    
-    struct WindowButton* button = malloc(sizeof(struct WindowButton));
-    if (button == NULL) return;
-    
-    button->x = x;
-    button->y = y;
-    button->width = width;
-    button->height = height;
-    
-    button->event = event;
-    if (sprite == NULL) {
-        button->sprite.data = NULL;
-    } else {
-        button->sprite = *sprite;
-    }
-    
-    list_append(&window->buttons_head, &window->buttons_tail, button);
 }

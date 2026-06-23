@@ -48,29 +48,29 @@ void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h) {
     if (y + h > display_h) h = display_h - y;
     if (w <= 0 || h <= 0) return;
     
-    if (window_context.dirty_count < MAX_DIRTY_RECTS) {
-        window_context.dirty_regions[window_context.dirty_count].x = x;
-        window_context.dirty_regions[window_context.dirty_count].y = y;
-        window_context.dirty_regions[window_context.dirty_count].w = w;
-        window_context.dirty_regions[window_context.dirty_count].h = h;
-        window_context.dirty_count++;
+    if (context.window_context.dirty_count < MAX_DIRTY_RECTS) {
+        context.window_context.dirty_regions[context.window_context.dirty_count].x = x;
+        context.window_context.dirty_regions[context.window_context.dirty_count].y = y;
+        context.window_context.dirty_regions[context.window_context.dirty_count].w = w;
+        context.window_context.dirty_regions[context.window_context.dirty_count].h = h;
+        context.window_context.dirty_count++;
     } else {
         
-        int min_x = window_context.dirty_regions[0].x;
-        int min_y = window_context.dirty_regions[0].y;
-        int max_x = min_x + window_context.dirty_regions[0].w;
-        int max_y = min_y + window_context.dirty_regions[0].h;
+        int min_x = context.window_context.dirty_regions[0].x;
+        int min_y = context.window_context.dirty_regions[0].y;
+        int max_x = min_x + context.window_context.dirty_regions[0].w;
+        int max_y = min_y + context.window_context.dirty_regions[0].h;
         
         if (x < min_x) min_x = x;
         if (y < min_y) min_y = y;
         if (x + w > max_x) max_x = x + w;
         if (y + h > max_y) max_y = y + h;
         
-        window_context.dirty_regions[0].x = min_x;
-        window_context.dirty_regions[0].y = min_y;
-        window_context.dirty_regions[0].w = max_x - min_x;
-        window_context.dirty_regions[0].h = max_y - min_y;
-        window_context.dirty_count = 1;
+        context.window_context.dirty_regions[0].x = min_x;
+        context.window_context.dirty_regions[0].y = min_y;
+        context.window_context.dirty_regions[0].w = max_x - min_x;
+        context.window_context.dirty_regions[0].h = max_y - min_y;
+        context.window_context.dirty_count = 1;
     }
 }
 

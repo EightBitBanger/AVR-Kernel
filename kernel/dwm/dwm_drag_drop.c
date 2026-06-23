@@ -5,194 +5,202 @@
 #include <kernel/util/string.h>
 
 void dwm_update_icon_dragging(struct WindowContext* ctx) {
-    if (dragged_icon == NULL) return;
+    if (dragdrop.dragged_icon == NULL) return;
     
     if (ctx->left_button_pressed) {
-        int new_x = ctx->mouse.x - icon_drag_offset_x;
-        int new_y = ctx->mouse.y - icon_drag_offset_y;
+        int new_x = ctx->mouse.x - dragdrop.icon_drag_offset_x;
+        int new_y = ctx->mouse.y - dragdrop.icon_drag_offset_y;
         int display_w = display_get_width();
         int display_h = display_get_height();
         
-        if (new_x + dragged_icon->bounds_x < 0) new_x = -dragged_icon->bounds_x;
-        if (new_x + dragged_icon->bounds_x + dragged_icon->bounds_w > display_w) new_x = display_w - dragged_icon->bounds_x - dragged_icon->bounds_w;
-        if (new_y + dragged_icon->bounds_y < 0) new_y = -dragged_icon->bounds_y;
-        if (new_y + dragged_icon->bounds_y + dragged_icon->bounds_h > display_h) new_y = display_h - dragged_icon->bounds_y - dragged_icon->bounds_h;
+        if (new_x + dragdrop.dragged_icon->bounds_x < 0) new_x = -dragdrop.dragged_icon->bounds_x;
+        if (new_x + dragdrop.dragged_icon->bounds_x + dragdrop.dragged_icon->bounds_w > display_w) 
+            new_x = display_w - dragdrop.dragged_icon->bounds_x - dragdrop.dragged_icon->bounds_w;
         
-        if (dragged_icon->x != new_x || dragged_icon->y != new_y) {
-            dwm_invalidate_region(dragged_icon->x + dragged_icon->bounds_x, dragged_icon->y + dragged_icon->bounds_y, dragged_icon->bounds_w, dragged_icon->bounds_h);
+        if (new_y + dragdrop.dragged_icon->bounds_y < 0) new_y = -dragdrop.dragged_icon->bounds_y;
+        if (new_y + dragdrop.dragged_icon->bounds_y + dragdrop.dragged_icon->bounds_h > display_h) 
+            new_y = display_h - dragdrop.dragged_icon->bounds_y - dragdrop.dragged_icon->bounds_h;
+        
+        if (dragdrop.dragged_icon->x != new_x || dragdrop.dragged_icon->y != new_y) {
+            dwm_invalidate_region(dragdrop.dragged_icon->x + dragdrop.dragged_icon->bounds_x, 
+                                  dragdrop.dragged_icon->y + dragdrop.dragged_icon->bounds_y, 
+                                  dragdrop.dragged_icon->bounds_w, dragdrop.dragged_icon->bounds_h);
             
-            dragged_icon->x = new_x;
-            dragged_icon->y = new_y;
+            dragdrop.dragged_icon->x = new_x;
+            dragdrop.dragged_icon->y = new_y;
             
-            dwm_invalidate_region(dragged_icon->x + dragged_icon->bounds_x, dragged_icon->y + dragged_icon->bounds_y, dragged_icon->bounds_w, dragged_icon->bounds_h);
+            dwm_invalidate_region(dragdrop.dragged_icon->x + dragdrop.dragged_icon->bounds_x, 
+                                  dragdrop.dragged_icon->y + dragdrop.dragged_icon->bounds_y, 
+                                  dragdrop.dragged_icon->bounds_w, 
+                                  dragdrop.dragged_icon->bounds_h);
         }
     } else {
         
-        dragged_icon = NULL;
+        dragdrop.dragged_icon = NULL;
     }
 }
 
 void dwm_update_window_dragging(struct WindowContext* ctx) {
-    if (dragged_window == NULL) return;
+    if (dragdrop.dragged_window == NULL) return;
     
     if (ctx->left_button_pressed) {
-        int new_x = ctx->mouse.x - drag_offset_x;
-        int new_y = ctx->mouse.y - drag_offset_y;
+        int new_x = ctx->mouse.x - dragdrop.drag_offset_x;
+        int new_y = ctx->mouse.y - dragdrop.drag_offset_y;
         
         int display_w = display_get_width();
         int display_h = display_get_height();
         
         // Constrain window dragging boundaries
-        if (new_x - (int)dragged_window->border_width < 0) new_x = dragged_window->border_width;
-        if (new_x + (int)dragged_window->w + (int)dragged_window->border_width > display_w) new_x = display_w - dragged_window->w - dragged_window->border_width;
-        if (new_y - (int)dragged_window->border_width < 0) new_y = dragged_window->border_width;
-        if (new_y + (int)dragged_window->h + (int)dragged_window->border_width > display_h) new_y = display_h - dragged_window->h - dragged_window->border_width;
+        if (new_x - (int)dragdrop.dragged_window->border_width < 0) new_x = dragdrop.dragged_window->border_width;
+        if (new_x + (int)dragdrop.dragged_window->w + (int)dragdrop.dragged_window->border_width > display_w) new_x = display_w - dragdrop.dragged_window->w - dragdrop.dragged_window->border_width;
+        if (new_y - (int)dragdrop.dragged_window->border_width < 0) new_y = dragdrop.dragged_window->border_width;
+        if (new_y + (int)dragdrop.dragged_window->h + (int)dragdrop.dragged_window->border_width > display_h) new_y = display_h - dragdrop.dragged_window->h - dragdrop.dragged_window->border_width;
         
-        if (dragged_window->x != new_x || dragged_window->y != new_y) {
-            dwm_invalidate_region(dragged_window->x - dragged_window->border_width, dragged_window->y - dragged_window->border_width, dragged_window->w + (dragged_window->border_width * 2), dragged_window->h + (dragged_window->border_width * 2));
+        if (dragdrop.dragged_window->x != new_x || dragdrop.dragged_window->y != new_y) {
+            dwm_invalidate_region(dragdrop.dragged_window->x - dragdrop.dragged_window->border_width, dragdrop.dragged_window->y - dragdrop.dragged_window->border_width, dragdrop.dragged_window->w + (dragdrop.dragged_window->border_width * 2), dragdrop.dragged_window->h + (dragdrop.dragged_window->border_width * 2));
             
-            dragged_window->x = new_x;
-            dragged_window->y = new_y;
+            dragdrop.dragged_window->x = new_x;
+            dragdrop.dragged_window->y = new_y;
             
-            if (dragged_window->parent != NULL) {
-                dragged_window->local_x = new_x - dragged_window->parent->surface_x;
-                dragged_window->local_y = new_y - dragged_window->parent->surface_y;
+            if (dragdrop.dragged_window->parent != NULL) {
+                dragdrop.dragged_window->local_x = new_x - dragdrop.dragged_window->parent->surface_x;
+                dragdrop.dragged_window->local_y = new_y - dragdrop.dragged_window->parent->surface_y;
             } else {
-                dragged_window->local_x = 0;
-                dragged_window->local_y = 0;
+                dragdrop.dragged_window->local_x = 0;
+                dragdrop.dragged_window->local_y = 0;
             }
             
-            dragged_window->surface_x = new_x;
-            dragged_window->surface_y = new_y + dragged_window->titlebar_height + 1;
-            dragged_window->surface_w = dragged_window->w;
-            dragged_window->surface_h = dragged_window->h - dragged_window->titlebar_height;
+            dragdrop.dragged_window->surface_x = new_x;
+            dragdrop.dragged_window->surface_y = new_y + dragdrop.dragged_window->titlebar_height + 1;
+            dragdrop.dragged_window->surface_w = dragdrop.dragged_window->w;
+            dragdrop.dragged_window->surface_h = dragdrop.dragged_window->h - dragdrop.dragged_window->titlebar_height;
             
-            dwm_cascade_child_positions(dragged_window);
+            dwm_cascade_child_positions(dragdrop.dragged_window);
             
-            dwm_invalidate_region(dragged_window->x - dragged_window->border_width, dragged_window->y - dragged_window->border_width, dragged_window->w + (dragged_window->border_width * 2), dragged_window->h + (dragged_window->border_width * 2));
+            dwm_invalidate_region(dragdrop.dragged_window->x - dragdrop.dragged_window->border_width, dragdrop.dragged_window->y - dragdrop.dragged_window->border_width, dragdrop.dragged_window->w + (dragdrop.dragged_window->border_width * 2), dragdrop.dragged_window->h + (dragdrop.dragged_window->border_width * 2));
             
-            dragged_window->flags |= DWM_WFLAG_REFRESH;
+            dragdrop.dragged_window->flags |= DWM_WFLAG_REFRESH;
         }
     } else {
         // Released - drop the window
-        dragged_window = NULL;
+        dragdrop.dragged_window = NULL;
     }
 }
 
 void dwm_update_window_resizing(struct WindowContext* ctx) {
-    if (resizing_window == NULL) return;
-    if (resizing_window->frame_buffer == NULL) 
+    if (dragdrop.dragged_resizing == NULL) return;
+    if (dragdrop.dragged_resizing->frame_buffer == NULL) 
         return;
     
     if (ctx->left_button_pressed) {
         // Project desired sizing bounds derived from mouse tracking adjustments
-        int target_w = (ctx->mouse.x + resize_offset_x) - resizing_window->x;
-        int target_h = (ctx->mouse.y + resize_offset_y) - resizing_window->y;
+        int target_w = (ctx->mouse.x + dragdrop.resize_offset_x) - dragdrop.dragged_resizing->x;
+        int target_h = (ctx->mouse.y + dragdrop.resize_offset_y) - dragdrop.dragged_resizing->y;
         
         int display_w = display_get_width();
         int display_h = display_get_height();
-        int border_ext = resizing_window->border_width;
+        int border_ext = dragdrop.dragged_resizing->border_width;
 
         // Prevent resizing beyond the right and bottom screen boundaries
-        if (resizing_window->x + target_w + border_ext > display_w) {
-            target_w = display_w - resizing_window->x - border_ext;
+        if (dragdrop.dragged_resizing->x + target_w + border_ext > display_w) {
+            target_w = display_w - dragdrop.dragged_resizing->x - border_ext;
         }
-        if (resizing_window->y + target_h + border_ext > display_h) {
-            target_h = display_h - resizing_window->y - border_ext;
+        if (dragdrop.dragged_resizing->y + target_h + border_ext > display_h) {
+            target_h = display_h - dragdrop.dragged_resizing->y - border_ext;
         }
         
         // Enforce a sensible minimum geometry threshold
         int min_width = 64;
-        int min_height = 48 + resizing_window->titlebar_height;
+        int min_height = 48 + dragdrop.dragged_resizing->titlebar_height;
         
         if (target_w < min_width)  target_w = min_width;
         if (target_h < min_height) target_h = min_height;
         
         // Enforce the maximum geometry threshold if defined (greater than 0)
-        if (resizing_window->max_width > 0 && target_w > resizing_window->max_width) {
-            target_w = resizing_window->max_width;
+        if (dragdrop.dragged_resizing->max_width > 0 && target_w > dragdrop.dragged_resizing->max_width) {
+            target_w = dragdrop.dragged_resizing->max_width;
         }
-        if (resizing_window->max_height > 0 && target_h > resizing_window->max_height) {
-            target_h = resizing_window->max_height;
+        if (dragdrop.dragged_resizing->max_height > 0 && target_h > dragdrop.dragged_resizing->max_height) {
+            target_h = dragdrop.dragged_resizing->max_height;
         }
         
         // Check if dimension shifts have actually happened
-        if (resizing_window->w != target_w || resizing_window->h != target_h) {
+        if (dragdrop.dragged_resizing->w != target_w || dragdrop.dragged_resizing->h != target_h) {
             
             // Invalidate old window space configuration to clear out previous borders
-            dwm_invalidate_region(resizing_window->x - border_ext, 
-                                  resizing_window->y - border_ext, 
-                                  resizing_window->w + (border_ext * 2), 
-                                  resizing_window->h + (border_ext * 2));
+            dwm_invalidate_region(dragdrop.dragged_resizing->x - border_ext, 
+                                  dragdrop.dragged_resizing->y - border_ext, 
+                                  dragdrop.dragged_resizing->w + (border_ext * 2), 
+                                  dragdrop.dragged_resizing->h + (border_ext * 2));
             
             // Commit the new target geometry properties
-            resizing_window->w = target_w;
-            resizing_window->h = target_h;
+            dragdrop.dragged_resizing->w = target_w;
+            dragdrop.dragged_resizing->h = target_h;
             
             // Synchronize any nested hierarchical layouts attached to it
-            dwm_sync_child_positions(resizing_window);
+            dwm_sync_child_positions(dragdrop.dragged_resizing);
             
             // Flag the resize event so the window's callback receives it
-            dwm_window_send_event(resizing_window->id, DWM_EVENT_RESIZE);
+            dwm_window_send_event(dragdrop.dragged_resizing->id, DWM_EVENT_RESIZE);
             
             // Request a complete paint pass and invalidate the updated boundaries
-            resizing_window->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
-            dwm_invalidate_region(resizing_window->x - border_ext, 
-                                  resizing_window->y - border_ext, 
-                                  resizing_window->w + (border_ext * 2), 
-                                  resizing_window->h + (border_ext * 2));
+            dragdrop.dragged_resizing->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
+            dwm_invalidate_region(dragdrop.dragged_resizing->x - border_ext, 
+                                  dragdrop.dragged_resizing->y - border_ext, 
+                                  dragdrop.dragged_resizing->w + (border_ext * 2), 
+                                  dragdrop.dragged_resizing->h + (border_ext * 2));
             
             int border_offset = 0;
             
-            resizing_window->surface_w = resizing_window->w;
-            resizing_window->surface_h = resizing_window->h - (resizing_window->titlebar_height + border_offset);
-            resizing_window->buffer_w  = target_w; 
-            resizing_window->buffer_h  = target_h - resizing_window->titlebar_height - border_offset;
+            dragdrop.dragged_resizing->surface_w = dragdrop.dragged_resizing->w;
+            dragdrop.dragged_resizing->surface_h = dragdrop.dragged_resizing->h - (dragdrop.dragged_resizing->titlebar_height + border_offset);
+            dragdrop.dragged_resizing->buffer_w  = target_w; 
+            dragdrop.dragged_resizing->buffer_h  = target_h - dragdrop.dragged_resizing->titlebar_height - border_offset;
             
-            resizing_window->surface_x = resizing_window->x;
-            resizing_window->surface_y = resizing_window->y + resizing_window->titlebar_height + 1;
+            dragdrop.dragged_resizing->surface_x = dragdrop.dragged_resizing->x;
+            dragdrop.dragged_resizing->surface_y = dragdrop.dragged_resizing->y + dragdrop.dragged_resizing->titlebar_height + 1;
             
             // Reallocate internal window back-buffer surface dimensions
-            uint32_t frame_buffer_sz = resizing_window->buffer_w * resizing_window->buffer_h * sizeof(uint32_t);
-            if (resizing_window->frame_buffer != NULL) {
-                free(resizing_window->frame_buffer);
+            uint32_t frame_buffer_sz = dragdrop.dragged_resizing->buffer_w * dragdrop.dragged_resizing->buffer_h * sizeof(uint32_t);
+            if (dragdrop.dragged_resizing->frame_buffer != NULL) {
+                free(dragdrop.dragged_resizing->frame_buffer);
             }
-            resizing_window->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
-            if (resizing_window->frame_buffer != NULL) {
-                memset(resizing_window->frame_buffer, 0x11, frame_buffer_sz);
+            dragdrop.dragged_resizing->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
+            if (dragdrop.dragged_resizing->frame_buffer != NULL) {
+                memset(dragdrop.dragged_resizing->frame_buffer, 0x11, frame_buffer_sz);
             }
             
             // Update the positioning coordinates of the resize handle button itself
-            for (struct list_node* node = resizing_window->buttons_head; node != NULL; node = node->next) {
+            for (struct list_node* node = dragdrop.dragged_resizing->buttons_head; node != NULL; node = node->next) {
                 struct WindowButton* btn = (struct WindowButton*)node->data;
                 if (btn->event == DWM_EVENT_RESIZE) {
-                    btn->x = resizing_window->w - btn->width;
-                    btn->y = resizing_window->h - btn->height;
+                    btn->x = dragdrop.dragged_resizing->w - btn->width;
+                    btn->y = dragdrop.dragged_resizing->h - btn->height;
                 }
                 
                 // Update system button (Close/Minimize) positions if window width changes
                 if (btn->event == DWM_EVENT_CLOSE) {
-                    btn->x = resizing_window->w - btn->width;
+                    btn->x = dragdrop.dragged_resizing->w - btn->width;
                 }
                 if (btn->event == DWM_EVENT_MINIMIZE) {
                     struct Image* button_close = dwm_resource_find("ui_close");
-                    btn->x = resizing_window->w - button_close->width - btn->width;
+                    btn->x = dragdrop.dragged_resizing->w - button_close->width - btn->width;
                 }
             }
             
             // Synchronize any nested hierarchical layouts attached to it
-            dwm_sync_child_positions(resizing_window);
+            dwm_sync_child_positions(dragdrop.dragged_resizing);
             
             // Request a complete paint pass and invalidate the updated boundaries
-            resizing_window->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
-            dwm_invalidate_region(resizing_window->x - border_ext, 
-                                  resizing_window->y - border_ext, 
-                                  resizing_window->w + (border_ext * 2), 
-                                  resizing_window->h + (border_ext * 2));
+            dragdrop.dragged_resizing->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
+            dwm_invalidate_region(dragdrop.dragged_resizing->x - border_ext, 
+                                  dragdrop.dragged_resizing->y - border_ext, 
+                                  dragdrop.dragged_resizing->w + (border_ext * 2), 
+                                  dragdrop.dragged_resizing->h + (border_ext * 2));
         }
     } else {
         // Drag click released - conclude the sizing operations safely
-        resizing_window = NULL;
+        dragdrop.dragged_resizing = NULL;
     }
 }
 

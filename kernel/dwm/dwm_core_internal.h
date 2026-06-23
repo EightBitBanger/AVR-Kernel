@@ -7,57 +7,96 @@
 #include <kernel/dwm/dwm_platform.h>
 #include <kernel/dwm/flags.h>
 
-extern uint32_t bg_color;
+#define MAX_CONTEXT_MENUS 8
 
-// Drag movement
-extern struct WindowObject* dragged_window;
-extern int drag_offset_x;
-extern int drag_offset_y;
+struct DWMWorkspace {
+    struct list_node* window_head;
+    struct list_node* window_tail;
+    
+    struct list_node* icon_head;
+    struct list_node* icon_tail;
+    
+    struct map_node* resource_head;
+    struct map_node* resource_tail;
+    
+    uint32_t next_window_id;
+};
 
-extern struct IconObject* dragged_icon;
-extern int icon_drag_offset_x;
-extern int icon_drag_offset_y;
+struct DWMTaskbar {
+    WindowHandle window;
+    
+    uint16_t height;
+};
 
-extern struct WindowObject* resizing_window;
-extern int resize_offset_x;
-extern int resize_offset_y;
+struct DWMTheme {
+    uint32_t bg_color;
+};
 
-// Object lists
-extern struct list_node* window_head;
-extern struct list_node* window_tail;
+struct DWMDragDrop {
+    struct WindowObject* dragged_window;
+    int drag_offset_x;
+    int drag_offset_y;
+    
+    struct IconObject* dragged_icon;
+    int icon_drag_offset_x;
+    int icon_drag_offset_y;
+    
+    struct WindowObject* dragged_resizing;
+    int resize_offset_x;
+    int resize_offset_y;
+};
 
-extern struct list_node* icon_head;
-extern struct list_node* icon_tail;
+struct DWMContext {
+    struct WindowContext window_context;
+    struct WindowObject* event_window;
+    
+    struct IconObject* focused_icon;
+    struct IconObject* last_focused_icon;
+    
+    uint32_t last_icon_click_time;  // Double click timing
+};
 
-extern struct WindowContext window_context;
-extern Point mouse_old;
+struct DWMInput {
+    Point mouse_last;
+    
+    bool last_left_button_pressed;
+    bool last_right_button_pressed;
+};
 
-extern bool old_left_button_pressed;
-extern bool old_right_button_pressed;
+struct DWMContextMenu {
+    struct ContextMenu menus[MAX_CONTEXT_MENUS];
+    
+    uint8_t menu_count;
+    uint16_t menu_directive;
+    struct WindowObject* handle;
+};
 
-extern struct WindowObject* event_window;
+struct DWMImages {
+    struct Image current_cursor;
+    
+};
 
-extern struct IconObject* focused_icon;
+struct DWMCascade {
+    uint16_t x;
+    uint16_t y;
+    
+    uint16_t h;
+    uint16_t w;
+    
+    uint16_t max;
+};
 
-// Double click timing
-extern struct IconObject* last_clicked_icon;
-extern uint32_t last_icon_click_time;
+extern struct DWMTheme theme;
 
-// Context menu
-extern struct ContextMenu context_menus[];
-extern uint8_t context_menu_count;
-extern uint16_t context_menu_directive;
-extern struct WindowObject* context_handle;
+extern struct DWMWorkspace    workspace;
+extern struct DWMContext      context;
+extern struct DWMTaskbar      taskbar;
+extern struct DWMDragDrop     dragdrop;
+extern struct DWMInput        input;
+extern struct DWMContextMenu  ctxmenu;
+extern struct DWMImages       images;
+extern struct DWMCascade      cascade;
 
-// Taskbar
-extern WindowHandle w_taskbar;
-extern uint16_t taskbar_height;
-
-// Images
-
-extern struct Image current_cursor;
-
-extern const uint8_t char_rom[];
 
 // UI
 
