@@ -113,9 +113,11 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     // --- CONTEXT MENU FOR OPEN WINDOW AREA ---
     // If it was a right click, but the loop above did not hit any files/folders
     if (!item_hit && (lparam & DWM_STATE_MOUSE_BTN_RIGHT)) {
-        const char* window_menu_options[] = { "Refresh", "New Folder", "New File", "Paste" };
+        
+        const char* window_menu_options[] = { "Refresh", "New Folder", "New File", "Paste", "Properties" };
         state->context_item_index = -1;
-        dwm_summon_context_menu(handle, click_x, click_y, window_menu_options, 4);
+        dwm_summon_context_menu(handle, click_x, click_y, window_menu_options, 5);
+        
         return;
     }
 }
@@ -168,7 +170,7 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         uint16_t row = i / max_cols;
         
         uint16_t sp_x = NAV_X + (col * ITEM_WIDTH);
-        uint16_t sp_y = NAV_Y + (row * ITEM_HEIGHT);
+        uint16_t sp_y = (NAV_Y + (row * ITEM_HEIGHT)) + NAV_Y_OFF;
         
         struct Image* current_icon;
         switch (state->items[i].icon_index) {
@@ -189,6 +191,14 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         uint16_t string_width = length * ITEM_FONT_CHAR_WIDTH;
         int16_t text_start_x = sp_x + ((ITEM_WIDTH - string_width) / 2);
         dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_HEIGHT_OFF, state->items[i].name, item_text);
+        
+        // DEBUG - show item hit boxes
+#ifdef _DEBUG_DRAW_ENABLE_
+        uint16_t tile_start_x = NAV_X + (col * ITEM_WIDTH);
+        uint16_t tile_start_y = NAV_Y + (row * ITEM_HEIGHT);
+        dwm_draw_rect(tile_start_x, tile_start_y, ITEM_WIDTH, ITEM_HEIGHT, 0xFF808080);
+#endif
+        
     }
 }
 
@@ -224,14 +234,36 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         
     case DWM_EVENT_CONTEXT_MENU:
         switch (wparam) {
+            
+        case 0:
+            dwm_summon_message_box("menu click", "test 0");
+            break;
+            
+        case 1:
+            dwm_summon_message_box("menu click", "test 1");
+            break;
+            
+        case 2:
+            dwm_summon_message_box("menu click", "item 2");
+            break;
+            
         case 3: // "Properties" clicked
             if (state->context_item_index != -1 && state->context_item_index < state->total_items) {
                 struct Item* clicked_item = &state->items[state->context_item_index];
                 
-                // Send the properties popup down to the window manager using clean parameters
                 dwm_summon_properties("Properties", clicked_item->name, clicked_item->path, clicked_item->icon_index);
-            }
+            } else {
+                
+                dwm_summon_message_box("menu click", "item 3");
+            };
             break;
+            
+        case 4:
+            
+            dwm_summon_properties("Properties", state->window_title, state->full_path, ICON_FOLDER);
+            
+            break;
+            
         }
         return;
     }

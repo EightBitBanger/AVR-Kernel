@@ -3,6 +3,8 @@
 
 #include <kernel/events.h>
 
+//#define _DEBUG_DRAW_ENABLE_
+
 #define MAX_ITEMS                   64
 #define MAX_TITLE_LEN               32
 #define MAX_PATH_LEN               128
@@ -61,11 +63,12 @@
 
 // Grid Layout Dimensions
 #define NAV_X                        5
-#define NAV_Y                       40
+#define NAV_Y                       38
+#define NAV_Y_OFF                    7
 
 // Grid Item Typography
 #define ITEM_WIDTH                  72
-#define ITEM_HEIGHT                 80
+#define ITEM_HEIGHT                 65
 #define ITEM_TEXT_HEIGHT_OFF        42
 #define ITEM_FONT_CHAR_WIDTH         6
 

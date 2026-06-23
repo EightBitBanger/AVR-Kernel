@@ -49,15 +49,15 @@ struct ExplorerWindowState {
     
     int32_t context_item_index; // Tracks right-clicked item (-1 means none/blank area)
     
-    uint32_t knode_current; // Current kernel directory (knode)
-    uint32_t fs_current;    // Current internal FS directory (0 if browsing knodes)
+    uint32_t knode_current;     // Current kernel directory (knode)
+    uint32_t fs_current;        // Current internal FS directory (0 if browsing knodes)
     
     struct ExplorerWindowState* next;
     
     struct Item items[MAX_ITEMS];
     
-    char window_title[MAX_TITLE_LEN];
-    char path[MAX_PATH_LEN];
+    char window_title[MAX_TITLE_LEN];  // Current directory name as the window title
+    char path[MAX_PATH_LEN];           // Truncated path for display
     char full_path[MAX_PATH_LEN];      // Absolute path
     uint16_t knode_path_len;           // Stores length of virtual base path for split rendering
 };
