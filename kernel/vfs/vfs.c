@@ -7,6 +7,15 @@
 #include <kernel/util/string.h>
 #include <kernel/util/list.h>
 
+typedef struct {
+    File id;              // Unique integer ID returned to the user
+    uint32_t address;     // Resolved knode address or fs_node address
+    bool in_file_system;  // Distinguishes between knode and block file system
+    uint32_t offset;      // Positions tracker for virtual knodes
+    FileHandle handle;    // Embedded File system handle for physical file system IO
+    uint16_t flags;       // Flags relating to the state of the opened file
+} OpenFileDescriptor;
+
 static struct list_node* open_files_head = NULL;
 static struct list_node* open_files_tail = NULL;
 static File next_unique_id = 1;
@@ -275,6 +284,18 @@ bool vfs_get_permissions(File file, uint8_t* perm) {
     }
     
     return true;
+}
+
+uint32_t vfs_get_size(File file) {
+    OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
+    if (!desc) return false;
+    // Check currently in a mounted file system
+    if (desc->in_file_system) {
+        return fs_file_get_size(desc->address);
+    } else {
+        return kmalloc_get_size(desc->address);
+    }
+    
 }
 
 bool vfs_is_directory(const char* path) {

@@ -9,6 +9,7 @@
 #include <kernel/syscall.h>
 
 #include <kernel/util/string.h>
+#include <kernel/util/tok.h>
 
 char* keyboard_string;
 uint8_t keyboard_length;
@@ -17,6 +18,24 @@ uint8_t keyboard_length_max;
 char* prompt_string;
 uint8_t prompt_length;
 uint8_t prompt_length_max;
+
+void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length) {
+    keyboard_length_max = kb_string_max_length;
+    prompt_length_max = kb_prompt_max_length;
+    
+    keyboard_string = kb_string;
+    prompt_string = kb_prompt;
+    
+    strcpy(prompt_string, "/>");
+    prompt_length = strlen(prompt_string);
+    
+    memset(keyboard_string, 0x00, keyboard_length_max);
+    keyboard_length = 0;
+    
+    console_prompt_set_string("/>");
+    
+    display_clear();
+}
 
 void console_prompt_print(void) {
     print(prompt_string);
@@ -63,24 +82,6 @@ uint32_t console_get_mounted_directory(void) {
     kernel_get_working_directory(&fs_current);
     return fs_current.mount_directory;
     return 0;
-}
-
-void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length) {
-    keyboard_length_max = kb_string_max_length;
-    prompt_length_max = kb_prompt_max_length;
-    
-    keyboard_string = kb_string;
-    prompt_string = kb_prompt;
-    
-    strcpy(prompt_string, "/>");
-    prompt_length = strlen(prompt_string);
-    
-    memset(keyboard_string, 0x00, keyboard_length_max);
-    keyboard_length = 0;
-    
-    console_prompt_set_string("/>");
-    
-    display_clear();
 }
 
 void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint8_t depth) {
@@ -169,11 +170,15 @@ void console_process_command(char* keyboard_str) {
     if (keyboard_str[0] == ' ' || keyboard_str[0] == '\0') 
         return;
     
-    char* token = strtok(keyboard_str, " \n\t");
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, keyboard_str, " \n\t");
+    
+    char* token = cstr_tok_next(&tok);
     while (token != NULL && arg_count < 16) {
         args[arg_count++] = token;
-        token = strtok(NULL, " \n\t");
+        token = cstr_tok_next(&tok);
     }
+    
     command = args[0];
     // Check internal commands
     for (uint32_t i = 0; i < syscall_get_count(); i++) {
@@ -200,14 +205,18 @@ void console_process_command(char* keyboard_str) {
         kernel_get_working_directory(&fs_current);
         kernel_get_local_paths(&fs_paths);
         
-        char old_path[32];
-        console_get_path(old_path, 32, fs_current.current_directory, fs_current.mount_directory, 16);
+        char old_path[PATH_LENGTH_MAX];
+        console_get_path(old_path, PATH_LENGTH_MAX, fs_current.current_directory, fs_current.mount_directory, 16);
         
-        char path[32];
+        char path[PATH_LENGTH_MAX];
         strcpy(path, fs_paths.path);
         
         int result = 1;
-        char* fs_path = strtok(path, ";");
+        
+        cstr_tok_t tok;
+        cstr_tok_init(&tok, path, ";");
+        
+        char* fs_path = cstr_tok_next(&tok);
         while (fs_path != NULL && result != 0) {
             
             syscall(SYSCALL_CHDIR, (char*[]){fs_path, NULL});
@@ -216,7 +225,7 @@ void console_process_command(char* keyboard_str) {
             
             syscall(SYSCALL_CHDIR, (char*[]){old_path, NULL});
             
-            fs_path = strtok(NULL, ";");
+            fs_path = cstr_tok_next(&tok);
         }
         
         if (result != 0) 

@@ -1,14 +1,11 @@
 #include <stdio.h>
-#include <stdlib.h> // Included for malloc and free
-#include <string.h>
 #include <stdbool.h>
+#include <kernel/util/string.h>
 
 #include <kernel/dwm/dwm.h>
 #include <kernel/util/list.h>
 #include <kernel/device/kevent.h>
 #include <kernel/events.h>
-
-#include <kernel/programs/explorer/explorer.h>
 
 struct list_node* event_list_head = NULL;
 struct list_node* event_list_tail = NULL;

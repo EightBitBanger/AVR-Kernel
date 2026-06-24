@@ -17,15 +17,6 @@
 
 typedef uint32_t File;
 
-typedef struct {
-    File id;              // Unique integer ID returned to the user
-    uint32_t address;     // Resolved knode address or fs_node address
-    bool in_file_system;  // Distinguishes between knode and block file system
-    uint32_t offset;      // Positions tracker for virtual knodes
-    FileHandle handle;    // Embedded File system handle for physical file system IO
-    uint16_t flags;       // Flags relating to the state of the opened file
-} OpenFileDescriptor;
-
 // Open/close
 
 File vfs_open(const char* path, uint16_t flags);
@@ -37,6 +28,8 @@ void vfs_read(File file, void* buffer, uint32_t size);
 void vfs_write(File file, const void* buffer, uint32_t size);
 
 // File system
+
+uint32_t vfs_get_size(File file);
 
 bool vfs_set_permissions(File file, uint8_t perm);
 bool vfs_get_permissions(File file, uint8_t* perm);

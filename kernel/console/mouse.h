@@ -21,7 +21,6 @@ struct RectangleStruct {
 void mouse_initiate(void);
 
 void mouse_set_cursor_speed(int32_t horz, int32_t vert);
-
 void mouse_set_cursor_acceleration(int32_t acceleration);
 
 void mouse_event_handler(void);
