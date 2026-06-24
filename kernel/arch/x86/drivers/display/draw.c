@@ -5,11 +5,11 @@
 #include <kernel/util/string.h>
 #include <emmintrin.h>
 
-#define CLIP_INSIDE  0
-#define CLIP_LEFT    1
-#define CLIP_RIGHT   2
-#define CLIP_BOTTOM  4
-#define CLIP_TOP     8
+#define DRAW_CLIP_INSIDE  0
+#define DRAW_CLIP_LEFT    1
+#define DRAW_CLIP_RIGHT   2
+#define DRAW_CLIP_BOTTOM  4
+#define DRAW_CLIP_TOP     8
 
 struct MultibootInfo* vinfo;
 
@@ -118,8 +118,7 @@ void draw_flush_region_simd(int x, int y, int width, int height) {
         const uint32_t* src = &back_buffer[src_offset];
         int rem_pixels = pixels_to_copy;
         
-        // 16 pixels * 4 bytes = 64 bytes (Exactly one CPU cache line)
-        // Highly optimized pure integer unrolling. Safe on all bare hardware.
+        // 16 pixels * 4 bytes = 64 bytes
         while (rem_pixels >= 16) {
             dst[0]  = src[0];  dst[1]  = src[1];  dst[2]  = src[2];  dst[3]  = src[3];
             dst[4]  = src[4];  dst[5]  = src[5];  dst[6]  = src[6];  dst[7]  = src[7];
@@ -213,11 +212,11 @@ void draw_flush_region(int x, int y, int width, int height) {
 
 
 static inline int render_clip_compute_outcode(int x, int y) {
-    int code = CLIP_INSIDE;
-         if (x < clipping_plain.min_x)  code |= CLIP_LEFT;
-    else if (x >= clipping_plain.max_x) code |= CLIP_RIGHT;
-         if (y < clipping_plain.min_y)  code |= CLIP_TOP;
-    else if (y >= clipping_plain.max_y) code |= CLIP_BOTTOM;
+    int code = DRAW_CLIP_INSIDE;
+         if (x < clipping_plain.min_x)  code |= DRAW_CLIP_LEFT;
+    else if (x >= clipping_plain.max_x) code |= DRAW_CLIP_RIGHT;
+         if (y < clipping_plain.min_y)  code |= DRAW_CLIP_TOP;
+    else if (y >= clipping_plain.max_y) code |= DRAW_CLIP_BOTTOM;
     return code;
 }
 
@@ -243,16 +242,16 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color) {
             int x, y;
             int outcodeOut = code0 ? code0 : code1;
             
-            if (outcodeOut & CLIP_TOP) {
+            if (outcodeOut & DRAW_CLIP_TOP) {
                 x = x0 + (x1 - x0) * (clipping_plain.min_y - y0) / (y1 - y0);
                 y = clipping_plain.min_y;
-            } else if (outcodeOut & CLIP_BOTTOM) {
+            } else if (outcodeOut & DRAW_CLIP_BOTTOM) {
                 x = x0 + (x1 - x0) * (clipping_plain.max_y - 1 - y0) / (y1 - y0);
                 y = clipping_plain.max_y - 1;
-            } else if (outcodeOut & CLIP_RIGHT) {
+            } else if (outcodeOut & DRAW_CLIP_RIGHT) {
                 y = y0 + (y1 - y0) * (clipping_plain.max_x - 1 - x0) / (x1 - x0);
                 x = clipping_plain.max_x - 1;
-            } else if (outcodeOut & CLIP_LEFT) {
+            } else if (outcodeOut & DRAW_CLIP_LEFT) {
                 y = y0 + (y1 - y0) * (clipping_plain.min_x - x0) / (x1 - x0);
                 x = clipping_plain.min_x;
             }

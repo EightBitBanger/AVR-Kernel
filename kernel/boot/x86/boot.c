@@ -138,7 +138,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // 16 byte aligned
     uint32_t heap_start              = ((uint32_t)_kernel_program_end + 0xFU) & ~0xFU;
-    uint32_t heap_size               = 1024U * 1024U * 64U;
+    uint32_t heap_size               = 1024U * 1024U * 4U;
     uint32_t block_size              = 16U;
     
     // 4k page aligned
@@ -153,6 +153,10 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Set millisecond timer
     timer_init();
     
+    // Paging
+    pmm_init(mbi, _kernel_memory_end);
+    vmm_init(mbi, _kernel_memory_end);
+    
     // Initiate display and drawing
     draw_set_info((uint32_t)mbi);
     display_init();
@@ -165,10 +169,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     draw_set_frame_front_buffer(front_buffer);
     draw_set_frame_back_buffer(back_buffer);
     draw_set_buffer_default();
-    
-    // Paging
-    pmm_init(mbi, _kernel_memory_end);
-    vmm_init(mbi, _kernel_memory_end);
     
     // Map the graphics front frame buffer 
     // as a cached write combine buffer
@@ -203,19 +203,21 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     
     //
-    // Command console boot options
+    // Command console / boot options
     
     {
         bool activate_console = false;
         
         uint64_t old_ms = timer_get_ms();
         while ((timer_get_ms() - old_ms) <= BOOT_DELAY_MS) {
-            // If there's keyboard data ready, check for 'c'
+            // Check keyboard data ready
             if (ps2_check_keyboard()) {
                 
                 if (kb_getc() == 'c') {
                     activate_console = true;
                     
+                    // Scan PCI bus for available hardware
+                    // before entering the console
                     pci_init();
                     
                     flush_keyboard_buffer();
@@ -246,7 +248,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     dwm_initiate();
     
-    uint16_t sep = 80;
+    uint16_t sep = 90;
     uint16_t posx = 30;
     uint16_t posy = 30;
     
@@ -254,6 +256,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
     dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
     dwm_create_mount(posx, posy,  "ssd0",       "/mnt/ssd0");
+    
+    
+    WindowHandle handle = notepad_main("/mnt/ssd0/test");
     
     
     /*
@@ -267,6 +272,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     vfs_write(file, buffer, sizeof(buffer));
     vfs_close(file);
     }
+    
     
     
     {
@@ -287,54 +293,37 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     */
     
     
-    
+    // User event call back messaging
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
     
-    // Scalable vector font or MSDF
+    // TODO scalable vector font or MSDF
     
-    // Color themes to handle color
+    // TODO color themes to handle color
     
-    // Key combination binding
+    // TODO key combination binding
     
-    // Get rid of those strtok calls...
-    
+    // TODO get rid of those strtok calls...
     
     
     while(1) {
+        
         dwm_update();
+        
         kernel_event_update();
-        
-        //dwm_summon_properties("wtf", "test", "/mnt");
-        
-        
-        /*
-        WindowClass wClass;
-        wClass.x = 100;
-        wClass.y = 100;
-        wClass.width  = 200;
-        wClass.height = 200;
-        
-        WindowHandle handle = dwm_create_window(wClass, 0, NULL);
-        
-        void* recc = malloc(1024000);
-        
-        dwm_window_resource_add(handle, "test", recc);
-        
-        dwm_destroy_window(handle);
-        
-        kernel_heap_hammer();
-        */
         
         
         // TODO move to interrupt handlers later on
         if (ps2_check_keyboard()) {
-            kb_getc();
+            
+            char last_key_pressed = kb_getc();
+            
+            dwm_set_keyboard_char(last_key_pressed);
+            dwm_window_send_event(handle, DWM_EVENT_KEYBOARD);
         }
         
     }
 }
-
 
 
 bool ps2_check_keyboard(void) {
@@ -365,65 +354,5 @@ void ps2_route_console(void) {
             draw_flush_display();
         }
     }
-}
-
-
-static unsigned long next_random(unsigned long *seed) {
-    *seed = *seed * 1103515245 + 12345;
-    return (unsigned int)(*seed / 65536) % 32768;
-}
-
-#define MAX_TRACKED_ALLOCS 256
-#define MAX_ALLOC_SIZE 4096
-
-WindowClass wclass;
-void* allocs[MAX_TRACKED_ALLOCS] = {0};
-unsigned long seed = 42; // Fixed seed for reproducibility, or pass in a timer tick
-unsigned long iteration = 0;
-unsigned long counter=0;
-
-WindowHandle whndl[4];
-
-void kernel_heap_hammer(void) {
-    counter++;
-    
-    wclass.x      = 100;
-    wclass.y      = 100;
-    wclass.width  = 800;
-    wclass.height = 600;
-    
-    unsigned long slot = next_random(&seed) % MAX_TRACKED_ALLOCS;
-    if (counter == 2) {whndl[0] = dwm_create_window(wclass, 0, NULL);}
-    if (counter == 4) {whndl[1] = dwm_create_window(wclass, 0, NULL);}
-    
-    if (allocs[slot] == NULL) {
-        // Slot is empty, let's allocate a random size
-        // Adding 1 to ensure we don't request 0 bytes
-        unsigned long size = (next_random(&seed) % MAX_ALLOC_SIZE) + 1;
-        
-        allocs[slot] = malloc(size);
-        
-        print_hex32( (uint32_t)allocs[slot] );
-        print("  ");
-        print_int( size );
-        print("\n");
-        
-        // Optional: You can write data to the block here to test for 
-        // page faults or memory corruption.
-    } else {
-        // Slot is occupied, let's free it
-        free(allocs[slot]);
-        allocs[slot] = NULL;
-    }
-    
-    if (counter == 6) {whndl[2] = dwm_create_window(wclass, 0, NULL);}
-    if (counter == 8) {whndl[3] = dwm_create_window(wclass, 0, NULL);}
-    
-    if (counter == 16) {dwm_destroy_window(whndl[0]);}
-    if (counter == 18) {dwm_destroy_window(whndl[1]);}
-    if (counter == 20) {dwm_destroy_window(whndl[2]);}
-    if (counter == 22) {dwm_destroy_window(whndl[3]);}
-    if (counter > 28) {counter = 0;}
-    
 }
 

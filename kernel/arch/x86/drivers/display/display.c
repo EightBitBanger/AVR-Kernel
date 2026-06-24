@@ -101,20 +101,22 @@ void display_putc(const char ch) {
 
 void display_newline(void) {
     extern uint32_t* back_buffer;
-    
-    uint8_t* fb_bytes = (uint8_t*)((uintptr_t)back_buffer);
+    if (!back_buffer) return;
     
     uint32_t pitch = vinfo->framebuffer_pitch;
+    uint32_t stride = pitch / 4; // Width in 32-bit pixels
     uint32_t height = display_get_height();
+    uint32_t width = display_get_width();
     
+    // Move existing lines up
     size_t bytes_per_text_row = FONT_HEIGHT * pitch; 
     size_t bytes_to_move = (height - FONT_HEIGHT) * pitch;
+    memmove(back_buffer, (uint8_t*)back_buffer + bytes_per_text_row, bytes_to_move);
     
-    memmove(fb_bytes, fb_bytes + bytes_per_text_row, bytes_to_move);
-    
+    // Clear the new bottom line
     for (uint32_t y = height - FONT_HEIGHT; y < height; y++) {
-        uint32_t* row_pixels = (uint32_t*)(fb_bytes + (y * pitch));
-        for (uint32_t x = 0; x < display_get_width(); x++) {
+        uint32_t* row_pixels = &back_buffer[y * stride];
+        for (uint32_t x = 0; x < width; x++) {
             row_pixels[x] = background_color;
         }
     }

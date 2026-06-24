@@ -13,12 +13,12 @@ static inline int is_delimiter(char c, const char *delim) {
     return 0;
 }
 
-void cstr_tokenizer_init(cstr_tokenizer_t* tokenizer, char* str, const char* delim) {
+void cstr_tok_init(cstr_tok_t* tokenizer, char* str, const char* delim) {
     tokenizer->next_token = str;
     tokenizer->delim = delim;
 }
 
-char* cstr_tokenizer_next(cstr_tokenizer_t *tokenizer) {
+char* cstr_tok_next(cstr_tok_t *tokenizer) {
     char *str = tokenizer->next_token;
     const char *delim = tokenizer->delim;
     

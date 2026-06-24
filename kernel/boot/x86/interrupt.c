@@ -14,7 +14,6 @@ extern void isr_general_fault(void);
 
 void pic_remap(void);
 
-// Create an array of 256 entries and the pointer
 struct idt_entry idt[256];
 struct idt_ptr idtp;
 
@@ -34,34 +33,37 @@ void idt_init(void) {
     for (int i = 0; i < 256; i++) 
         idt_set_gate(i, (uint32_t)isr_dummy, 0x08, 0x8E);
     
-    idt_set_gate(0,    (uint32_t)isr_div_zero,        0x08, 0x8E);
-    idt_set_gate(0x20, (uint32_t)isr_timer,           0x08, 0x8E);
-    idt_set_gate(0x0E, (uint32_t)isr_page_fault,      0x08, 0x8E);
-    idt_set_gate(0x0D, (uint32_t)isr_general_fault,   0x08, 0x8E);
+    idt_set_gate(0,    (uint32_t)isr_div_zero,         0x08, 0x8E);
+    idt_set_gate(0x20, (uint32_t)isr_timer,            0x08, 0x8E);
+    idt_set_gate(0x0E, (uint32_t)isr_page_fault,       0x08, 0x8E);
+    idt_set_gate(0x0D, (uint32_t)isr_general_fault,    0x08, 0x8E);
     
-    //idt_set_gate(0x21, (uint32_t)isr_keyboard,    0x08, 0x8E);
-    //idt_set_gate(0x2C, (uint32_t)isr_mouse,       0x08, 0x8E);
+    //idt_set_gate(0x21, (uint32_t)isr_keyboard,         0x08, 0x8E);
+    //idt_set_gate(0x2C, (uint32_t)isr_mouse,            0x08, 0x8E);
     
     __asm__ __volatile__("lidt (%0)" : : "r" (&idtp));
     
     pic_remap();
     
     // Unmask IRQ 0 (Timer) and IRQ 1 (Keyboard) on the PIC
-    // Bit 0 = Timer, Bit 1 = Keyboard. 0 means UNMASKED (enabled)
+    // Bit 0 = Timer, Bit 1 = Keyboard. 0 = UNMASKED (enabled)
     outb(0x21, 0xFC);
     
     __asm__ __volatile__("sti");
 }
 
+static inline void interrupt_end(void) {
+    outb(0x20, 0x20);
+}
 
 void isr_callback_div_zero_handler(void) {
     
-    outb(0x20, 0x20); // End of Interrupt
+    interrupt_end();
 }
 
 void c_dummy_handler(void) {
     
-    outb(0x20, 0x20); // End of Interrupt
+    interrupt_end();
 }
 
 void isr_callback_fault_handler(uint32_t error_code, uint32_t faulting_address, uint8_t type) {
@@ -69,4 +71,14 @@ void isr_callback_fault_handler(uint32_t error_code, uint32_t faulting_address, 
     kernel_crashout(error_code, faulting_address, type, "");
     
     while(1);
+    interrupt_end();
+}
+
+void keyboard_handler_c(void) {
+    volatile uint8_t dummy = inb(0x60);
+    
+    print("key pressed ");
+    draw_flush_display();
+    
+    interrupt_end();
 }

@@ -46,12 +46,5 @@ uint32_t device_get_hardware_address(const char* name) {
 }
 
 void device_get_hardware_data(uint32_t address, char* data_buffer, uint8_t size) {
-    //char device_name[size];
     
-    //struct Bus bus;
-    //bus.read_waitstate  = 20;
-    //bus.write_waitstate = 20;
-    
-    //for (uint8_t index=0; index < size; index++) 
-    //    mmio_readb(&bus, address + index , &data_buffer[index]);
 }
