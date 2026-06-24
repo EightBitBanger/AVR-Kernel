@@ -27,6 +27,8 @@ typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lp
 void dwm_initiate(void);
 void dwm_update(void);
 
+void dwm_set_keyboard_char(char ch);
+
 // Windows
 
 WindowHandle dwm_create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc);

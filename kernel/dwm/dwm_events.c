@@ -61,7 +61,7 @@ void dwm_process_window_events(struct WindowObject* window) {
     
     if (window->event_callback != NULL && window->events != 0) {
         if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
-        if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, 0, 0);}
+        if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, input.last_key_pressed, 0);}
         
         if (window->events & DWM_EVENT_RESIZE)    {window->events &= ~DWM_EVENT_RESIZE;    window->event_callback(window->id, DWM_EVENT_RESIZE, window_sz_data, 0);}
         

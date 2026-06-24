@@ -93,6 +93,8 @@ void dwm_initiate(void) {
     
     // Input
     
+    input.last_key_pressed = 0;
+    
     input.mouse_last.x = 0;
     input.mouse_last.y = 0;
     

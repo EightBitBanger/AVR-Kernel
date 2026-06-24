@@ -259,3 +259,7 @@ void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16
     
     list_append(&window->buttons_head, &window->buttons_tail, button);
 }
+
+void dwm_set_keyboard_char(char ch) {
+    input.last_key_pressed = ch;
+}

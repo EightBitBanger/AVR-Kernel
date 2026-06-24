@@ -23,6 +23,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define PATH_LENGTH_MAX  64
+
 struct WorkingDirectory {
     uint32_t current_directory;
     uint32_t mount_device;
@@ -31,7 +33,7 @@ struct WorkingDirectory {
 };
 
 struct LocalPaths {
-    char path[64];
+    char path[PATH_LENGTH_MAX];
 };
 
 void kernel_get_working_directory(struct WorkingDirectory* out_dir);
@@ -53,7 +55,6 @@ void destroy_driver(uint32_t address);
 
 uint32_t create_procblock(const char* name);
 void destroy_procblock(uint32_t address);
-
 
 // Hardware identification
 

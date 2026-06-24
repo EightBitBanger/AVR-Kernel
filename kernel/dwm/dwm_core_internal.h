@@ -57,6 +57,8 @@ struct DWMContext {
 };
 
 struct DWMInput {
+    char last_key_pressed;
+    
     Point mouse_last;
     
     bool last_left_button_pressed;

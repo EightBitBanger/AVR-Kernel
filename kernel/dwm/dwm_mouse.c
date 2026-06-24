@@ -19,7 +19,7 @@ static uint64_t last_window_click_time = 0;
 void dwm_update_mouse(struct WindowContext* ctx) {
     // Check for hover states first (always runs regardless of clicks)
     dwm_handle_context_menu_hover(ctx);
-
+    
     bool is_new_left_click = ctx->left_button_pressed && !input.last_left_button_pressed;
     bool is_new_right_click = ctx->right_button_pressed && !input.last_right_button_pressed;
     

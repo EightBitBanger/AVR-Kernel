@@ -1,6 +1,9 @@
 #ifndef KERNEL_EVENT_SYSTEM_H
 #define KERNEL_EVENT_SYSTEM_H
 
+#include <kernel/programs/explorer/explorer.h>
+#include <kernel/programs/notepad/notepad.h>
+
 #include <kernel/events.h>
 
 #define KEVENT_EXECUTE     0x0001
