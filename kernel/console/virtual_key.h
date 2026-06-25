@@ -9,7 +9,7 @@
 #define VK_ALT            0x38  // Left Alt
 #define VK_CAPSLOCK       0x3A
 
-// Navigation & Editing (Note: These are the standard Set 1 base codes)
+// Navigation & Editing
 #define VK_HOME           0x47
 #define VK_UP             0x48
 #define VK_PAGE_UP        0x49

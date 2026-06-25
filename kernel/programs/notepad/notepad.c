@@ -37,6 +37,8 @@ struct NotepadWindowState* allocate_notepad_window_state(WindowHandle handle, co
     new_node->win_width = 400;
     new_node->text_length = 0;
     
+    strncpy(new_node->file_path, path, DWM_PATH_LENGTH);
+    
     new_node->next = notepad_window_list_head;
     notepad_window_list_head = new_node;
     
@@ -45,19 +47,21 @@ struct NotepadWindowState* allocate_notepad_window_state(WindowHandle handle, co
     if (file == INVALID_FILE_ID) 
         return new_node;
     
-    char buffer[8];
-    
     uint32_t size = vfs_get_size(file);
-    if (size > MAX_TEXT_LEN) 
-        size = MAX_TEXT_LEN;
+    if (size > (MAX_TEXT_LEN - 1)) 
+        size = MAX_TEXT_LEN - 1;
     
-    new_node->text_length = size;
     vfs_read(file, new_node->text_buffer, size);
     vfs_close(file);
     
+    // Cap length at the first null-terminator if it exists early
+    uint32_t actual_length = 0;
+    while (actual_length < size && new_node->text_buffer[actual_length] != '\0') {
+        actual_length++;
+    }
     
-    buffer[sizeof(buffer)-1] = '\0';
-    print(buffer);
+    new_node->text_length = actual_length;
+    new_node->text_buffer[actual_length] = '\0';
     
     return new_node;
 }

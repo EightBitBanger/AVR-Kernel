@@ -11,6 +11,7 @@ extern uint32_t notepad_text_color;
 
 struct NotepadWindowState {
     WindowHandle handle;
+    char file_path[DWM_PATH_LENGTH];
     
     uint16_t win_width;
     uint16_t win_height;
@@ -18,6 +19,8 @@ struct NotepadWindowState {
     char window_title[MAX_TITLE_LEN];
     char text_buffer[MAX_TEXT_LEN];
     uint32_t text_length;
+    
+    uint32_t cursor_index;
     
     struct NotepadWindowState* next;
 };
