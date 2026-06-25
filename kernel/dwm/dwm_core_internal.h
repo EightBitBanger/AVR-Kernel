@@ -57,7 +57,7 @@ struct DWMContext {
 };
 
 struct DWMInput {
-    char last_key_pressed;
+    uint16_t last_key_pressed;
     
     Point mouse_last;
     

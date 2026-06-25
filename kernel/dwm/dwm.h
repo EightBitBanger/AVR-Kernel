@@ -27,7 +27,7 @@ typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lp
 void dwm_initiate(void);
 void dwm_update(void);
 
-void dwm_set_keyboard_char(char ch);
+void dwm_set_keyboard_char(uint16_t ch);
 
 // Windows
 

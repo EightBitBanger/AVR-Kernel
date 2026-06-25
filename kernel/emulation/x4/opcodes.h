@@ -3,8 +3,8 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <string.h>
 
+#include <kernel/util/string.h>
 #include <kernel/util/delay.h>
 #include <kernel/kernel.h>
 
