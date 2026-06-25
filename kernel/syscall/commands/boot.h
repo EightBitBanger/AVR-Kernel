@@ -2,8 +2,9 @@
 #define SYSCALL_BOOT_H
 
 #include <stdint.h>
-#include <string.h>
+
 #include <kernel/kernel.h>
+#include <kernel/util/string.h>
 
 #include <kernel/emulation/x4/x4.h>
 

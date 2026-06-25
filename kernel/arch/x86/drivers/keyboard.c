@@ -137,59 +137,87 @@ void kb_event_handler(void) {
 }
 
 void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
-    uint8_t status = inb(0x64);
-    
-    if ((status & 0x01) && !(status & 0x20)) {
-        uint8_t raw_code = inb(0x60);
-        
-        if (raw_code & 0x80) {
-            *low_byte  = raw_code & 0x7F;
-            *high_byte = 0x80;
-        } else {
-            *low_byte  = raw_code;
-            *high_byte = 0x00;
-        }
-    } else {
-        *low_byte  = 0;
-        *high_byte = 0;
-    }
 }
 
-char kb_getc(void) {
-    uint8_t low_byte, high_byte;
-    kb_get_raw(&low_byte, &high_byte);
-    
-    if (low_byte == 0 && high_byte == 0) return 0;
-    
-    uint32_t scancode = low_byte;
-    bool is_break = (high_byte == 0x80);
-    
-    // Track Left Ctrl (0x1D) and Left Alt (0x38)
-    if (scancode == 0x1D) {
-        is_ctrl_pressed = !is_break;
-    } else if (scancode == 0x38) {
-        is_alt_pressed = !is_break;
-    } else if (scancode == 0x2A || scancode == 0x36) {
-        is_shift_pressed = !is_break;
+uint16_t kb_getc(void) {
+    // Check PS/2 Controller Status Register (Port 0x64)
+    // Bit 0 (0x01) is set when the Output Buffer has a scan code waiting to be read.
+    uint8_t status = inb(0x64);
+    if (!(status & 0x01)) {
+        return 0; // No key data available right now
     }
     
-    // Check for Delete key (0x53) while Ctrl and Alt are held down
+    // Check if this data came from the mouse instead of the keyboard (Bit 5 / 0x20)
+    if (status & 0x20) {
+        inb(0x60); // Flush the mouse byte to avoid locking up the port
+        return 0;
+    }
+
+    // Read the primary scan code byte from the PS/2 Data Port (Port 0x60)
+    uint8_t scancode = inb(0x60);
+    bool is_extended = false;
+
+    // --- HANDLE EXTENDED SCROLL SCAN CODES (0xE0 Prefix) ---
+    if (scancode == 0xE0) {
+        // Spin briefly until the second byte of the sequence lands in the buffer
+        int timeout = 20000;
+        while (!((inb(0x64) & 0x01)) && timeout > 0) {
+            timeout--;
+        }
+        
+        // If the second byte arrived, grab it; otherwise drop the trailing prefix safely
+        if (timeout > 0) {
+            scancode = inb(0x60);
+            is_extended = true;
+        } else {
+            return 0; 
+        }
+    }
+
+    // Determine if this is a Make code (press) or Break code (release)
+    // In Set 1, a break code has bit 7 (0x80) enabled.
+    bool is_break = (scancode & 0x80) ? true : false;
+    scancode &= 0x7F; // Strip bit 7 to isolate the core scancode identifier
+
+    // --- STATE TRACKING FOR MODIFIER KEYS ---
+    if (scancode == 0x1D) {         // Left Ctrl
+        is_ctrl_pressed = !is_break;
+    } else if (scancode == 0x38) {  // Left Alt
+        is_alt_pressed = !is_break;
+    } else if (scancode == 0x2A || scancode == 0x36) { // Left/Right Shift
+        is_shift_pressed = !is_break;
+    }
+
+    // Handle Ctrl+Alt+Del Reset Sequence
     if (scancode == 0x53 && !is_break) {
         if (is_ctrl_pressed && is_alt_pressed) {
             system_restart();
         }
     }
-    
+
+    // Forward the key state updates down to virtual tracking subsystems
     kb_vkey_set(scancode, !is_break);
-    
-    // MODIFIED: Return appropriate character map based on Shift state
-    if (scancode < sizeof(scancode_to_ascii_set1) && !is_break) {
-        if (is_shift_pressed) {
-            return scancode_to_ascii_shifted_set1[scancode];
-        } else {
-            return scancode_to_ascii_set1[scancode];
+
+    // We only process 'Make' events (key presses) for text area character insertion
+    if (!is_break) {
+        // Handle Directional Arrow Keys
+        // Arrow key scan codes are identical in make values, but carry the extended 0xE0 flag.
+        if (is_extended) {
+            if (scancode == 0x48 || scancode == 0x4B || scancode == 0x4D || scancode == 0x50) {
+                return (uint16_t)(scancode << 8); // Pack raw scancode directly into the high byte
+            }
+            return 0; // Skip other non-navigation extended keys for now
+        }
+
+        // Handle standard printable ASCII scan code translations
+        if (scancode < sizeof(scancode_to_ascii_set1)) {
+            if (is_shift_pressed) {
+                return (uint16_t)scancode_to_ascii_shifted_set1[scancode];
+            } else {
+                return (uint16_t)scancode_to_ascii_set1[scancode];
+            }
         }
     }
-    
+
     return 0;
 }

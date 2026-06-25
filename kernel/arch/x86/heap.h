@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define KMALLOC_NULL         0xFFFFFFFF
+#define KMALLOC_NULL         0xFFFFFFFFUL
 
 #define KMALLOC_FLAG_DIRTY       0x01
 #define KMALLOC_FLAG_MOUNT       0x02

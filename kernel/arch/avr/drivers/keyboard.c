@@ -157,7 +157,7 @@ void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
     mmio_readb(&bus, 0x90001, high_byte);
 }
 
-char kb_getc(void) {
+uint16_t kb_getc(void) {
     uint8_t low_byte, high_byte;
     kb_get_raw(&low_byte, &high_byte);
     

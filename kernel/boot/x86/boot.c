@@ -261,37 +261,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     WindowHandle handle = notepad_main("/mnt/ssd0/test");
     
     
-    /*
-    {
-    File file = vfs_open("/mnt/ssd0/test", VFS_OPEN_WRITE);
-    if (file == INVALID_FILE_ID) {
-        print("fuck \n");
-    }
-    
-    char buffer[] = "wtf";
-    vfs_write(file, buffer, sizeof(buffer));
-    vfs_close(file);
-    }
-    
-    
-    
-    {
-    File file = vfs_open("/mnt/ssd0/test", VFS_OPEN_READ);
-    if (file == INVALID_FILE_ID) {
-        print("fuck \n");
-    }
-    
-    char buffer[16];
-    memset(buffer, ' ', sizeof(buffer));
-    vfs_read(file, buffer, sizeof(buffer));
-    vfs_close(file);
-    
-    buffer[sizeof(buffer)-1] = '\0';
-    print(buffer);
-    
-    }
-    */
-    
     
     // User event call back messaging
     //  wEvent GetMessage();
@@ -312,11 +281,10 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
         kernel_event_update();
         
-        
         // TODO move to interrupt handlers later on
         if (ps2_check_keyboard()) {
             
-            char last_key_pressed = kb_getc();
+            uint16_t last_key_pressed = kb_getc();
             
             dwm_set_keyboard_char(last_key_pressed);
             dwm_window_send_event(handle, DWM_EVENT_KEYBOARD);

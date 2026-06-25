@@ -48,6 +48,20 @@ char* strncpy(char* dest, const char* src, size_t n) {
     return dest;
 }
 
+char* strcat(char* dest, const char* src) {
+    char *ptr = dest;
+    
+    // Find the end of dest
+    while (*ptr != '\0') {
+        ptr++;
+    }
+    
+    // Copy src to the end of dest
+    while ((*ptr++ = *src++) != '\0');
+    
+    return dest;
+}
+
 size_t strncat(char* dest, const char* src, size_t size) {
     char *d = dest;
     const char *s = src;
@@ -163,6 +177,25 @@ char* strnchr(const char* str, size_t n, int character) {
     return NULL;
 }
 
+char* strrchr(const char* str, int character) {
+    const char *last = NULL;
+    char c = (char)character;
+    
+    while (*str != '\0') {
+        if (*str == c) {
+            last = str;
+        }
+        str++;
+    }
+    
+    // Standard behavior: if searching for '\0', return pointer to the terminator
+    if (c == '\0') {
+        return (char*)str;
+    }
+    
+    return (char*)last;
+}
+
 char* strstr(const char* haystack, const char* needle) {
     if (!*needle) {
         return (char*)haystack;
@@ -181,6 +214,28 @@ char* strstr(const char* haystack, const char* needle) {
         }
     }
     return NULL;
+}
+
+size_t strspn(const char *str, const char *accept) {
+    const char *s = str;
+    while (*s != '\0') {
+        if (!is_delimiter(*s, accept)) {
+            break;
+        }
+        s++;
+    }
+    return (size_t)(s - str);
+}
+
+size_t strcspn(const char *str, const char *reject) {
+    const char *s = str;
+    while (*s != '\0') {
+        if (is_delimiter(*s, reject)) {
+            break;
+        }
+        s++;
+    }
+    return (size_t)(s - str);
 }
 
 // Memory Operations
@@ -220,6 +275,20 @@ void* memmove(void* dest, const void* src, size_t n) {
         }
     }
     return dest;
+}
+
+int memcmp(const void* s1, const void* s2, size_t n) {
+    const unsigned char *p1 = (const unsigned char *)s1;
+    const unsigned char *p2 = (const unsigned char *)s2;
+    
+    while (n--) {
+        if (*p1 != *p2) {
+            return *p1 - *p2;
+        }
+        p1++;
+        p2++;
+    }
+    return 0;
 }
 
 // Translation Operations

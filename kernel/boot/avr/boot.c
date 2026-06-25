@@ -8,7 +8,7 @@
 #include <kernel/emulation/x4/scheduler.h>
 #include <kernel/emulation/x4/x4.h>
 
-#include <string.h>
+#include <kernel/util/string.h>
 
 ISR(INT2_vect) {
     

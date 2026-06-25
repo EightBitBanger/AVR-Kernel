@@ -128,12 +128,12 @@ uint32_t fs_directory_create(const char* name, uint8_t permissions, uint32_t par
     return address;
 }
 
-void fs_directory_delete(uint32_t handle) {
+void fs_directory_delete(uint32_t address) {
     struct FSDirectoryHeader directory;
     uint32_t                 extent_address;
     uint32_t                 next_extent_address;
     
-    if (!fs_directory_header_read(handle, &directory))
+    if (!fs_directory_header_read(address, &directory))
         return;
     
     extent_address = directory.next;
@@ -149,7 +149,7 @@ void fs_directory_delete(uint32_t handle) {
         extent_address = next_extent_address;
     }
     
-    fs_free(handle);
+    fs_free(address);
 }
 
 uint8_t fs_directory_add_reference(uint32_t directory_address, uint32_t reference_address) {

@@ -18,7 +18,7 @@
 
 #define FS_MAGIC                0xAAUL
 #define FS_NULL                 0xFFFFFFFFUL
-#define FS_INVALID_FRAME        0xFFFFFFFF
+#define FS_INVALID_FRAME        0xFFFFFFFFUL
 
 void fs_init(void);
 
