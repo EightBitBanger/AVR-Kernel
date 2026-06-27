@@ -172,9 +172,12 @@ File vfs_open(const char* path, uint16_t flags) {
     
     // If it's a file system node, bind and open the concrete backend handler
     if (desc->in_file_system) {
+        uint8_t perm = 0;
+        fs_file_get_permissions(desc->address, &perm);
+        
         uint8_t target_mode = 0;
-        if (flags & VFS_OPEN_READ)   target_mode |= FS_FILE_MODE_READ;
-        if (flags & VFS_OPEN_WRITE)  target_mode |= FS_FILE_MODE_WRITE;
+        if ((flags & VFS_OPEN_READ) && (perm & FS_PERMISSION_READ))    target_mode |= FS_FILE_MODE_READ;
+        if ((flags & VFS_OPEN_WRITE) && (perm & FS_PERMISSION_WRITE))  target_mode |= FS_FILE_MODE_WRITE;
         
         // Fallback baseline mode if zero options specified
         if (target_mode == 0) {
@@ -187,7 +190,7 @@ File vfs_open(const char* path, uint16_t flags) {
         }
     }
     
-    // Register with the link list tracker
+    // Register with the linked list tracker
     if (!list_append(&open_files_head, &open_files_tail, desc)) {
         if (desc->in_file_system) {
             fs_file_close(&desc->handle);
@@ -212,12 +215,24 @@ void vfs_close(File file) {
     free(desc);
 }
 
+bool vfs_exists(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == 0xFFFFFFFF || address == 0) 
+        return false;
+    if (!fs_file_check(address)) 
+        if (!fs_check_directory_valid(address)) 
+            return false;
+    return true;
+}
+
 void vfs_read(File file, void* buffer, uint32_t size) {
     OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
     if (!desc) return;
     
     if (desc->in_file_system) {
-        // Leverages your filesystem API to process allocation metadata boundaries safely
         fs_file_read(&desc->handle, buffer, size);
     } else {
         kmem_read(buffer, desc->address + desc->offset, size);
@@ -230,7 +245,6 @@ void vfs_write(File file, const void* buffer, uint32_t size) {
     if (!desc) return;
     
     if (desc->in_file_system) {
-        // Directly writes payload blocks through your verified sub-system
         fs_file_write(&desc->handle, buffer, size);
     } else {
         kmem_write(desc->address + desc->offset, buffer, size);
@@ -238,15 +252,16 @@ void vfs_write(File file, const void* buffer, uint32_t size) {
     }
 }
 
-void vfs_mkfile(const char* path, uint32_t size) {
-    if (path == NULL || path[0] == '\0') return;
+bool vfs_mkfile(const char* path, uint32_t size) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
     
     char parent_path[256];
     char target_name[16];
     
     // Find the last occurrence of '/' to isolate the filename
     const char* last_slash = strrchr(path, '/');
-    if (last_slash == NULL) return; // Expecting absolute paths
+    if (last_slash == NULL) return false; // Expecting absolute paths
     
     if (last_slash == path) {
         // The parent directory is the root "/"
@@ -254,7 +269,7 @@ void vfs_mkfile(const char* path, uint32_t size) {
         strncpy(target_name, last_slash + 1, sizeof(target_name) - 1);
     } else {
         size_t parent_len = last_slash - path;
-        if (parent_len >= sizeof(parent_path)) return; // Path overflow safety
+        if (parent_len >= sizeof(parent_path)) return false; // Path overflow safety
         
         strncpy(parent_path, path, parent_len);
         parent_path[parent_len] = '\0';
@@ -265,31 +280,33 @@ void vfs_mkfile(const char* path, uint32_t size) {
     // Resolve parent directory address and check if it exists
     uint32_t parent_address = resolve_path_to_address(parent_path);
     if (parent_address == 0xFFFFFFFF || parent_address == 0) {
-        return; // Leading path does not exist
+        return false; // Leading path does not exist
     }
     
     // Ensure creations happen inside an active filesystem context
     if (fs_check_directory_valid(parent_address)) {
         fs_file_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, size, parent_address);
     }
+    return true;
 }
 
-void vfs_mkdir(const char* path) {
-    if (path == NULL || path[0] == '\0') return;
+bool vfs_mkdir(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
     
     char parent_path[256];
     char target_name[16];
     
     // Find the last occurrence of '/' to isolate the directory name
     const char* last_slash = strrchr(path, '/');
-    if (last_slash == NULL) return;
+    if (last_slash == NULL) return false;
     
     if (last_slash == path) {
         strcpy(parent_path, "/");
         strncpy(target_name, last_slash + 1, sizeof(target_name) - 1);
     } else {
         size_t parent_len = last_slash - path;
-        if (parent_len >= sizeof(parent_path)) return;
+        if (parent_len >= sizeof(parent_path)) return false;
         
         strncpy(parent_path, path, parent_len);
         parent_path[parent_len] = '\0';
@@ -300,29 +317,94 @@ void vfs_mkdir(const char* path) {
     // Resolve parent directory address and check if it exists
     uint32_t parent_address = resolve_path_to_address(parent_path);
     if (parent_address == 0xFFFFFFFF || parent_address == 0) {
-        return; // Leading path does not exist
+        return false; // Leading path does not exist
     }
     
     if (fs_check_directory_valid(parent_address)) {
         fs_directory_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, parent_address);
     }
+    return true;
 }
 
-void vfs_remove(const char* path) {
-    if (path == NULL || path[0] == '\0') return;
+bool vfs_remove(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
     
-    // Resolve the direct target element address
+    uint32_t address = resolve_path_to_address(path);
+    if (address == 0xFFFFFFFF || address == 0) 
+        return false;
+    
+    uint32_t parent = resolve_parent_path_to_address(path);
+    if (parent == 0xFFFFFFFF || parent == 0) 
+        return false;
+    
+    if (fs_check_directory_valid(parent)) {
+        uint8_t item_perm = 0;
+        uint8_t parent_perm = 0;
+        fs_file_get_permissions(address, &item_perm);
+        fs_file_get_permissions(address, &parent_perm);
+        
+        if (!(item_perm & FS_PERMISSION_WRITE) || 
+            !(parent_perm & FS_PERMISSION_READ) || 
+            !(parent_perm & FS_PERMISSION_WRITE)) 
+            return false;
+        
+        fs_directory_remove_reference(parent, address);
+        
+        if (fs_file_delete(address)) {
+            if (fs_directory_delete(address)) 
+                return true;
+        }
+        
+    } else {
+        // KNODE
+    }
+    
+    
+    
+    return false;
+}
+
+bool vfs_rename(const char* path, const char* name) {
+    if (path == NULL || name == NULL) 
+        return false;
+    
+    if (path[0] == '\0' || name[0] == '\0' || 
+        path[0] == ' ' || name[0] == ' ') 
+        return false;
+    
+    // Resolve the target file/directory's current internal address
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) {
-        return; // Target element or its leading path does not exist
+        return false; // Target item does not exist
     }
     
-    // Route to appropriate concrete driver removal logic
-    if (fs_check_directory_valid(address)) {
-        fs_directory_delete(address);
-    } else if (fs_file_check(address)) {
-        fs_file_delete(address);
+    // Resolve the parent directory's address to determine the context
+    uint32_t parent_address = resolve_parent_path_to_address(path);
+    if (parent_address == 0xFFFFFFFF || parent_address == 0) {
+        return false; // Unable to locate parent directory context
     }
+    // Check if the name is taken
+    if (fs_directory_find(parent_address, name) != FS_NULL) {
+        return false;
+    }
+    
+    // Perform the rename operation based on the architecture layer
+    if (fs_check_directory_valid(parent_address)) {
+        fs_file_set_name(address, name);
+        return true;
+    } else {
+        knode_set_name(address, name);
+        return true;
+    }
+}
+
+bool vfs_truncate(const char* path, uint32_t new_size) {
+    if (vfs_remove(path)) 
+        if (vfs_mkfile(path, new_size)) 
+            return true;
+    // TODO implement a proper 'fs_file_resize' function
+    return false;
 }
 
 bool vfs_set_permissions(File file, uint8_t perm) {
@@ -441,6 +523,21 @@ bool vfs_is_directory_mounted(const char* path) {
     return false;
 }
 
+uint32_t vfs_directory_count(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == KNODE_NULL || address == FS_NULL) 
+        return false;
+    if (fs_check_directory_valid(address)) {
+        return fs_directory_get_reference_count(address);
+    } else {
+        return knode_get_reference_count(address);
+    }
+    return 0;
+}
+
 uint32_t resolve_path_to_address(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return 0xFFFFFFFF;
@@ -517,11 +614,11 @@ uint32_t resolve_path_to_address(const char* path) {
                 for (uint32_t i = 0; i < ref_count; i++) {
                     uint32_t reference = fs_directory_get_reference(current_fs_node, i);
                     if (reference == FS_NULL) continue;
-                
-                    char item_name[16]; // Match MAX_TITLE_LEN
+                    
+                    char item_name[32];
                     fs_file_get_name(reference, item_name);
-                
-                    if (strcmp(item_name, token) == 0) {
+                    
+                    if (strncmp(item_name, token, 32) == 0) {
                         found_ref = reference;
                         break;
                     }
@@ -539,4 +636,37 @@ uint32_t resolve_path_to_address(const char* path) {
     
     // Return the correct address context based on where traversal ended
     return in_file_system ? current_fs_node : current_knode;
+}
+
+uint32_t resolve_parent_path_to_address(const char* path) {
+    if (path == NULL || path[0] == '\0') {
+        return 0xFFFFFFFF;
+    }
+    
+    char parent_path[256];
+    
+    // Find the last occurrence of '/' to isolate the parent directory path
+    const char* last_slash = strrchr(path, '/');
+    if (last_slash == NULL) {
+        // If there's no slash, it's a relative path in the current directory.
+        // Assuming relative paths fall back to current directory, or return error if absolute is required.
+        strcpy(parent_path, "."); 
+    }
+    else if (last_slash == path) {
+        // The parent directory is the root "/" (e.g., "/filename")
+        strcpy(parent_path, "/");
+    } 
+    else {
+        // Extract everything before the last slash (e.g., "/mnt/filename" -> "/mnt")
+        size_t parent_len = last_slash - path;
+        if (parent_len >= sizeof(parent_path)) {
+            return 0xFFFFFFFF; // Path overflow safety
+        }
+        
+        strncpy(parent_path, path, parent_len);
+        parent_path[parent_len] = '\0';
+    }
+    
+    // Pass the isolated parent directory path to your existing path resolver
+    return resolve_path_to_address(parent_path);
 }

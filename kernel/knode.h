@@ -21,6 +21,7 @@ void knode_set_root(uint32_t address);
 uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr);
 uint8_t knode_remove_reference(uint32_t directory_address, uint32_t reference_ptr);
 uint32_t knode_get_reference(uint32_t directory_address, uint32_t index);
+uint32_t knode_get_reference_count(uint32_t directory_address);
 uint32_t knode_find_by_name(uint32_t directory_address, const char* name);
 
 uint32_t create_extent(void);

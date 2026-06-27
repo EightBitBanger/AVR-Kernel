@@ -44,6 +44,9 @@ void knode_get_name(uint32_t address, char* name) {
 }
 
 void knode_set_name(uint32_t address, const char* name) {
+    uint8_t permissions = kmalloc_get_permissions(address);
+    if (!(permissions & KMALLOC_PERMISSION_WRITE)) 
+        return;
     for (uint8_t i=0; i < KNODE_NAME_LENGTH_MAX; i++) {
         kmem_write(address + i, &name[i], 1);
         if (name[i] == '\0') 
@@ -303,6 +306,30 @@ uint32_t knode_get_reference(uint32_t directory_address, uint32_t index) {
         current_extent_address = extent.next;
     }
     return KMALLOC_NULL;
+}
+
+uint32_t knode_get_reference_count(uint32_t directory_address) {
+    if (knode_is_valid_address(directory_address) == 0) 
+        return KMALLOC_NULL;
+    
+    struct KernelDirectory directory;
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
+    
+    // Start with the number of references in the primary directory node
+    uint32_t total_count = directory.size;
+    
+    // Traverse through the extents linked list to accumulate additional references
+    uint32_t current_extent_address = directory.next;
+    
+    while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
+        struct KernelDirectoryExtent extent;
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
+        
+        total_count += extent.size;
+        current_extent_address = extent.next;
+    }
+    
+    return total_count;
 }
 
 uint32_t knode_get_root(void) {

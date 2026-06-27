@@ -21,8 +21,9 @@ typedef uint32_t File;
 
 File vfs_open(const char* path, uint16_t flags);
 void vfs_close(File file);
+bool vfs_exists(const char* path);
 
-// Read/write
+// File
 
 void vfs_read(File file, void* buffer, uint32_t size);
 void vfs_write(File file, const void* buffer, uint32_t size);
@@ -37,10 +38,17 @@ bool vfs_get_permissions(File file, uint8_t* perm);
 bool vfs_is_directory(const char* path);
 bool vfs_is_directory_mounted(const char* path);
 
-void vfs_mkfile(const char* path, uint32_t size);
-void vfs_mkdir(const char* path);
-void vfs_remove(const char* path);
+bool vfs_mkfile(const char* path, uint32_t size);
+bool vfs_mkdir(const char* path);
+bool vfs_remove(const char* path);
+bool vfs_rename(const char* path, const char* name);
+
+bool vfs_truncate(const char* path, uint32_t new_size);
+
+// Directory
+uint32_t vfs_directory_count(const char* path);
 
 uint32_t resolve_path_to_address(const char* path);
+uint32_t resolve_parent_path_to_address(const char* path);
 
 #endif
