@@ -43,87 +43,7 @@ bool ps2_check_keyboard(void);
 void flush_keyboard_buffer(void);
 void ps2_route_console(void);
 
-void kernel_heap_hammer(void);
-
-
-void test_slab_malloc(void) {
-    /*
-    print("--- STARTING SLAB ALLOCATOR TESTS ---\n");
-    draw_flush_display();
-
-    // Test 1: Basic Allocation and Freeing
-    print("Test 1: Allocating a 32-byte chunk... ");
-    int* ptr1 = (int*)vmalloc(32);
-    if (ptr1 != NULL) {
-        print("SUCCESS\n");
-        *ptr1 = 12345; // Test writing to it
-    } else {
-        print("FAILED\n");
-    }
-    draw_flush_display();
-
-    print("Test 1b: Freeing 32-byte chunk... ");
-    vfree(ptr1);
-    print("DONE\n");
-    draw_flush_display();
-
-
-    // Test 2: Multiple allocations to ensure buckets separate correctly
-    print("Test 2: Allocating different bucket sizes...\n");
-    char* small_ptr = (char*)vmalloc(8);   // Should go to 16-byte bucket
-    char* large_ptr = (char*)vmalloc(400); // Should go to 512-byte bucket
-
-    if (small_ptr != NULL && large_ptr != NULL) {
-        print("  Allocations successful.\n");
-    } else {
-        print("  CRITICAL: Allocation failed!\n");
-    }
-    draw_flush_display();
-
-
-    // Test 3: Force Page Growth
-    // The 512-byte bucket can hold roughly ~7 slots per 4KB page.
-    // Let's allocate 10 slots to force the allocator to call slab_grow().
-    print("Test 3: Forcing slab expansion (allocating 10 blocks of 512 bytes)...\n");
-    void* allocations[10];
-    bool growth_success = true;
-
-    for (int i = 0; i < 10; i++) {
-        allocations[i] = vmalloc(512);
-        if (allocations[i] == NULL) {
-            growth_success = false;
-            print("  Failed at allocation index: ");
-            // If you have a print_int function, use it here
-            print("!\n");
-            break;
-        }
-    }
-
-    if (growth_success) {
-        print("  SUCCESS: Slab expanded and allocated across multiple pages safely.\n");
-    }
-    draw_flush_display();
-
-
-    // Test 4: Free everything to ensure stability
-    print("Test 4: Cleaning up expansion blocks... ");
-    for (int i = 0; i < 10; i++) {
-        if (allocations[i] != NULL) {
-            vfree(allocations[i]);
-        }
-    }
-    vfree(small_ptr);
-    vfree(large_ptr);
-    print("CLEANUP DONE\n");
-    
-    print("--- ALL TESTS COMPLETED ---\n");
-    draw_flush_display();
-    
-    while(1);
-    */
-}
-
-
+void test_vm_heap(void);
 
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
@@ -258,9 +178,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     dwm_create_mount(posx, posy,  "ssd0",       "/mnt/ssd0");
     
     
-    WindowHandle handle = notepad_main("/mnt/ssd0/test");
-    
-    
     
     // User event call back messaging
     //  wEvent GetMessage();
@@ -281,13 +198,16 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
         kernel_event_update();
         
+        //test_vm_heap();
+        
         // TODO move to interrupt handlers later on
         if (ps2_check_keyboard()) {
             
             uint16_t last_key_pressed = kb_getc();
             
             dwm_set_keyboard_char(last_key_pressed);
-            dwm_window_send_event(handle, DWM_EVENT_KEYBOARD);
+            
+            dwm_send_event(DWM_EVENT_KEYBOARD);
         }
         
     }
@@ -324,3 +244,146 @@ void ps2_route_console(void) {
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Configuration
+#define MAX_ALLOCATIONS 1024
+#define MIN_SIZE 4          // 4 Bytes
+#define MAX_SIZE 65536      // 64 KB (Scaled down for typical early-stage kernel testing)
+#define ITERATIONS 2000
+
+// Simple LCG state
+static unsigned long rand_state = 123456789;
+
+// Seed the random number generator
+void seed_random() {
+    unsigned long ms = timer_get_ms();
+    if (ms != 0) {
+        rand_state = ms;
+    }
+}
+
+// Returns a pseudo-random number between 0 and 32767
+unsigned int get_random() {
+    rand_state = rand_state * 1103515245 + 12345;
+    return (unsigned int)(rand_state / 65536) % 32768;
+}
+
+// Structure to track active allocations
+typedef struct {
+    void *ptr;
+    unsigned long size;
+} AllocBlock;
+
+void test_vm_heap(void) {
+    // Seed using your custom millisecond timer
+    seed_random();
+
+    AllocBlock tracked_allocs[MAX_ALLOCATIONS];
+    int active_count = 0;
+
+    // Manually zero out the tracking array since we don't have a standard runtime clear
+    for (int j = 0; j < MAX_ALLOCATIONS; j++) {
+        tracked_allocs[j].ptr = NULL;
+        tracked_allocs[j].size = 0;
+    }
+
+    for (int i = 0; i < ITERATIONS; i++) {
+        // Use random generator to decide: 0 = Alloc, 1 = Free
+        int op = get_random() % 2;
+
+        if ((op == 0 && active_count < MAX_ALLOCATIONS) || active_count == 0) {
+            // --- ALLOCATE ---
+            int slot = -1;
+            for (int j = 0; j < MAX_ALLOCATIONS; j++) {
+                if (tracked_allocs[j].ptr == NULL) {
+                    slot = j;
+                    break;
+                }
+            }
+
+            // Calculate a pseudo-random size within our boundaries
+            unsigned long size = MIN_SIZE + (get_random() % (MAX_SIZE - MIN_SIZE));
+            void *p = malloc(size);
+
+            // CRITICAL: Write to the memory boundaries to force page faults / map physical frames
+            char *c_ptr = (char *)p;
+            c_ptr[0] = 'A';
+            c_ptr[size - 1] = 'Z';
+
+            // Save allocation info
+            tracked_allocs[slot].ptr = p;
+            tracked_allocs[slot].size = size;
+            active_count++;
+
+            // Periodic status update every 100 iterations
+            if (i % 100 == 0) {
+                print_hex32((unsigned int)(unsigned long)p);
+                print("   ");
+                print_int((int)size);
+                print("\n");
+            }
+
+        } else if (active_count > 0) {
+            // --- FREE ---
+            // Pick a random slot and look for an active allocation
+            int slot = get_random() % MAX_ALLOCATIONS;
+            int search_limit = MAX_ALLOCATIONS;
+            
+            while (tracked_allocs[slot].ptr == NULL && search_limit > 0) {
+                slot = (slot + 1) % MAX_ALLOCATIONS;
+                search_limit--;
+            }
+
+            if (tracked_allocs[slot].ptr != NULL) {
+                if (i % 100 == 0) {
+                    print_hex32((unsigned int)(unsigned long)tracked_allocs[slot].ptr);
+                    print("    ");
+                    print_int((int)tracked_allocs[slot].size);
+                    print("\n");
+                }
+
+                free(tracked_allocs[slot].ptr);
+
+                // Clear tracker slot
+                tracked_allocs[slot].ptr = NULL;
+                tracked_allocs[slot].size = 0;
+                active_count--;
+            }
+        }
+    }
+
+    for (int j = 0; j < MAX_ALLOCATIONS; j++) {
+        if (tracked_allocs[j].ptr != NULL) {
+            free(tracked_allocs[j].ptr);
+        }
+    }
+    
+}

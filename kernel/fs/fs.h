@@ -22,24 +22,37 @@
 
 void fs_init(void);
 
+// Initiate the device to a given size
 void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size);
+
+// Open a device for IO operations
 uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition);
 
+// Get the number of used bytes on this device
+uint32_t fs_get_used_bytes(void);
+
+// Get the device partition block
 uint8_t fs_device_get_partition(uint32_t device_address, struct FSPartitionBlock* part);
 
+// Find raw allocations
 uint32_t fs_find_next(uint32_t previous_address);
 
+// Bitmap allocation tracking
 void fs_bitmap_flush(void);
 uint32_t fs_bitmap_get_size();
 
+// Low level allocation
 uint32_t fs_alloc(uint32_t size);
 void fs_free(uint32_t address);
 
+// File IO
 void fs_mem_write(uint32_t address, const void* source, uint32_t size);
 void fs_mem_read(uint32_t address, void* destination, uint32_t size);
 
+// Check if the directory is valid
 bool fs_check_directory_valid(uint32_t address);
 
+// Flush the cache back to disk
 void fs_cache_sync(void);
 
 #endif

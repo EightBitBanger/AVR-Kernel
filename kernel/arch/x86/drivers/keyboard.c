@@ -21,7 +21,7 @@ static bool is_shift_pressed = false;
 
 // Native PS/2 Scan Code Set 1 Table
 static const char scancode_to_ascii_set1[] = {
-    0,  0, '1', '2', '3', '4', '5', '6', '7', '8',     /* 0x00 - 0x09 */
+    0,  0x1B, '1', '2', '3', '4', '5', '6', '7', '8',  /* 0x00 - 0x09 */
   '9', '0', '-', '=', 0x01, '\t', 'q', 'w', 'e', 'r',  /* 0x0A - 0x13 (0x01 is Backspace) */
   't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0x02,   0,   /* 0x14 - 0x1D (0x02 is Enter) */
   'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';',    /* 0x1E - 0x27 */

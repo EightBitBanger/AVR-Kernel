@@ -257,7 +257,6 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                         //
                         // Quick and dirty format example
                         
-                        /*
                         uint32_t device_size = 1024 * 1024 * 32;
                         
                         uint32_t device_address = kmalloc( 512 );
@@ -275,7 +274,7 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                         fs_mem_write(sizeof(struct FSDeviceHeader), &part, sizeof(struct FSPartitionBlock));
                         
                         fs_cache_sync();
-                        */
+                        
                         }
                         
                         char device_name[] = "ssd ";

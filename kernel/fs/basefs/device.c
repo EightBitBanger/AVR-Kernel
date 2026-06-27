@@ -49,6 +49,34 @@ uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partiti
     return 0;
 }
 
+uint32_t fs_get_used_bytes(void) {
+    uint32_t used_bytes = 0;
+    
+    // First, account for the metadata block overhead (headers + bitmap area)
+    // expressed in bytes up to the end of the reserved blocks.
+    used_bytes += fs_reserved_blocks * fs_sector_size;
+    
+    // Iterate through all active allocations in the system
+    uint32_t current_alloc = fs_find_next(FS_NULL);
+    
+    while (current_alloc != FS_NULL) {
+        // Look up the underlying allocation header to get its true block footprint
+        uint32_t header_addr = current_alloc - sizeof(struct FSAllocHeader);
+        struct FSAllocHeader header;
+        fs_mem_read(header_addr, &header, sizeof(struct FSAllocHeader));
+        
+        // Calculate how many actual bytes this allocation occupies on disk.
+        // Because the filesystem allocates in whole-sector runs, we calculate 
+        // the rounded sector footprint to accurately reflect disk consumption.
+        uint32_t blocks_used = (sizeof(struct FSAllocHeader) + header.size + fs_sector_size - 1UL) / fs_sector_size;
+        used_bytes += blocks_used * fs_sector_size;
+        
+        // Move to the next allocation
+        current_alloc = fs_find_next(current_alloc);
+    }
+    
+    return used_bytes;
+}
 
 uint32_t fs_alloc(uint32_t size) {
     struct FSAllocHeader header;

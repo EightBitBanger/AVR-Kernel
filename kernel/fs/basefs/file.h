@@ -13,11 +13,13 @@ typedef struct {
 bool fs_file_check(uint32_t address);
 
 uint32_t fs_file_create(const char* name, uint8_t permissions, uint32_t size, uint32_t parent_directory);
-void fs_file_delete(uint32_t address);
+bool fs_file_delete(uint32_t address);
+
+bool fs_file_resize(uint32_t address, uint32_t new_size);
 
 uint32_t fs_file_get_size(uint32_t address);
-void fs_file_get_name(uint32_t address, char* filename);
-void fs_file_set_name(uint32_t address, char* filename);
+bool fs_file_get_name(uint32_t address, char* filename);
+bool fs_file_set_name(uint32_t address, const char* filename);
 
 bool fs_file_get_permissions(uint32_t address, uint8_t* permissions);
 bool fs_file_set_permissions(uint32_t address, uint8_t permissions);
