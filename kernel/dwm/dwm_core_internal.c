@@ -62,6 +62,214 @@ struct WindowObject* dwm_get_window_by_id(uint32_t id) {
     return NULL;
 }
 
+bool dwm_window_edit_text(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        size_t len = strnlen(text,32);
+        strncpy(field->text, text, 128);
+        
+        field->cursor_index = len;
+        
+        return true;
+    }
+    return false;
+}
+
+bool dwm_window_edit_visible(WindowHandle handle, EditFieldHandle edit_field_handle, bool enable) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        field->is_active = enable;
+        return true;
+    }
+    return false;
+}
+
+
+bool dwm_window_edit_insert(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return false; // Changed to false for consistency with bool return type
+    
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        // Calculate lengths
+        size_t new_len = strnlen(text, 32); 
+        size_t current_len = strnlen(field->text, 128);
+        
+        // Safety check: ensure cursor isn't out of bounds
+        if (field->cursor_index > current_len) {
+            field->cursor_index = current_len;
+        }
+        
+        // Prevent buffer overflow (assuming field->text max capacity is 128)
+        if (current_len + new_len >= 128) {
+            // Either truncate new_len or return false. Let's cap it to fit.
+            if (127 > current_len) {
+                new_len = 127 - current_len;
+            } else {
+                return false; // No room at all
+            }
+        }
+        
+        // Shift the trailing text down to make room
+        // We use memmove since the source and destination regions overlap
+        size_t num_chars_to_shift = current_len - field->cursor_index;
+        
+        memmove(
+            &field->text[field->cursor_index + new_len], // Where to move it to
+            &field->text[field->cursor_index],           // Where it is now
+            num_chars_to_shift + 1                       // +1 to include the null terminator '\0'
+        );
+        
+        // Copy the new text into the newly created gap
+        memcpy(&field->text[field->cursor_index], text, new_len);
+        
+        // Advance the cursor
+        field->cursor_index += new_len;
+        return true;
+    }
+    return false;
+}
+
+bool dwm_window_edit_backspace(WindowHandle handle, EditFieldHandle edit_field_handle) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return false;
+    
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        size_t current_len = strnlen(field->text, 128);
+        
+        // Safety check: ensure cursor isn't out of bounds
+        if (field->cursor_index > current_len) {
+            field->cursor_index = current_len;
+        }
+        
+        // If the cursor is at the very beginning, there is nothing to backspace
+        if (field->cursor_index == 0) {
+            return false;
+        }
+        
+        // Calculate how many characters need to be shifted left
+        // (everything from the cursor position to the end, including the null terminator)
+        size_t num_chars_to_shift = current_len - field->cursor_index;
+        
+        // Shift trailing text one position to the left over the deleted character
+        memmove(
+            &field->text[field->cursor_index - 1], 
+            &field->text[field->cursor_index], 
+            num_chars_to_shift + 1 // Include null char
+        );
+        
+        field->cursor_index--;
+        return true;
+    }
+    
+    return false;
+}
+
+bool dwm_window_edit_cursor_set_pos(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t position) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        field->cursor_index = position;
+        return true;
+    }
+    return false;
+}
+
+bool dwm_window_edit_set_pos(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t x, uint16_t y) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        field->x = x;
+        field->y = y;
+        return true;
+    }
+    return false;
+}
+
+bool dwm_window_edit_set_width(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t width) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        field->width = width;
+        return true;
+    }
+    return false;
+}
+
+size_t dwm_window_edit_get_len(WindowHandle handle, EditFieldHandle edit_field_handle) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        return strnlen(field->text, 32);
+    }
+    return 0;
+}
+
+bool dwm_window_edit_get_text(WindowHandle handle, EditFieldHandle edit_field_handle, char* name_buffer, size_t buffer_size) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return false;
+    for (struct list_node* node = window->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        
+        if (field->id != edit_field_handle) 
+            continue;
+        
+        strncpy(name_buffer, field->text, buffer_size);
+        
+        return true;
+    }
+    return false;
+}
+
 uint16_t dwm_window_get_width(WindowHandle handle) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) 
@@ -80,7 +288,7 @@ uint8_t dwm_window_set_name(WindowHandle handle, const char* name) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) 
         return 0;
-    strncpy(window->title, name, DWM_FILENAME_LENGTH);
+    strncpy(window->title, name, DWM_TITLE_LENGTH);
     return 1;
 }
 
@@ -228,13 +436,17 @@ void dwm_window_send_event(WindowHandle handle, wEvent event) {
     window->events |= event;
 }
 
+void dwm_send_event(wEvent event) {
+    struct WindowObject* window = (struct WindowObject*)workspace.window_tail->data;
+    if (window == NULL) return;
+    
+    window->events |= event;
+}
+
 uint32_t dwm_window_get_count(void) {
     uint32_t count = 0;
-    
-    // Iterate through the master window linked list starting at the head
-    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) 
         count++;
-    }
     
     return count;
 }
@@ -262,4 +474,10 @@ void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16
 
 void dwm_set_keyboard_char(uint16_t ch) {
     input.last_key_pressed = ch;
+}
+
+uint16_t dwm_get_titlebar_height(WindowHandle handle) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) return 0;
+    return window->titlebar_height;
 }

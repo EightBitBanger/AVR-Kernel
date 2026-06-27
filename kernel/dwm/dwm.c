@@ -25,32 +25,30 @@ struct DWMCascade      cascade;
 
 void dwm_initiate(void) {
     
-    // Setup global default look for the root menu container slot
-    for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
-        ctxmenu.menus[i].visible = false;
-        
-        ctxmenu.menus[i].x = 0;
-        ctxmenu.menus[i].y = 0;
-        ctxmenu.menus[i].w = 0;
-        ctxmenu.menus[i].h = 0;
-        
-        ctxmenu.menus[i].color_bg         = 0x8F222222;
-        ctxmenu.menus[i].color_border     = 0x8F444444;
-        ctxmenu.menus[i].color_separator  = 0x8F111111;
-        ctxmenu.menus[i].color_highlight  = 0x8F777777;
-        ctxmenu.menus[i].color_text       = 0x8FE0E0E0;
-        ctxmenu.menus[i].hovered_item     = -1;
-        ctxmenu.menus[i].item_height      = 0;
-        ctxmenu.menus[i].item_count       = 0;
-    }
-    
     // Theme
     
-    theme.bg_color = 0xFF0E0E1A;
+    theme.bg_color          = 0xFF0E0E1A;
+    
+    theme.w_border          = 0xFF2A2A2A;
+    theme.w_background      = 0xFF6F6F6F;
+    theme.w_title_text      = 0xFFEFEFEF;
+    
+    theme.w_title_low       = 0xFF008000;
+    theme.w_title_high      = 0xFF001900;
+    
+    theme.w_inactive_low    = 0xFF505050;
+    theme.w_inactive_high   = 0xFF101010;
+    
+    theme.ctx_bg            = 0x8F222222;
+    theme.ctx_border        = 0x8F444444;
+    theme.ctx_separator     = 0x8F111111;
+    theme.ctx_highlight     = 0x8F777777;
+    theme.ctx_text          = 0x8FE0E0E0;
     
     // Workspace
-    
+    workspace.next_edit_field_id = 0;
     workspace.next_window_id = 0;
+    
     workspace.window_head = NULL;
     workspace.window_tail = NULL;
     
@@ -145,6 +143,25 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("ui_new",           &rc_button_plus);
     dwm_resource_sprite_load("ui_button",        &rc_button);
     
+    // Setup global default theme for the root menu container slot
+    for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
+        ctxmenu.menus[i].visible = false;
+        
+        ctxmenu.menus[i].x = 0;
+        ctxmenu.menus[i].y = 0;
+        ctxmenu.menus[i].w = 0;
+        ctxmenu.menus[i].h = 0;
+        
+        ctxmenu.menus[i].color_bg         = theme.ctx_bg;
+        ctxmenu.menus[i].color_border     = theme.ctx_border;
+        ctxmenu.menus[i].color_separator  = theme.ctx_separator;
+        ctxmenu.menus[i].color_highlight  = theme.ctx_highlight;
+        ctxmenu.menus[i].color_text       = theme.ctx_text;
+        ctxmenu.menus[i].hovered_item     = -1;
+        ctxmenu.menus[i].item_height      = 0;
+        ctxmenu.menus[i].item_count       = 0;
+    }
+    
     // Mouse cursors
     dwm_resource_sprite_load("cur_edge",    &rc_cursor_edge);
     dwm_resource_sprite_load("cur_pointer", &rc_cursor_pointer);
@@ -202,13 +219,22 @@ void dwm_destroy_window(WindowHandle handle) {
         window_handle->parent = NULL;
     }
     
-    // Kill all window buttons
+    // Free buttons
     while (window_handle->buttons_head != NULL) {
         struct list_node* btn_node = window_handle->buttons_head;
         struct WindowButton* btn = (struct WindowButton*)btn_node->data;
         
         list_remove(&window_handle->buttons_head, &window_handle->buttons_tail, btn);
         free(btn);
+    }
+    
+    // Free editable text fields
+    while (window_handle->edit_head != NULL) {
+        struct list_node* edit_node = window_handle->edit_head;
+        struct WindowEditField* editable = (struct WindowEditField*)edit_node->data;
+        
+        list_remove(&window_handle->edit_head, &window_handle->edit_tail, editable);
+        free(editable);
     }
     
     // Kill all children
@@ -297,6 +323,51 @@ void dwm_destroy_icon(struct IconObject* icon) {
     free(icon);
 }
 
+EditFieldHandle dwm_window_add_edit_field(WindowHandle handle, uint16_t x, uint16_t y, uint16_t width) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) 
+        return 0;
+    
+    struct WindowEditField* edit_field = malloc(sizeof(struct WindowEditField));
+    if (edit_field == NULL) 
+        return 0;
+    
+    edit_field->x = x;
+    edit_field->y = y;
+    edit_field->width = width;
+    edit_field->height = 18;
+    edit_field->is_active = true;
+    edit_field->is_centered = true;
+    
+    uint16_t text_field_size = 128;
+    
+    edit_field->text = malloc(text_field_size);
+    memset(edit_field->text, '\0', text_field_size);
+    
+    uint32_t candidate_id = workspace.next_edit_field_id++;
+    if (candidate_id == 0) candidate_id = workspace.next_edit_field_id++;
+    
+    bool id_check = true;
+    while (id_check) {
+        id_check = false;
+        for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
+            struct WindowObject* window = (struct WindowObject*)node->data;
+            if (window->id == candidate_id) {
+                id_check = true;
+                candidate_id = workspace.next_edit_field_id++;
+                if (candidate_id == 0) candidate_id = workspace.next_edit_field_id++;
+                break;
+            }
+        }
+    }
+    
+    edit_field->id = candidate_id;
+    
+    list_append(&window->edit_head, &window->edit_tail, edit_field);
+    
+    return candidate_id;
+}
+
 struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, WindowProcedure proc) {
     struct WindowObject* window_object = malloc(sizeof(struct WindowObject));
     if (window_object == NULL) 
@@ -336,7 +407,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     window_object->id = candidate_id;
     window_object->style = w_style;
-    strncpy(window_object->title, w_class.title, DWM_FILENAME_LENGTH);
+    strncpy(window_object->title, w_class.title, DWM_TITLE_LENGTH);
     
     // Check if the no-borders style is applied
     if (window_object->style & DWM_WSTYLE_NOBORDERS) {
@@ -386,14 +457,17 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->max_width = w_class.max_width;
     window_object->max_height = w_class.max_height;
     
-    window_object->border_color         = 0xFF2A2A2A;
-    window_object->background_color     = 0xFF6F6F6F;
-    window_object->title_text_color     = 0xFFEFEFEF;
+    // Window theme
+    window_object->border_color         = theme.w_border;
+    window_object->background_color     = theme.w_background;
+    window_object->title_text_color     = theme.w_title_text;
     
-    window_object->title_color_low      = 0xFF008000;
-    window_object->title_color_high     = 0xFF001900;
-    window_object->inactive_color_low   = 0xFF505050;
-    window_object->inactive_color_high  = 0xFF101010;
+    window_object->title_color_low      = theme.w_title_low;
+    window_object->title_color_high     = theme.w_title_high;
+    
+    window_object->inactive_color_low   = theme.w_inactive_low;
+    window_object->inactive_color_high  = theme.w_inactive_high;
+    
     
     window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH;
     
@@ -513,7 +587,6 @@ int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* pat
     return 0;
 }
 
-
 void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const char** options, uint16_t number_of_items) {
     struct WindowObject* w_object = dwm_get_window_by_id((uint32_t)window);
     if (w_object == NULL) 
@@ -548,8 +621,8 @@ WindowHandle dwm_summon_message_box(const char* title, const char* message) {
     wclass_msgbox.max_height = height;
     
     // Copy the title safely over to the class context
-    strncpy(wclass_msgbox.title, title, DWM_FILENAME_LENGTH - 1);
-    wclass_msgbox.title[DWM_FILENAME_LENGTH - 1] = '\0';
+    strncpy(wclass_msgbox.title, title, DWM_TITLE_LENGTH - 1);
+    wclass_msgbox.title[DWM_TITLE_LENGTH - 1] = '\0';
     
     struct WindowObject* msg_handle = dwm_allocate_window(
         wclass_msgbox, 
@@ -558,13 +631,52 @@ WindowHandle dwm_summon_message_box(const char* title, const char* message) {
     );
     
     // Add the message text as a window resource
-    size_t message_length = strnlen(message, 32);
+    size_t message_length = strnlen(message, 1024);
     
     char* rc_message = (char*)malloc(message_length);
     strncpy(rc_message, message, message_length);
     rc_message[message_length] = '\0';
     
     dwm_window_resource_add(msg_handle->id, "text", rc_message);
+    
+    dwm_set_focus(msg_handle);
+    
+    return msg_handle->id;
+}
+
+WindowHandle dwm_summon_dialog_delete(const char* title, const char* file_path) {
+    WindowClass wclass_msgbox;
+    uint16_t width  = 300;
+    uint16_t height = 150;
+    
+    // Center the message box on the screen
+    wclass_msgbox.width  = width;
+    wclass_msgbox.height = height;
+    wclass_msgbox.x      = (display_get_width() - width) / 2;
+    wclass_msgbox.y      = (display_get_height() - height) / 2;
+    
+    // Assign boundaries limits
+    wclass_msgbox.max_width  = width;
+    wclass_msgbox.max_height = height;
+    
+    // Copy the title safely over to the class context
+    strncpy(wclass_msgbox.title, title, DWM_TITLE_LENGTH - 1);
+    wclass_msgbox.title[DWM_TITLE_LENGTH - 1] = '\0';
+    
+    struct WindowObject* msg_handle = dwm_allocate_window(
+        wclass_msgbox, 
+        0, 
+        (WindowProcedure)callback_deletion_dialog_handler
+    );
+    
+    // Add the message text as a window resource
+    size_t path_length = strnlen(file_path, 128);
+    
+    char* path = (char*)malloc(128);
+    strncpy(path, file_path, path_length);
+    path[path_length] = '\0';
+    
+    dwm_window_resource_add(msg_handle->id, "path", path);
     
     dwm_set_focus(msg_handle);
     
@@ -587,8 +699,8 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     wclass_props.max_height = height;
     
     // Copy the title over to the class context
-    strncpy(wclass_props.title, title, DWM_FILENAME_LENGTH - 1);
-    wclass_props.title[DWM_FILENAME_LENGTH - 1] = '\0';
+    strncpy(wclass_props.title, title, DWM_TITLE_LENGTH - 1);
+    wclass_props.title[DWM_TITLE_LENGTH - 1] = '\0';
     
     struct WindowObject* msg_handle = dwm_allocate_window(
         wclass_props, 
@@ -596,7 +708,7 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
         (WindowProcedure)callback_properties_handler
     );
     
-    // Instance metadata
+    // Instance metadata TAG
     char* instance = (char*)malloc(16);
     dwm_window_resource_add(msg_handle->id, "instance", instance);
     instance[0] = 0;
@@ -609,37 +721,83 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     char* target_path = (char*)malloc(DWM_PATH_LENGTH);
     char* target_name = (char*)malloc(DWM_PATH_LENGTH);
     char* target_type = (char*)malloc(DWM_PATH_LENGTH);
+    char* target_size = (char*)malloc(DWM_PATH_LENGTH);
+    
+    uint16_t size = 0;
+    
+    File file = vfs_open(file_path, VFS_OPEN_READ);
+    if (file != 0) {
+        size = vfs_get_size(file);
+        
+        vfs_close(file);
+    }
+    
+    uint16_t type_index = 0;
+    if (vfs_is_directory(file_path)) {
+        if (vfs_is_directory_mounted(file_path)) {
+            type_index = 1;
+            strncpy(target_type, "Storage", DWM_PATH_LENGTH);
+        } else {
+            type_index = 2;
+            strncpy(target_type, "Folder", DWM_PATH_LENGTH);
+        }
+    } else {
+        switch (icon_index) {
+        case 1: type_index = 3; strncpy(target_type, "File", DWM_PATH_LENGTH); break;
+        case 2: type_index = 4; strncpy(target_type, "Document", DWM_PATH_LENGTH); break;
+        case 3: type_index = 5; strncpy(target_type, "System", DWM_PATH_LENGTH); break;
+        }
+    }
+    
+    switch (type_index) {
+        
+    default: // General file types
+        itos(size, target_size);
+        size_t length = strnlen(target_size, DWM_PATH_LENGTH);
+        const char* bytes_str = " (bytes)";
+        strncpy(&target_size[length], bytes_str, strnlen(bytes_str, DWM_PATH_LENGTH)+1);
+        
+        strncpy(target_path, file_path, path_length);
+        target_path[path_length] = '\0';
+        
+        break;
+        
+    case 1: // Storage
+        char* target_used = (char*)malloc(DWM_PATH_LENGTH);
+        char* target_free = (char*)malloc(DWM_PATH_LENGTH);
+        
+        uint32_t used = fs_get_used_bytes();
+        itos(used, target_used);
+        size_t len = strnlen(target_used, DWM_PATH_LENGTH);
+        target_used[len] = '\0';
+        
+        target_free[0] = '\0';
+        
+        dwm_window_resource_add(msg_handle->id, "used", target_used);
+        dwm_window_resource_add(msg_handle->id, "free", target_free);
+        break;
+        
+    case 2: // Folder
+        
+        size_t item_count = vfs_directory_count(file_path);
+        
+        itos(item_count, target_size);
+        size_t size_length = strnlen(target_size, DWM_PATH_LENGTH);
+        
+        break;
+    }
+    
+    // File name
+    strncpy(target_name, name, name_length);
+    target_name[name_length] = '\0';
     
     strncpy(target_path, file_path, path_length);
     target_path[path_length] = '\0';
     
-    strncpy(target_name, name, name_length);
-    target_name[name_length] = '\0';
-    
-    if (vfs_is_directory(file_path)) {
-        
-        if (vfs_is_directory_mounted(file_path)) {
-            
-            strncpy(target_type, "Storage", DWM_PATH_LENGTH);
-        } else {
-            strncpy(target_type, "Folder", DWM_PATH_LENGTH);
-        }
-        
-    } else {
-        
-        switch (icon_index) {
-        
-        case 1: strncpy(target_type, "File", DWM_PATH_LENGTH); break;
-        case 2: strncpy(target_type, "Document", DWM_PATH_LENGTH); break;
-        case 3: strncpy(target_type, "System", DWM_PATH_LENGTH); break;
-        
-        }
-        
-    }
-    
     dwm_window_resource_add(msg_handle->id, "path", target_path);
     dwm_window_resource_add(msg_handle->id, "name", target_name);
     dwm_window_resource_add(msg_handle->id, "type", target_type);
+    dwm_window_resource_add(msg_handle->id, "size", target_size);
     }
     
     // Attributes

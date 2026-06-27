@@ -1,5 +1,6 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/dwm_core_internal.h>
+#include <kernel/util/list.h>
 
 void dwm_process_window_events(struct WindowObject* window) {
     if (window == NULL) return;
@@ -33,18 +34,9 @@ void dwm_process_window_events(struct WindowObject* window) {
         win_h = iy2 - iy1;
     }
     
-    // Check mouse is inside the visible/clamped area using absolute screen space coordinates
-    if (!(mouse_world_x >= win_x && mouse_world_x < win_x + win_w && 
-          mouse_world_y >= win_y && mouse_world_y < win_y + win_h)) 
-        return;
-    
-    // Hit-test passed! Now convert to surface-local coordinates for user packing
+    // Hit-test passed, convert to surface-local coordinates for user packing
     int mx = mouse_world_x - window->surface_x;
     int my = mouse_world_y - window->surface_y;
-    
-    // Lower limit
-    if (mx < 0) mx = 0;
-    if (my < 0) my = 0;
     
     // Pack data down for the callback function
     uint32_t window_sz_data = ((uint32_t)(uint16_t)window->h << 16) | ((uint32_t)(uint16_t)window->w & 0xFFFF);
@@ -54,21 +46,24 @@ void dwm_process_window_events(struct WindowObject* window) {
     if (context.window_context.left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
     if (context.window_context.right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
     
-    // On double click event (UPDATED)
+    // On double click event
     if (context.window_context.is_double_click) {
         mouse_state |= DWM_STATE_MOUSE_DOUBLE_CLK;
     }
     
     if (window->event_callback != NULL && window->events != 0) {
-        if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
+        
         if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, input.last_key_pressed, 0);}
+        if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
         
         if (window->events & DWM_EVENT_RESIZE)    {window->events &= ~DWM_EVENT_RESIZE;    window->event_callback(window->id, DWM_EVENT_RESIZE, window_sz_data, 0);}
+        if (window->events & DWM_EVENT_DESTROY)   {window->events &= ~DWM_EVENT_DESTROY;   window->event_callback(window->id, DWM_EVENT_DESTROY, 0, 0);}
         
         if (window->events & DWM_EVENT_REDRAW)    {window->events &= ~DWM_EVENT_REDRAW;
             dwm_invalidate_region(window->x, window->y, window->w, window->h);
             window->flags |= (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         }
+        
     }
 }
 

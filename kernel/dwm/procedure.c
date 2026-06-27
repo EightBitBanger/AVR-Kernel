@@ -17,6 +17,96 @@ void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam
     }
 }
 
+void callback_deletion_dialog_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
+    struct WindowObject* window = dwm_get_window_by_id(handle);
+    if (window == NULL) return;
+    
+    uint16_t button_width  = 60;
+    uint16_t button_height = 24;
+    uint16_t button_gap    = 20;
+    
+    // Calculate layout coordinates for two horizontally centered buttons
+    uint16_t total_buttons_width = (button_width * 2) + button_gap;
+    uint16_t yes_button_x = (window->w - total_buttons_width) / 2;
+    uint16_t no_button_x  = yes_button_x + button_width + button_gap;
+    uint16_t button_y     = ((window->h - button_height) - button_height) - 7;
+    
+    switch (event) {
+        case DWM_EVENT_REDRAW: {
+            // Window background
+            dwm_draw_rect_filled(0, 0, window->w, window->h, 0xFF08080F);
+            
+            // Render confirmation prompt text
+            char* path_resource = (char*)dwm_window_resource_get_by_name(handle, "path");
+            if (path_resource != NULL) {
+                char format_buffer[256];
+                // Safety fallback if snprintf isn't in your utility layer: use custom string copying
+                strcpy(format_buffer, "Delete: ");
+                strcat(format_buffer, path_resource);
+                strcat(format_buffer, "?");
+                
+                dwm_draw_text(15, 20, format_buffer, window->title_text_color);
+            } else {
+                dwm_draw_text(15, 20, "Are you sure you want to delete this?", window->title_text_color);
+            }
+            
+            // --- Draw "Yes" Button ---
+            dwm_draw_rect_filled(yes_button_x, button_y, button_width, button_height, 0xFF1C1C2A);
+            dwm_draw_rect(yes_button_x, button_y, button_width, button_height, 0xFF444466);
+            
+            const char* yes_text = "Yes";
+            uint16_t yes_text_x = yes_button_x + ((button_width - (strlen(yes_text) * 6)) / 2);
+            uint16_t yes_text_y = button_y + ((button_height - 8) / 2);
+            dwm_draw_text(yes_text_x, yes_text_y, yes_text, 0xFF3F3FFF); // Blue accent for positive action
+            
+            // --- Draw "No" Button ---
+            dwm_draw_rect_filled(no_button_x, button_y, button_width, button_height, 0xFF1C1C2A);
+            dwm_draw_rect(no_button_x, button_y, button_width, button_height, 0xFF444466);
+            
+            const char* no_text = "No";
+            uint16_t no_text_x = no_button_x + ((button_width - (strlen(no_text) * 6)) / 2);
+            uint16_t no_text_y = button_y + ((button_height - 8) / 2);
+            dwm_draw_text(no_text_x, no_text_y, no_text, 0xFF3FFF3F); // Green accent for safe out
+            
+            break;
+        }
+            
+        case DWM_EVENT_MOUSE: {
+            uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
+            uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
+            
+            // Hit-test "Yes" Button
+            if (click_x >= yes_button_x && click_x < (yes_button_x + button_width) && 
+                click_y >= button_y && click_y < (button_y + button_height)) {
+                
+                char* path_resource = (char*)dwm_window_resource_get_by_name(handle, "path");
+                
+                if (path_resource != NULL) 
+                    vfs_remove(path_resource);
+                
+                dwm_window_send_event(handle, DWM_EVENT_CLOSE);
+            }
+            // Hit-test "No" Button
+            else if (click_x >= no_button_x && click_x < (no_button_x + button_width) && 
+                     click_y >= button_y && click_y < (button_y + button_height)) {
+                
+                dwm_window_send_event(handle, DWM_EVENT_CLOSE);
+            }
+            break;
+        }
+            
+        case DWM_EVENT_KEYBOARD:
+            // Escape key cancels out
+            if (wparam == 0x1B) {
+                dwm_window_send_event(handle, DWM_EVENT_CLOSE);
+            }
+            break;
+            
+        default:
+            break;
+    }
+}
+
 void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) return;
@@ -64,6 +154,13 @@ void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wp
                 dwm_window_send_event(handle, DWM_EVENT_CLOSE);
             }
             break;
+            
+        case DWM_EVENT_KEYBOARD:
+            if (wparam == 0x1B) 
+                dwm_window_send_event(handle, DWM_EVENT_CLOSE);
+            
+            break;
+            
         }
             
         default:
@@ -108,6 +205,13 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
     uint16_t button_y = ((window->h - button_height) - button_height) - 7;
     
     switch (event) {
+            
+        case DWM_EVENT_KEYBOARD:
+            if (wparam == 0x1B) 
+                dwm_window_send_event(handle, DWM_EVENT_CLOSE);
+            
+            break;
+            
         case DWM_EVENT_REDRAW:
             // Window background
             dwm_draw_rect_filled(0, 0, window->w, window->h, 0xFF08080F);
@@ -124,15 +228,42 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                 char* name_str = (char*)dwm_window_resource_get_by_name(handle, "name");
                 if (name_str != NULL) dwm_draw_text(90, 78, name_str, 0xFF3FFF3F);
                 
+                uint16_t type_index = 0;
                 char* type_str = (char*)dwm_window_resource_get_by_name(handle, "type");
+                
                 if (type_str != NULL) {
                     dwm_draw_text(90, 58, type_str, 0xFFFFFFFF);
-                    if (strncmp(type_str, "File", 5) == 0) {dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_file"));}
-                    else if (strncmp(type_str, "Folder", 7) == 0) {dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_folder"));}
-                    else if (strncmp(type_str, "Document", 9) == 0) {dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_document"));}
-                    else if (strncmp(type_str, "System", 7) == 0) {dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_system"));}
-                    else if (strncmp(type_str, "Storage", 8) == 0) {dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_storage"));}
+                         if (strncmp(type_str, "File",     5) == 0) {type_index = 1; dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_file"));}
+                    else if (strncmp(type_str, "Folder",   7) == 0) {type_index = 2; dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_folder"));}
+                    else if (strncmp(type_str, "Document", 9) == 0) {type_index = 3; dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_document"));}
+                    else if (strncmp(type_str, "System",   7) == 0) {type_index = 4; dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_system"));}
+                    else if (strncmp(type_str, "Storage",  8) == 0) {type_index = 5; dwm_draw_sprite(20, 54, (struct Image*)dwm_resource_find("icon_storage"));}
                 }
+                
+                // Ignore size for storage and folders
+                if (type_index == 2) { // Folder
+                    char* size_str = (char*)dwm_window_resource_get_by_name(handle, "size");
+                    dwm_draw_text(15, 150, "Items", 0xFFFFFFFF);
+                    if (size_str != NULL) dwm_draw_text(90, 150, size_str, 0xFF3FFF3F);
+                    
+                } else if (type_index == 5) { // Storage
+                    char* used_str = (char*)dwm_window_resource_get_by_name(handle, "used");
+                    char* free_str = (char*)dwm_window_resource_get_by_name(handle, "free");
+                    
+                    dwm_draw_text(15, 150, "Used", 0xFFFFFFFF);
+                    dwm_draw_text(15, 165, "Free", 0xFFFFFFFF);
+                    
+                    if (used_str != NULL) dwm_draw_text(90, 150, used_str, 0xFF3FFF3F);
+                    if (free_str != NULL) dwm_draw_text(90, 165, free_str, 0xFF3FFF3F);
+                    
+                } else { // File
+                    
+                    char* size_str = (char*)dwm_window_resource_get_by_name(handle, "size");
+                    dwm_draw_text(15, 150, "Size", 0xFFFFFFFF);
+                    if (size_str != NULL) dwm_draw_text(90, 150, size_str, 0xFF3FFF3F);
+                    
+                }
+                
             } 
             else if (current_tab == 1) { // Permissions
                 char* attrib_str = (char*)dwm_window_resource_get_by_name(handle, "perms");

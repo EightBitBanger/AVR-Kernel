@@ -4,11 +4,11 @@
 #include <kernel/console/console_const.h>
 #include <kernel/console/display.h>
 #include <kernel/console/console.h>
-#include <kernel/console/parser.h>
 #include <kernel/console/print.h>
 #include <kernel/syscall.h>
 
 #include <kernel/util/string.h>
+#include <kernel/util/parser.h>
 #include <kernel/util/tok.h>
 
 char* keyboard_string;
@@ -165,7 +165,7 @@ void console_process_command(char* keyboard_str) {
     int arg_count = 0;
     char* command;
     
-    parser_trim_leading_spaces(keyboard_str);
+    parse_trim_leading_spaces(keyboard_str);
     
     if (keyboard_str[0] == ' ' || keyboard_str[0] == '\0') 
         return;

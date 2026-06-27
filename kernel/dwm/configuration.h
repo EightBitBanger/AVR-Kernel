@@ -10,6 +10,7 @@
 // Name lengths
 
 #define DWM_FILENAME_LENGTH                    32
+#define DWM_TITLE_LENGTH                      128
 #define DWM_PATH_LENGTH                       128
 
 #endif

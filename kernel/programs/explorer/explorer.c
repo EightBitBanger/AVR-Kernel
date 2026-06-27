@@ -158,6 +158,11 @@ WindowHandle explorer_create_instance(const char* title, uint32_t target_directo
     WindowHandle window = dwm_create_window(wclass, DWM_WSTYLE_RESIZEABLE, callback_handler_explorer);
     state->handle = window;
     
+    EditFieldHandle edit_field = dwm_window_add_edit_field(window, 0, 0, state->edit_width);
+    dwm_window_edit_visible(window, edit_field, false);
+    
+    state->edit_handle = edit_field;
+    
     dwm_window_set_focus(window);
     return window;
 }
@@ -176,7 +181,7 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     memset(state->items, 0, sizeof(state->items));
     state->total_items = 0;
     
-    // --- 1. BUILD FILE SYSTEM PATH SEGMENTS ---
+    // Build file system path segments
     char fs_path_display[MAX_PATH_LEN] = {0};
     char fs_path_absolute[MAX_PATH_LEN] = {0};
     
@@ -188,7 +193,7 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         fs_file_get_name(fs_climb, dir_name);
         dir_name[MAX_TITLE_LEN - 1] = '\0';
         
-        // FIX: Capture the target directory name for the window state title
+        // Capture the target directory name for the window state title
         if (fs_climb == fs_dir_addr) {
             strncpy(state->window_title, dir_name, MAX_TITLE_LEN - 1);
             state->window_title[MAX_TITLE_LEN - 1] = '\0';
@@ -243,7 +248,7 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
         depth_counter++;
     }
     
-    // --- 2. BUILD VIRTUAL KNODE BASE PATHS ---
+    // Build virtual knode base paths
     char base_knode_display[MAX_PATH_LEN] = {0};
     char base_knode_absolute[MAX_PATH_LEN] = {0};
     
@@ -355,17 +360,17 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
             state->items[collected].icon_index = ICON_FILE;
             state->items[collected].fs_dir = 0;
         }
-
+        
+        memset(state->items[collected].path, '\0', MAX_PATH_LEN);
         strncpy(state->items[collected].path, state->full_path, MAX_PATH_LEN - 1);
-        state->items[collected].path[MAX_PATH_LEN - 1] = '\0';
         
         size_t path_len = strlen(state->items[collected].path);
-        if (path_len > 0 && state->items[collected].path[path_len - 1] != '/') {
-            strncat(state->items[collected].path, "/", MAX_PATH_LEN - path_len - 1);
+        if (path_len > 0 && state->items[collected].path[path_len - 1] != '/' && path_len < MAX_PATH_LEN - 1) {
+            state->items[collected].path[path_len] = '/';
             path_len++;
         }
         if (path_len < MAX_PATH_LEN - 1) {
-            strncat(state->items[collected].path, state->items[collected].name, MAX_PATH_LEN - path_len - 1);
+            strncpy(&state->items[collected].path[path_len], state->items[collected].name, MAX_PATH_LEN - path_len - 1);
         }
         
         collected++;
@@ -393,7 +398,7 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
         strncpy(state->path, "/", MAX_PATH_LEN - 1);
         strncpy(state->full_path, "/", MAX_PATH_LEN - 1);
         
-        // FIX: Capture root window title
+        // Capture root window title
         strncpy(state->window_title, "/", MAX_TITLE_LEN - 1);
         state->window_title[MAX_TITLE_LEN - 1] = '\0';
         
@@ -418,7 +423,7 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
             segment[sizeof(segment) - 1] = '\0';
             size_t seg_len = strlen(segment);
             
-            // FIX: Capture the initial target directory name
+            // Capture the initial target directory name
             if (is_target_dir) {
                 strncpy(state->window_title, current_dir_meta.name, MAX_TITLE_LEN - 1);
                 state->window_title[MAX_TITLE_LEN - 1] = '\0';
@@ -500,17 +505,17 @@ void populate_state_from_knode(struct ExplorerWindowState* state, uint32_t dir_a
             }
         }
         
+        memset(state->items[collected_count].path, '\0', MAX_PATH_LEN);
         strncpy(state->items[collected_count].path, state->full_path, MAX_PATH_LEN - 1);
-        state->items[collected_count].path[MAX_PATH_LEN - 1] = '\0';
         
         size_t path_len = strlen(state->items[collected_count].path);
-        if (path_len > 0 && state->items[collected_count].path[path_len - 1] != '/') {
-            strncat(state->items[collected_count].path, "/", MAX_PATH_LEN - path_len - 1);
+        if (path_len > 0 && state->items[collected_count].path[path_len - 1] != '/' && path_len < MAX_PATH_LEN - 1) {
+            state->items[collected_count].path[path_len] = '/';
             path_len++;
         }
         
         if (path_len < MAX_PATH_LEN - 1) {
-            strncat(state->items[collected_count].path, state->items[collected_count].name, MAX_PATH_LEN - path_len - 1);
+            strncpy(&state->items[collected_count].path[path_len], state->items[collected_count].name, MAX_PATH_LEN - path_len - 1);
         }
         
         collected_count++;

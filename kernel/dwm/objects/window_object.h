@@ -13,7 +13,7 @@ struct WindowObject {
     uint16_t style;
     uint16_t events;
     
-    char title[DWM_FILENAME_LENGTH];
+    char title[DWM_TITLE_LENGTH];
     
     // Child windows
     struct WindowObject* parent;
@@ -23,6 +23,10 @@ struct WindowObject {
     // Buttons
     struct list_node* buttons_head;
     struct list_node* buttons_tail;
+    
+    // Editable text fields
+    struct list_node* edit_head;
+    struct list_node* edit_tail;
     
     // Resources
     struct map_node* resource_head;

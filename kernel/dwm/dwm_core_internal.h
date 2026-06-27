@@ -20,6 +20,7 @@ struct DWMWorkspace {
     struct map_node* resource_tail;
     
     uint32_t next_window_id;
+    uint32_t next_edit_field_id;
 };
 
 struct DWMTaskbar {
@@ -30,6 +31,27 @@ struct DWMTaskbar {
 
 struct DWMTheme {
     uint32_t bg_color;
+    
+    // Window frame
+    
+    uint32_t w_border;
+    uint32_t w_background;
+    uint32_t w_title_text;
+    
+    uint32_t w_title_low;
+    uint32_t w_title_high;
+    
+    uint32_t w_inactive_low;
+    uint32_t w_inactive_high;
+    
+    // Context menu
+    
+    uint32_t ctx_bg;
+    uint32_t ctx_border;
+    uint32_t ctx_separator;
+    uint32_t ctx_highlight;
+    uint32_t ctx_text;
+    
 };
 
 struct DWMDragDrop {
@@ -111,6 +133,7 @@ void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16
 
 void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_deletion_dialog_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 // Internal routines

@@ -13,6 +13,7 @@
 
 #include <kernel/dwm/objects/window_context.h>
 #include <kernel/dwm/objects/window_object.h>
+#include <kernel/dwm/objects/window_edit.h>
 #include <kernel/dwm/objects/window_handle.h>
 #include <kernel/dwm/objects/window_class.h>
 
@@ -47,6 +48,7 @@ void dwm_destroy_icon(struct IconObject* icon);
 
 void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const char** options, uint16_t number_of_items);
 
+WindowHandle dwm_summon_dialog_delete(const char* title, const char* file_path);
 WindowHandle dwm_summon_message_box(const char* title, const char* message);
 WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index);
 
@@ -74,6 +76,19 @@ void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
 void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image);
 
+// Window objects
+EditFieldHandle dwm_window_add_edit_field(WindowHandle handle, uint16_t x, uint16_t y, uint16_t width);
+
+bool dwm_window_edit_text(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text);
+bool dwm_window_edit_visible(WindowHandle handle, EditFieldHandle edit_field_handle, bool enable);
+bool dwm_window_edit_insert(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text);
+bool dwm_window_edit_backspace(WindowHandle handle, EditFieldHandle edit_field_handle);
+bool dwm_window_edit_cursor_set_pos(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t position);
+bool dwm_window_edit_set_pos(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t x, uint16_t y);
+bool dwm_window_edit_set_width(WindowHandle handle, EditFieldHandle edit_field_handle, uint16_t width);
+size_t dwm_window_edit_get_len(WindowHandle handle, EditFieldHandle edit_field_handle);
+bool dwm_window_edit_get_text(WindowHandle handle, EditFieldHandle edit_field_handle, char* name_buffer, size_t buffer_size);
+
 // Window settings
 
 void dwm_window_set_parent(WindowHandle child, WindowHandle parent);
@@ -86,8 +101,14 @@ uint8_t dwm_window_set_name(WindowHandle handle, const char* name);
 
 void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height);
 
+uint16_t dwm_get_titlebar_height(WindowHandle handle);
+
 void dwm_window_set_focus(WindowHandle handle);
 
+// Send an event message to the currently focused window
+void dwm_send_event(wEvent event);
+
+// Send an even to a specific window
 void dwm_window_send_event(WindowHandle handle, wEvent event);
 
 uint32_t dwm_window_get_count(void);

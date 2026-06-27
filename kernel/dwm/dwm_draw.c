@@ -10,6 +10,8 @@ extern uint32_t* front_buffer;
 extern uint32_t* back_buffer;
 extern uint32_t* frame_buffer;
 
+extern const uint8_t char_rom[];
+
 bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2);
 void get_rect_intersection(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2, int *out_x, int *out_y, int *out_w, int *out_h);
 
@@ -46,6 +48,9 @@ void dwm_sync_child_positions(struct WindowObject* parent) {
 void dwm_render_window_recursive(struct WindowObject* window, const struct WindowContext* ctx, uint32_t* frame_buffer, uint32_t screen_stride) {
     if (window == NULL) return;
     
+    // Process window events
+    dwm_process_window_events( window );
+    
     if (window->flags & DWM_WFLAG_REDRAW) { 
         window->flags &= ~DWM_WFLAG_REDRAW;
         
@@ -81,10 +86,6 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
     
     int do_redraw = dirty_intersection || (window->flags & (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE));
     
-    // Process window events
-    
-    dwm_process_window_events( window );
-    
     if (do_redraw) {
         
         // Handle application-level redraw request
@@ -105,9 +106,6 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
         }
         
         if ((window->flags & (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE)) || dirty_intersection) {
-            
-            // Draw decorations (borders/titlebars)
-            dwm_draw_window(window);
             
             // Upload client pixel contents to the system back-buffer
             if (window->parent == NULL) {
@@ -140,6 +138,9 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
                     dwm_upload_window_buffer_to_backbuffer(root, frame_buffer, screen_stride, clip_x, clip_y, clip_w, clip_h);
                 }
             }
+            
+            // Draw decorations (borders/titlebars)
+            dwm_draw_window(window);
             
             window->flags &= ~(DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         }
@@ -329,14 +330,74 @@ void dwm_draw_window(struct WindowObject* window_handle) {
         
         draw_sprite_blend(btn->sprite.data, btn->sprite.width, btn->sprite.height, btn_abs_x, btn_abs_y, 0xFF000000);
     }
+    
+    // Draw window editable text fields
+    int32_t surface_abs_x = window_handle->surface_x;
+    int32_t surface_abs_y = window_handle->surface_y;
+    
+    for (struct list_node* node = window_handle->edit_head; node != NULL; node = node->next) {
+        struct WindowEditField* field = (struct WindowEditField*)node->data;
+        if (!field->is_active) 
+            continue;
+        
+        int32_t field_abs_x = surface_abs_x + field->x;
+        int32_t field_abs_y = surface_abs_y + field->y;
+        
+        uint32_t box_bg        = 0xFF202020;
+        uint32_t box_bdr       = 0xFF404040;
+        uint32_t text_color    = 0xFF08F008;
+        uint32_t cursor_color  = 0xFFF0F0F0;
+        
+        uint16_t font_width    = 6;
+        uint16_t font_height   = 8; // Defined height for vertical alignment
+        
+        // Calculate horizontal text centering offset
+        int32_t text_len = strlen(field->text);
+        int32_t text_offset_x=0;
+        
+        if (field->is_centered) {
+            int32_t total_text_width = text_len * font_width;
+            text_offset_x = (field->width - total_text_width) / 2;
+        } else {
+            text_offset_x = 5;
+        }
+        
+        if (text_offset_x < 0) text_offset_x = 0; // Prevent clipping boundaries if string is too long
+        
+        // Calculate vertical text centering offset
+        int32_t text_offset_y = (field->height - font_height) / 2;
+        if (text_offset_y < 0) text_offset_y = 0;
+        
+        // Apply offsets to get the final text drawing positions
+        int32_t text_draw_x = field_abs_x + text_offset_x;
+        int32_t text_draw_y = field_abs_y + text_offset_y;
+        
+        // Draw the background boxes
+        draw_rect_filled(field_abs_x, field_abs_y, field->width, field->height, box_bg);
+        draw_rect(field_abs_x-1, field_abs_y-1, field->width+2, field->height+2, box_bdr);
+        
+        // Draw the centered text
+        draw_text(text_draw_x, text_draw_y, field->text, text_color);
+        
+        // Update the cursor position relative to the centered text coordinates
+        uint16_t cursor_index = (field->cursor_index * font_width);
+        
+        uint16_t cursor_x = text_draw_x + cursor_index;
+        uint16_t cursor_y = text_draw_y;
+        uint16_t cursor_w = text_draw_x + cursor_index;
+        uint16_t cursor_h = text_draw_y + font_height;
+        
+        // Draw cursor line
+        draw_line(cursor_x, cursor_y, cursor_w, cursor_h, cursor_color);
+        draw_line(cursor_x+1, cursor_y, cursor_w+1, cursor_h, cursor_color);
+    }
+    
 }
 
 
 //
 // Low level drawing
 //
-
-extern const uint8_t char_rom[];
 
 void dwm_draw_line(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color) {
     draw_line(x, y, x + w, y + h, color);

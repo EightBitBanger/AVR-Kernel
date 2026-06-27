@@ -106,7 +106,7 @@ static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowSta
     char ascii_char = (char)(wparam & 0xFF);
     uint16_t scancode = (uint8_t)((wparam >> 8) & 0xFF);
     
-    // Fallback check: If wparam contains a packed scancode in the upper byte,
+    // Fallback If wparam contains a packed scancode in the upper byte,
     // or if ascii_char is 0, extract the raw scancode directly from wparam.
     if (scancode == 0 && ascii_char == 0) {
         scancode = (uint8_t)(wparam & 0xFF); 
@@ -191,19 +191,33 @@ static void handle_notepad_mouse(WindowHandle handle, struct NotepadWindowState*
     uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
     uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
     
-    const char* file_menu_options[] = { "New File", "Open File", "Save", "Clear Text", "Exit" };
+    const char* file_menu_options[] = { "New", "Open", "Save", "Clear", "Exit" };
+    const char* canvas_menu_options[] = { "Cut", "Copy", "Delete", "Paste" };
     
-    // 1. Right-click context menu
+    // Right-click context menu
     if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
-        dwm_summon_context_menu(handle, click_x, click_y, file_menu_options, 5);
+        context_directive = 0;
+        dwm_summon_context_menu(handle, click_x, click_y, canvas_menu_options, 4);
         return;
     }
     
-    // 2. Left-click processing
+    // Left-click processing
     if (lparam & DWM_STATE_MOUSE_BTN_LEFT) {
-        if (click_x >= MENUBAR_TEXT_X && click_x < (MENUBAR_TEXT_X + MENUBAR_CLICK_WIDTH) &&
-            click_y >= 0 && click_y < MENUBAR_HEIGHT) {
-            dwm_summon_context_menu(handle, MENUBAR_TEXT_X, MENUBAR_HEIGHT, file_menu_options, 5);
+        
+        uint16_t titlebar_height = dwm_get_titlebar_height(handle);
+        
+        uint16_t btn_x = MENUBAR_TEXT_X;
+        uint16_t btn_y = 0;
+        uint16_t btn_w = MENUBAR_CLICK_WIDTH;
+        uint16_t btn_h = MENUBAR_HEIGHT;
+        
+        // Standard AABB Hit Test
+        if (click_x >= btn_x && click_x < (btn_x + btn_w) &&
+            click_y >= btn_y && click_y < (btn_y + btn_h)) {
+            
+            // Summon menu directly anchored to the bottom-left of the button bounds
+            context_directive = 1;
+            dwm_summon_context_menu(handle, btn_x, btn_y + btn_h, file_menu_options, 5);
             return;
         }
         
@@ -315,46 +329,85 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
         
     case DWM_EVENT_DESTROY:
         free_notepad_window_state(handle);
+        dwm_window_send_event(handle, DWM_EVENT_CLOSE);
         return;
         
     case DWM_EVENT_CONTEXT_MENU:
-        switch (wparam) {
-            
-        case 0: // New
-            dwm_summon_message_box("File Menu", "Creating a new file...");
-            break;
-            
-        case 1: // Open
-            dwm_summon_message_box("File Menu", "Opening file dialog...");
-            break;
-            
-        case 2: // Save
-            //vfs_remove(state->file_path);
-            //vfs_mkfile(state->file_path, state->text_length);
-            
-            File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-            if (file != INVALID_FILE_ID) {
-                uint32_t size = vfs_get_size(file);
-                if (size > (MAX_TEXT_LEN - 1)) 
-                    size = MAX_TEXT_LEN - 1;
+        
+        if (context_directive == CONTEXT_DIRECTIVE_FILE) {
+            switch (wparam) {
                 
-                if (state->text_length < size) 
+            case 0: // New
+                dwm_summon_message_box("File Menu", "Creating a new file...");
+                break;
+                
+            case 1: // Open
+                dwm_summon_message_box("File Menu", "Opening file dialog...");
+                break;
+                
+            case 2: // Save
+                
+                File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                if (file != INVALID_FILE_ID) {
+                    uint32_t size = vfs_get_size(file);
+                    
+                    // Check file resize
+                    if (state->text_length > size) {
+                        size = state->text_length;
+                        vfs_close(file);
+                        
+                        // Resize file
+                        vfs_truncate(state->file_path, state->text_length);
+                        
+                        file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                        if (file == INVALID_FILE_ID) {
+                            if (!vfs_mkfile(state->file_path, size)) {
+                                dwm_summon_message_box("File Menu", "Unable to save file");
+                            } else {
+                                // Open new file
+                                file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                            }
+                        }
+                    }
+                    
                     vfs_write(file, state->text_buffer, size);
+                    vfs_close(file);
+                }
+                break;
                 
-                vfs_close(file);
+            case 3: // Clear
+                state->text_length = 0;
+                state->cursor_index = 0;
+                state->text_buffer[0] = '\0';
+                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+                break;
+                
+            case 4: // Exit
+                dwm_window_send_event(handle, DWM_EVENT_DESTROY);
+                break;
+            
             }
-            break;
+        } else if (context_directive == CONTEXT_DIRECTIVE_CANVAS) {
+            switch (wparam) {
+                
+            case 0: // Cut
+                dwm_summon_message_box("Canvas", "Cut");
+                break;
+                
+            case 1: // Copy
+                dwm_summon_message_box("Canvas", "Copy");
+                break;
+                
+            case 2: // Delete
+                dwm_summon_message_box("Canvas", "Delete");
+                break;
+                
+            case 3: // Paste
+                dwm_summon_message_box("Canvas", "Paste");
+                break;
+                
+            }
             
-        case 3: // Clear
-            state->text_length = 0;
-            state->cursor_index = 0;
-            state->text_buffer[0] = '\0';
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-            break;
-            
-        case 4: // Exit
-            dwm_window_send_event(handle, DWM_EVENT_DESTROY);
-            break;
         }
         return;
     }

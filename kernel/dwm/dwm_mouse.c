@@ -171,7 +171,6 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     }
     
     if (clicked_icon != NULL) {
-        
         context.focused_icon = clicked_icon;
         
         if (is_new_left_click) {
@@ -196,15 +195,11 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
                 context.last_icon_click_time = current_time;
             }
         }
-        else if (is_new_right_click) {
-            
-            // Icon right click context menu
+        else if (is_new_right_click) { // Icon right click context menu
             
             dwm_icon_right_click(ctx);
         }
-    } else {
-        
-        // Desktop click
+    } else { // Desktop click
         
         if (is_new_left_click) {
             context.last_focused_icon = NULL;

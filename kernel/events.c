@@ -17,11 +17,11 @@ bool kernel_event_send(uint8_t flags, const char* name, const char* arguments) {
         return false;
     
     // Initialize the KEvent fields and guarantee null-termination
-    strncpy(new_event->name, name, 32);
-    new_event->name[31] = '\0'; 
+    strncpy(new_event->name, name, KEVENT_NAME_LENGTH_MAX);
+    new_event->name[KEVENT_NAME_LENGTH_MAX-1] = '\0'; 
     
-    strncpy(new_event->args, arguments, 32);
-    new_event->args[31] = '\0';
+    strncpy(new_event->args, arguments, KEVENT_ARG_LENGTH_MAX);
+    new_event->args[KEVENT_ARG_LENGTH_MAX-1] = '\0';
     
     new_event->flags = flags;
     
@@ -44,7 +44,7 @@ bool kernel_event_remove(const char* name) {
     // Walk the list nodes to find the KEvent matching the name
     while (current != NULL) {
         struct KEvent* ev = (struct KEvent*)current->data;
-        if (strncmp(ev->name, name, 32) == 0) {
+        if (strncmp(ev->name, name, KEVENT_NAME_LENGTH_MAX) == 0) {
             target_node = current;
             target_event = ev;
             break;
@@ -70,8 +70,12 @@ void kernel_event_update(void) {
         if (event->flags & KEVENT_EXECUTE) {
             event->flags &= ~KEVENT_EXECUTE;
             
-            if (strncmp(event->name, "explorer", 32) == 0) {
+            if (strncmp(event->name, "explorer", KEVENT_NAME_LENGTH_MAX) == 0) {
                 explorer_main(event->args);
+            }
+            
+            if (strncmp(event->name, "notepad", KEVENT_NAME_LENGTH_MAX) == 0) {
+                notepad_main(event->args);
             }
             
             break;

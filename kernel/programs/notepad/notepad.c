@@ -1,30 +1,40 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include <kernel/arch/x86/malloc.h>
+
 #include <kernel/kernel.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/events.h>
-#include <kernel/util/string.h>
 
 #include <kernel/programs/notepad/internal.h>
 #include <kernel/programs/notepad/notepad.h>
-#include <kernel/arch/x86/malloc.h>
+
+#include <kernel/util/string.h>
+#include <kernel/util/parser.h>
 
 uint32_t notepad_bg         = 0xFF08080F; // Matching the dark palette
 uint32_t notepad_text_color = 0xFFD0D0DF;
 
+uint8_t context_directive = 0; // Context menu directive
+
 struct NotepadWindowState* notepad_window_list_head = NULL;
 
 WindowHandle notepad_main(const char* arguments) {
-    char window_title[MAX_TITLE_LEN] = "Untitled - Notepad";
+    char window_title[DWM_TITLE_LENGTH] = "Untitled - Notepad";
+    
+    dwm_summon_message_box("test", arguments);
     
     // Fallback assignment to capture target document paths if passed
     if (arguments != NULL && arguments[0] != '\0') {
-        strncpy(window_title, arguments, MAX_TITLE_LEN - 1);
-        window_title[MAX_TITLE_LEN - 1] = '\0';
+        parse_get_filename(arguments, window_title, 128);
+        //strncpy(window_title, arguments, DWM_TITLE_LENGTH - 1);
+        window_title[DWM_TITLE_LENGTH - 1] = '\0';
+        
+        
     }
     
-    WindowHandle handle = notepad_create_instance(window_title);
+    WindowHandle handle = notepad_create_instance(window_title, arguments);
     return handle;
 }
 
@@ -85,8 +95,7 @@ void free_notepad_window_state(WindowHandle handle) {
     }
 }
 
-WindowHandle notepad_create_instance(const char* title) {
-    const char* path = "/mnt/ssd0/test";
+WindowHandle notepad_create_instance(const char* title, const char* path) {
     struct NotepadWindowState* state = allocate_notepad_window_state(0, path);
     if (state == NULL) return 0;
     
@@ -102,7 +111,7 @@ WindowHandle notepad_create_instance(const char* title) {
     wclass.max_width  = 0;
     wclass.max_height = 0;
     
-    size_t title_length = strnlen(title, DWM_FILENAME_LENGTH);
+    size_t title_length = strnlen(title, DWM_TITLE_LENGTH);
     strncpy(wclass.title, title, title_length);
     wclass.title[title_length] = '\0';
     

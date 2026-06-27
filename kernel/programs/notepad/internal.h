@@ -3,11 +3,14 @@
 
 #include <kernel/programs/notepad/notepad.h>
 
-#define MAX_TEXT_LEN              2048
-#define MAX_TITLE_LEN               32
+#define MAX_TEXT_LEN                 2048
+
+#define CONTEXT_DIRECTIVE_CANVAS        0
+#define CONTEXT_DIRECTIVE_FILE          1
 
 extern uint32_t notepad_bg;
 extern uint32_t notepad_text_color;
+extern uint8_t context_directive;
 
 struct NotepadWindowState {
     WindowHandle handle;
@@ -27,7 +30,7 @@ struct NotepadWindowState {
 
 extern struct NotepadWindowState* notepad_window_list_head;
 
-WindowHandle notepad_create_instance(const char* title);
+WindowHandle notepad_create_instance(const char* title, const char* path);
 struct NotepadWindowState* allocate_notepad_window_state(WindowHandle handle, const char* path);
 void free_notepad_window_state(WindowHandle handle);
 

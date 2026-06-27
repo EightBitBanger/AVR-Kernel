@@ -3,9 +3,12 @@
 
 #include <stdint.h>
 
+#define  KEVENT_NAME_LENGTH_MAX   128
+#define  KEVENT_ARG_LENGTH_MAX    256
+
 struct KEvent {
-    char name[32];
-    char args[32];
+    char name[KEVENT_NAME_LENGTH_MAX];
+    char args[KEVENT_ARG_LENGTH_MAX];
     
     uint16_t flags;
 };

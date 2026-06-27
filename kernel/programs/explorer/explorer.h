@@ -6,8 +6,9 @@
 //#define _DEBUG_DRAW_ENABLE_
 
 #define MAX_ITEMS                   64
-#define MAX_TITLE_LEN               32
-#define MAX_PATH_LEN               128
+#define MAX_TITLE_LEN               64
+#define MAX_PATH_LEN               256
+#define MAX_RENAME_WIDTH           140
 
 #define ICON_FOLDER                  0
 #define ICON_FILE                    1
@@ -15,7 +16,7 @@
 #define ICON_SYSTEM                  3
 #define ICON_STORAGE                 4
 
-#define MAX_PATH_DEPTH               4
+#define MAX_PATH_DEPTH               5
 
 #define PATH_FIELD_X                 0
 #define PATH_FIELD_Y                 4
@@ -69,7 +70,7 @@
 // Grid Item Typography
 #define ITEM_WIDTH                  72
 #define ITEM_HEIGHT                 65
-#define ITEM_TEXT_HEIGHT_OFF        42
+#define ITEM_TEXT_HEIGHT_OFF        44
 #define ITEM_FONT_CHAR_WIDTH         6
 
 void explorer_main(const char* arguments);
