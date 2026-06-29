@@ -1,16 +1,18 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include <kernel/arch/x86/malloc.h>
+#include <kernel/knode.h>
 #include <kernel/kernel.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/events.h>
-#include <kernel/util/string.h>
 
 #include <kernel/programs/explorer/internal.h>
 #include <kernel/programs/explorer/explorer.h>
 
-#include <kernel/arch/x86/malloc.h>
-#include <kernel/knode.h>
+#include <kernel/util/string.h>
+#include <kernel/util/tok.h>
+
 
 struct Image* icon_folder = NULL;
 struct Image* icon_file = NULL;
@@ -58,7 +60,10 @@ void explorer_main(const char* arguments) {
             current_knode_addr = knode_get_root();
         }
         
-        char* token = strtok(path_scratch, "/");
+        cstr_tok_t tok;
+        cstr_tok_init(&tok, path_scratch, "/");
+        
+        char* token = cstr_tok_next(&tok);
         while (token != NULL) {
             if (strcmp(token, "..") == 0) {
                 current_knode_addr = knode_get_parent(current_knode_addr);
@@ -74,7 +79,7 @@ void explorer_main(const char* arguments) {
             strncpy(window_title, token, MAX_TITLE_LEN - 1);
             window_title[MAX_TITLE_LEN - 1] = '\0';
             
-            token = strtok(NULL, "/");
+            token = cstr_tok_next(&tok);
         }
     }
     
@@ -86,7 +91,7 @@ void explorer_main(const char* arguments) {
             uint32_t device_mount_address = knode_get_reference(current_knode_addr, 0);
             if (device_mount_address != 0) {
                 struct FSPartitionBlock partition;
-                fs_device_open(device_mount_address, &partition);
+                fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
                 
                 // Point to the actual internal root directory of that storage file system
                 current_fs_addr = partition.root_directory;
@@ -103,7 +108,7 @@ struct ExplorerWindowState* allocate_window_state(WindowHandle handle) {
     
     memset(new_node, 0, sizeof(struct ExplorerWindowState));
     new_node->handle = handle;
-    new_node->win_width = 400; 
+    new_node->win_width = WINDOW_WIDTH; 
     new_node->next = window_list_head;
     new_node->context_item_index = -1;
     
@@ -145,12 +150,12 @@ WindowHandle explorer_create_instance(const char* title, uint32_t target_directo
     memset(&wclass, 0x00, sizeof(WindowClass));
     wclass.x = 200;
     wclass.y = 150;
-    wclass.width  = 480;
-    wclass.height = 340;
+    wclass.width  = WINDOW_WIDTH;
+    wclass.height = WINDOW_HEIGHT;
     wclass.max_width  = 0;
     wclass.max_height = 0;
     
-    size_t title_length = strnlen(title, DWM_FILENAME_LENGTH);
+    size_t title_length = strnlen(title, DWM_MAX_NAME_LEN);
     
     strncpy(wclass.title, title, title_length);
     wclass.title[title_length] = '\0';
@@ -176,7 +181,7 @@ void populate_state_from_file_system(struct ExplorerWindowState* state, uint32_t
     uint32_t device_mount_address = knode_get_reference(knode_addr, 0);
     
     struct FSPartitionBlock partition;
-    fs_device_open(device_mount_address, &partition);
+    fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
     
     memset(state->items, 0, sizeof(state->items));
     state->total_items = 0;

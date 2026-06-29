@@ -147,7 +147,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
             if (state->fs_current != 0) {
                 uint32_t device_mount_address = knode_get_reference(state->knode_current, 0);
                 struct FSPartitionBlock partition;
-                fs_device_open(device_mount_address, &partition);
+                fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
                 
                 if (state->fs_current == partition.root_directory) {
                     uint32_t parent_dir = knode_get_parent(state->knode_current);
@@ -210,7 +210,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
                     } else if (state->items[i].icon_index == ICON_STORAGE) {
                         uint32_t device_mount_address = knode_get_reference(state->items[i].knode, 0);
                         struct FSPartitionBlock partition;
-                        fs_device_open(device_mount_address, &partition);
+                        fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
                         
                         populate_state_from_file_system(state, state->items[i].knode, partition.root_directory);
                     } else { // Should be a file, open with notepad editor for now...
@@ -404,6 +404,16 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         free_window_state(handle);
         return;
         
+    case DWM_EVENT_REFRESH:
+        if (state->fs_current != 0) {
+            populate_state_from_file_system(state, state->knode_current, state->fs_current);
+        } else {
+            populate_state_from_knode(state, state->knode_current);
+        }
+        
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        break;
+        
     case DWM_EVENT_CONTEXT_MENU:
         switch (context_directive) {
         case 0:  // Open hit
@@ -497,17 +507,7 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
             case 3: {
                 struct Item* clicked_item = &state->items[state->context_item_index];
                 
-                //dwm_summon_dialog_delete("Deletion request", clicked_item->path);
-                
-                vfs_remove(clicked_item->path);
-                
-                if (state->fs_current != 0) {
-                    populate_state_from_file_system(state, state->knode_current, state->fs_current);
-                } else {
-                    populate_state_from_knode(state, state->knode_current);
-                }
-                
-                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+                dwm_summon_dialog_delete("Deletion request", clicked_item->path, handle, 1);
                 
                 state->context_item_index = -1;
                 break;

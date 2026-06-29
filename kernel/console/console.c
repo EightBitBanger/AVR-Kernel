@@ -275,7 +275,7 @@ void console_print_fs_entry(uint32_t directory_address) {
     kernel_get_working_directory(&fs_current);
     
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, &partition);
+    fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
     
     for (uint32_t reference_index=0;;reference_index++) {
         uint32_t reference = fs_directory_get_reference(fs_current.mount_directory, reference_index);

@@ -14,7 +14,7 @@ extern uint8_t context_directive;
 
 struct NotepadWindowState {
     WindowHandle handle;
-    char file_path[DWM_PATH_LENGTH];
+    char file_path[DWM_MAX_PATH_LEN];
     
     uint16_t win_width;
     uint16_t win_height;

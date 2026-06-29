@@ -347,31 +347,41 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
                 
             case 2: // Save
                 
-                File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                if (file != INVALID_FILE_ID) {
-                    uint32_t size = vfs_get_size(file);
+                uint8_t permissions=0;
+                vfs_get_permissions(state->file_path, &permissions);
+                
+                if (!(permissions & VFS_PERMISSION_WRITE)) {
                     
-                    // Check file resize
-                    if (state->text_length > size) {
-                        size = state->text_length;
-                        vfs_close(file);
+                    dwm_summon_message_error("Write error", "Access denied", "", "image_error");
+                    
+                } else {
+                    
+                    File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                    if (file != INVALID_FILE_ID) {
+                        uint32_t size = vfs_file_get_size(file);
                         
-                        // Resize file
-                        vfs_truncate(state->file_path, state->text_length);
-                        
-                        file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                        if (file == INVALID_FILE_ID) {
-                            if (!vfs_mkfile(state->file_path, size)) {
-                                dwm_summon_message_box("File Menu", "Unable to save file");
-                            } else {
-                                // Open new file
-                                file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                        // Check file resize
+                        if (state->text_length > size) {
+                            size = state->text_length;
+                            vfs_close(file);
+                            
+                            // Resize file
+                            vfs_truncate(state->file_path, state->text_length);
+                            
+                            file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                            if (file == INVALID_FILE_ID) {
+                                if (!vfs_mkfile(state->file_path, size)) {
+                                    dwm_summon_message_box("File Menu", "Unable to save file");
+                                } else {
+                                    // Open new file
+                                    file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+                                }
                             }
                         }
+                        
+                        vfs_file_write(file, state->text_buffer, size);
+                        vfs_close(file);
                     }
-                    
-                    vfs_write(file, state->text_buffer, size);
-                    vfs_close(file);
                 }
                 break;
                 

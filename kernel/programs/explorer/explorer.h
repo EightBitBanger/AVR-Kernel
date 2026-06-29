@@ -21,6 +21,10 @@
 #define PATH_FIELD_X                 0
 #define PATH_FIELD_Y                 4
 
+// Window
+#define WINDOW_WIDTH                 480
+#define WINDOW_HEIGHT                350
+
 // Button placements
 #define BACK_BTN_X                   4
 #define BACK_BTN_Y                   4

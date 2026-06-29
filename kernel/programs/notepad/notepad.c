@@ -21,17 +21,12 @@ uint8_t context_directive = 0; // Context menu directive
 struct NotepadWindowState* notepad_window_list_head = NULL;
 
 WindowHandle notepad_main(const char* arguments) {
-    char window_title[DWM_TITLE_LENGTH] = "Untitled - Notepad";
-    
-    dwm_summon_message_box("test", arguments);
+    char window_title[DWM_MAX_TITLE_LEN] = "Untitled - Notepad";
     
     // Fallback assignment to capture target document paths if passed
     if (arguments != NULL && arguments[0] != '\0') {
         parse_get_filename(arguments, window_title, 128);
-        //strncpy(window_title, arguments, DWM_TITLE_LENGTH - 1);
-        window_title[DWM_TITLE_LENGTH - 1] = '\0';
-        
-        
+        window_title[DWM_MAX_TITLE_LEN - 1] = '\0';
     }
     
     WindowHandle handle = notepad_create_instance(window_title, arguments);
@@ -47,31 +42,42 @@ struct NotepadWindowState* allocate_notepad_window_state(WindowHandle handle, co
     new_node->win_width = 400;
     new_node->text_length = 0;
     
-    strncpy(new_node->file_path, path, DWM_PATH_LENGTH);
+    strncpy(new_node->file_path, path, DWM_MAX_PATH_LEN);
     
     new_node->next = notepad_window_list_head;
     notepad_window_list_head = new_node;
     
-    // Load the file
-    File file = vfs_open(path, VFS_OPEN_READ);
-    if (file == INVALID_FILE_ID) 
+    uint8_t permissions=0;
+    vfs_get_permissions(path, &permissions);
+    
+    if (!(permissions & VFS_PERMISSION_READ)) {
+        
+        dwm_summon_message_error("Read error", "Access denied", "", "image_error");
+    } else {
+        // Load the file
+        File file = vfs_open(path, VFS_OPEN_READ);
+        if (file == INVALID_FILE_ID) 
+            return new_node;
+        
+        uint32_t size = vfs_file_get_size(file);
+        if (size > (MAX_TEXT_LEN - 1)) 
+            size = MAX_TEXT_LEN - 1;
+        
+        vfs_file_read(file, new_node->text_buffer, size);
+        vfs_close(file);
+        
+        // Cap length at the first null-terminator if it exists early
+        uint32_t actual_length = 0;
+        while (actual_length < size && new_node->text_buffer[actual_length] != '\0') {
+            actual_length++;
+        }
+        new_node->text_length = actual_length;
+        new_node->text_buffer[actual_length] = '\0';
         return new_node;
-    
-    uint32_t size = vfs_get_size(file);
-    if (size > (MAX_TEXT_LEN - 1)) 
-        size = MAX_TEXT_LEN - 1;
-    
-    vfs_read(file, new_node->text_buffer, size);
-    vfs_close(file);
-    
-    // Cap length at the first null-terminator if it exists early
-    uint32_t actual_length = 0;
-    while (actual_length < size && new_node->text_buffer[actual_length] != '\0') {
-        actual_length++;
     }
     
-    new_node->text_length = actual_length;
-    new_node->text_buffer[actual_length] = '\0';
+    new_node->text_length = 0;
+    new_node->text_buffer[0] = '\0';
     
     return new_node;
 }
@@ -111,7 +117,7 @@ WindowHandle notepad_create_instance(const char* title, const char* path) {
     wclass.max_width  = 0;
     wclass.max_height = 0;
     
-    size_t title_length = strnlen(title, DWM_TITLE_LENGTH);
+    size_t title_length = strnlen(title, DWM_MAX_TITLE_LEN);
     strncpy(wclass.title, title, title_length);
     wclass.title[title_length] = '\0';
     
