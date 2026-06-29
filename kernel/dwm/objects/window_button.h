@@ -2,6 +2,7 @@
 #define WINDOW_BUTTON_H
 
 #include <stdint.h>
+#include <kernel/dwm/rendering/image.h>
 
 struct WindowButton {
     int16_t x;

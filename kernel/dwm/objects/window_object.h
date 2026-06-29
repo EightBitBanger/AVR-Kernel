@@ -13,7 +13,7 @@ struct WindowObject {
     uint16_t style;
     uint16_t events;
     
-    char title[DWM_TITLE_LENGTH];
+    char title[DWM_MAX_TITLE_LEN];
     
     // Child windows
     struct WindowObject* parent;

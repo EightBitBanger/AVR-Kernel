@@ -8,6 +8,7 @@
 #include <kernel/dwm/images/icon.h>
 #include <kernel/dwm/images/ui.h>
 #include <kernel/dwm/images/cursor.h>
+#include <kernel/dwm/images/images.h>
 
 #include <kernel/dwm/objects/icon_object.h>
 
@@ -22,6 +23,11 @@
 
 #include <kernel/dwm/style_flags.h>
 #include <kernel/dwm/configuration.h>
+
+#include <kernel/dwm/windows/properties.h>
+#include <kernel/dwm/windows/message_box.h>
+#include <kernel/dwm/windows/message_error.h>
+#include <kernel/dwm/windows/dialog_delete.h>
 
 typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
 
@@ -44,13 +50,9 @@ int8_t dwm_create_mount(uint16_t x, uint16_t y, const char* name, const char* pa
 struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite, uint16_t icon_index);
 void dwm_destroy_icon(struct IconObject* icon);
 
-// Builtin context functions
+// Context functions
 
 void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const char** options, uint16_t number_of_items);
-
-WindowHandle dwm_summon_dialog_delete(const char* title, const char* file_path);
-WindowHandle dwm_summon_message_box(const char* title, const char* message);
-WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index);
 
 // Resource management
 
@@ -79,6 +81,7 @@ void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image);
 // Window objects
 EditFieldHandle dwm_window_add_edit_field(WindowHandle handle, uint16_t x, uint16_t y, uint16_t width);
 
+// Edit box
 bool dwm_window_edit_text(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text);
 bool dwm_window_edit_visible(WindowHandle handle, EditFieldHandle edit_field_handle, bool enable);
 bool dwm_window_edit_insert(WindowHandle handle, EditFieldHandle edit_field_handle, const char* text);
@@ -106,7 +109,10 @@ uint16_t dwm_get_titlebar_height(WindowHandle handle);
 void dwm_window_set_focus(WindowHandle handle);
 
 // Send an event message to the currently focused window
-void dwm_send_event(wEvent event);
+void dwm_event_send_focused(wEvent event);
+
+// Send an event message to all windows
+void dwm_event_send(wEvent event);
 
 // Send an even to a specific window
 void dwm_window_send_event(WindowHandle handle, wEvent event);

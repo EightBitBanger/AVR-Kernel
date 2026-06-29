@@ -1,5 +1,5 @@
-#ifndef UI_IMAGE_LIBRARY_H
-#define UI_IMAGE_LIBRARY_H
+#ifndef _UI_IMAGE_LIBRARY_H_
+#define _UI_IMAGE_LIBRARY_H_
 
 #include <stdint.h>
 #include <kernel/arch/x86/drivers/display/draw.h>

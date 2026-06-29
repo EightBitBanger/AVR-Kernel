@@ -1,6 +1,7 @@
 #ifndef DWM_INTERNAL_CORE_CONPONENTS_H
 #define DWM_INTERNAL_CORE_CONPONENTS_H
 
+#include <kernel/dwm/dwm.h>
 #include <kernel/dwm/objects/window_button.h>
 #include <kernel/dwm/dwm_context_menu.h>
 
@@ -131,8 +132,10 @@ void window_add_button(struct WindowObject* window, int16_t x, int16_t y, uint16
 
 // Built in event handlers
 
-void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_message_box_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_message_error_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+
+void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_deletion_dialog_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 

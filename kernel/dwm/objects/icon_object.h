@@ -7,9 +7,8 @@
 struct IconObject {
     uint8_t flags;
     
-    char name[DWM_FILENAME_LENGTH];
-    
-    char path[DWM_PATH_LENGTH];
+    char name[DWM_MAX_NAME_LEN];
+    char path[DWM_MAX_PATH_LEN];
     
     // Position and size
     

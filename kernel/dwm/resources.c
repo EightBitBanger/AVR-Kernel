@@ -108,7 +108,7 @@ void* dwm_window_resource_get_by_name(WindowHandle handle, const char* name) {
     if (window == NULL) return NULL;
     
     for (struct map_node* node = (struct map_node*)window->resource_head; node != NULL; node = node->next) {
-        if (strncmp(node->name, name, DWM_FILENAME_LENGTH) == 0) {
+        if (strncmp(node->name, name, DWM_MAX_NAME_LEN) == 0) {
             return node->data;
         }
     }

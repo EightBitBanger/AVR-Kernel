@@ -1,5 +1,5 @@
-#ifndef CURSOR_IMAGE_LIBRARY_H
-#define CURSOR_IMAGE_LIBRARY_H
+#ifndef _CURSOR_IMAGE_LIBRARY_H_
+#define _CURSOR_IMAGE_LIBRARY_H_
 
 #include <stdint.h>
 #include <kernel/arch/x86/drivers/display/draw.h>

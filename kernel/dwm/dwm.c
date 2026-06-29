@@ -128,11 +128,14 @@ void dwm_initiate(void) {
     // Load resources
     
     // Icons
-    dwm_resource_sprite_load("icon_folder",    &rc_icon_folder);
-    dwm_resource_sprite_load("icon_file",      &rc_icon_file);
-    dwm_resource_sprite_load("icon_document",  &rc_icon_document);
-    dwm_resource_sprite_load("icon_system",    &rc_icon_system);
-    dwm_resource_sprite_load("icon_storage",   &rc_icon_storage);
+    dwm_resource_sprite_load("icon_folder",      &rc_icon_folder);
+    dwm_resource_sprite_load("icon_file",        &rc_icon_file);
+    dwm_resource_sprite_load("icon_document",    &rc_icon_document);
+    dwm_resource_sprite_load("icon_system",      &rc_icon_system);
+    dwm_resource_sprite_load("icon_storage",     &rc_icon_storage);
+    
+    // Images
+    dwm_resource_sprite_load("image_error",      &rc_image_error);
     
     // UI
     dwm_resource_sprite_load("ui_close",         &rc_button_close);
@@ -407,7 +410,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     window_object->id = candidate_id;
     window_object->style = w_style;
-    strncpy(window_object->title, w_class.title, DWM_TITLE_LENGTH);
+    strncpy(window_object->title, w_class.title, DWM_MAX_TITLE_LEN);
     
     // Check if the no-borders style is applied
     if (window_object->style & DWM_WSTYLE_NOBORDERS) {
@@ -533,8 +536,8 @@ int8_t dwm_create_folder(uint16_t x, uint16_t y, const char* name, const char* p
         return -1;
     
     struct IconObject* folder = dwm_create_icon(x, y, folder_sprite->width, folder_sprite->height, folder_sprite, 0);
-    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
-    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
+    size_t name_length = strnlen(name, DWM_MAX_NAME_LEN);
+    size_t path_length = strnlen(path, DWM_MAX_PATH_LEN);
     
     strncpy(folder->name, name, name_length);
     strncpy(folder->path, path, path_length);
@@ -553,8 +556,8 @@ int8_t dwm_create_mount(uint16_t x, uint16_t y, const char* name, const char* pa
         return -1;
     
     struct IconObject* folder = dwm_create_icon(x, y, mount_sprite->width, mount_sprite->height, mount_sprite, 0);
-    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
-    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
+    size_t name_length = strnlen(name, DWM_MAX_NAME_LEN);
+    size_t path_length = strnlen(path, DWM_MAX_PATH_LEN);
     
     strncpy(folder->name, name, name_length);
     strncpy(folder->path, path, path_length);
@@ -573,8 +576,8 @@ int8_t dwm_create_file(uint16_t x, uint16_t y, const char* name, const char* pat
         return -1;
     
     struct IconObject* file = dwm_create_icon(x, y, file_sprite->width, file_sprite->height, file_sprite, 1);
-    size_t name_length = strnlen(name, DWM_FILENAME_LENGTH);
-    size_t path_length = strnlen(path, DWM_PATH_LENGTH);
+    size_t name_length = strnlen(name, DWM_MAX_NAME_LEN);
+    size_t path_length = strnlen(path, DWM_MAX_PATH_LEN);
     
     strncpy(file->name, name, name_length);
     strncpy(file->path, path, path_length);
@@ -603,230 +606,4 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const 
     ctxmenu.handle = w_object;
     
     dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, options, number_of_items);
-}
-
-WindowHandle dwm_summon_message_box(const char* title, const char* message) {
-    WindowClass wclass_msgbox;
-    uint16_t width  = 300;
-    uint16_t height = 150;
-    
-    // Center the message box on the screen
-    wclass_msgbox.width  = width;
-    wclass_msgbox.height = height;
-    wclass_msgbox.x      = (display_get_width() - width) / 2;
-    wclass_msgbox.y      = (display_get_height() - height) / 2;
-    
-    // Assign boundaries limits
-    wclass_msgbox.max_width  = width;
-    wclass_msgbox.max_height = height;
-    
-    // Copy the title safely over to the class context
-    strncpy(wclass_msgbox.title, title, DWM_TITLE_LENGTH - 1);
-    wclass_msgbox.title[DWM_TITLE_LENGTH - 1] = '\0';
-    
-    struct WindowObject* msg_handle = dwm_allocate_window(
-        wclass_msgbox, 
-        0, 
-        (WindowProcedure)callback_message_box_handler
-    );
-    
-    // Add the message text as a window resource
-    size_t message_length = strnlen(message, 1024);
-    
-    char* rc_message = (char*)malloc(message_length);
-    strncpy(rc_message, message, message_length);
-    rc_message[message_length] = '\0';
-    
-    dwm_window_resource_add(msg_handle->id, "text", rc_message);
-    
-    dwm_set_focus(msg_handle);
-    
-    return msg_handle->id;
-}
-
-WindowHandle dwm_summon_dialog_delete(const char* title, const char* file_path) {
-    WindowClass wclass_msgbox;
-    uint16_t width  = 300;
-    uint16_t height = 150;
-    
-    // Center the message box on the screen
-    wclass_msgbox.width  = width;
-    wclass_msgbox.height = height;
-    wclass_msgbox.x      = (display_get_width() - width) / 2;
-    wclass_msgbox.y      = (display_get_height() - height) / 2;
-    
-    // Assign boundaries limits
-    wclass_msgbox.max_width  = width;
-    wclass_msgbox.max_height = height;
-    
-    // Copy the title safely over to the class context
-    strncpy(wclass_msgbox.title, title, DWM_TITLE_LENGTH - 1);
-    wclass_msgbox.title[DWM_TITLE_LENGTH - 1] = '\0';
-    
-    struct WindowObject* msg_handle = dwm_allocate_window(
-        wclass_msgbox, 
-        0, 
-        (WindowProcedure)callback_deletion_dialog_handler
-    );
-    
-    // Add the message text as a window resource
-    size_t path_length = strnlen(file_path, 128);
-    
-    char* path = (char*)malloc(128);
-    strncpy(path, file_path, path_length);
-    path[path_length] = '\0';
-    
-    dwm_window_resource_add(msg_handle->id, "path", path);
-    
-    dwm_set_focus(msg_handle);
-    
-    return msg_handle->id;
-}
-
-WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index) {
-    WindowClass wclass_props;
-    uint16_t width  = 300;
-    uint16_t height = 360;
-    
-    // Center the message box on the screen
-    wclass_props.width  = width;
-    wclass_props.height = height;
-    wclass_props.x      = (display_get_width() - width) / 2;
-    wclass_props.y      = (display_get_height() - height) / 2;
-    
-    // Assign boundaries limits
-    wclass_props.max_width  = width;
-    wclass_props.max_height = height;
-    
-    // Copy the title over to the class context
-    strncpy(wclass_props.title, title, DWM_TITLE_LENGTH - 1);
-    wclass_props.title[DWM_TITLE_LENGTH - 1] = '\0';
-    
-    struct WindowObject* msg_handle = dwm_allocate_window(
-        wclass_props, 
-        0, 
-        (WindowProcedure)callback_properties_handler
-    );
-    
-    // Instance metadata TAG
-    char* instance = (char*)malloc(16);
-    dwm_window_resource_add(msg_handle->id, "instance", instance);
-    instance[0] = 0;
-    
-    // General - file metadata
-    {
-    size_t path_length = strnlen(file_path, DWM_PATH_LENGTH);
-    size_t name_length = strnlen(name, DWM_PATH_LENGTH);
-    
-    char* target_path = (char*)malloc(DWM_PATH_LENGTH);
-    char* target_name = (char*)malloc(DWM_PATH_LENGTH);
-    char* target_type = (char*)malloc(DWM_PATH_LENGTH);
-    char* target_size = (char*)malloc(DWM_PATH_LENGTH);
-    
-    uint16_t size = 0;
-    
-    File file = vfs_open(file_path, VFS_OPEN_READ);
-    if (file != 0) {
-        size = vfs_get_size(file);
-        
-        vfs_close(file);
-    }
-    
-    uint16_t type_index = 0;
-    if (vfs_is_directory(file_path)) {
-        if (vfs_is_directory_mounted(file_path)) {
-            type_index = 1;
-            strncpy(target_type, "Storage", DWM_PATH_LENGTH);
-        } else {
-            type_index = 2;
-            strncpy(target_type, "Folder", DWM_PATH_LENGTH);
-        }
-    } else {
-        switch (icon_index) {
-        case 1: type_index = 3; strncpy(target_type, "File", DWM_PATH_LENGTH); break;
-        case 2: type_index = 4; strncpy(target_type, "Document", DWM_PATH_LENGTH); break;
-        case 3: type_index = 5; strncpy(target_type, "System", DWM_PATH_LENGTH); break;
-        }
-    }
-    
-    switch (type_index) {
-        
-    default: // General file types
-        itos(size, target_size);
-        size_t length = strnlen(target_size, DWM_PATH_LENGTH);
-        const char* bytes_str = " (bytes)";
-        strncpy(&target_size[length], bytes_str, strnlen(bytes_str, DWM_PATH_LENGTH)+1);
-        
-        strncpy(target_path, file_path, path_length);
-        target_path[path_length] = '\0';
-        
-        break;
-        
-    case 1: // Storage
-        char* target_used = (char*)malloc(DWM_PATH_LENGTH);
-        char* target_free = (char*)malloc(DWM_PATH_LENGTH);
-        
-        uint32_t used = fs_get_used_bytes();
-        itos(used, target_used);
-        size_t len = strnlen(target_used, DWM_PATH_LENGTH);
-        target_used[len] = '\0';
-        
-        target_free[0] = '\0';
-        
-        dwm_window_resource_add(msg_handle->id, "used", target_used);
-        dwm_window_resource_add(msg_handle->id, "free", target_free);
-        break;
-        
-    case 2: // Folder
-        
-        size_t item_count = vfs_directory_count(file_path);
-        
-        itos(item_count, target_size);
-        size_t size_length = strnlen(target_size, DWM_PATH_LENGTH);
-        
-        break;
-    }
-    
-    // File name
-    strncpy(target_name, name, name_length);
-    target_name[name_length] = '\0';
-    
-    strncpy(target_path, file_path, path_length);
-    target_path[path_length] = '\0';
-    
-    dwm_window_resource_add(msg_handle->id, "path", target_path);
-    dwm_window_resource_add(msg_handle->id, "name", target_name);
-    dwm_window_resource_add(msg_handle->id, "type", target_type);
-    dwm_window_resource_add(msg_handle->id, "size", target_size);
-    }
-    
-    // Attributes
-    {
-    char* target_attrib = (char*)malloc(16);
-    memset(target_attrib, ' ', 16);
-    
-    uint32_t address = resolve_path_to_address(file_path);
-    
-    uint8_t permissions;
-    if (fs_check_directory_valid(address) || fs_file_check(address)) {
-        
-        fs_file_get_permissions(address, &permissions);
-        
-    } else {
-        
-        knode_get_permissions(address, &permissions);
-    }
-    
-    if (permissions & VFS_PERMISSION_EXECUTE) target_attrib[0] = 'x';
-    if (permissions & VFS_PERMISSION_READ)    target_attrib[1] = 'r';
-    if (permissions & VFS_PERMISSION_WRITE)   target_attrib[2] = 'w';
-    
-    dwm_window_resource_add(msg_handle->id, "perms", target_attrib);
-    
-    }
-    
-    
-    
-    dwm_set_focus(msg_handle);
-    return msg_handle->id;
 }

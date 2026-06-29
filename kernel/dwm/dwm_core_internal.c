@@ -288,7 +288,7 @@ uint8_t dwm_window_set_name(WindowHandle handle, const char* name) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) 
         return 0;
-    strncpy(window->title, name, DWM_TITLE_LENGTH);
+    strncpy(window->title, name, DWM_MAX_TITLE_LEN);
     return 1;
 }
 
@@ -431,13 +431,6 @@ void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sp
 
 void dwm_window_send_event(WindowHandle handle, wEvent event) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
-    if (window == NULL) return;
-    
-    window->events |= event;
-}
-
-void dwm_send_event(wEvent event) {
-    struct WindowObject* window = (struct WindowObject*)workspace.window_tail->data;
     if (window == NULL) return;
     
     window->events |= event;

@@ -2,6 +2,23 @@
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/util/list.h>
 
+void dwm_event_send_focused(wEvent event) {
+    struct WindowObject* window = (struct WindowObject*)workspace.window_tail->data;
+    if (window == NULL) return;
+    
+    window->events |= event;
+}
+
+void dwm_event_send(wEvent event) {
+    // Iterate through all windows starting from the head of the list
+    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
+        struct WindowObject* window = (struct WindowObject*)node->data;
+        if (window != NULL) {
+            window->events |= event;
+        }
+    }
+}
+
 void dwm_process_window_events(struct WindowObject* window) {
     if (window == NULL) return;
     
@@ -55,6 +72,8 @@ void dwm_process_window_events(struct WindowObject* window) {
         
         if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, input.last_key_pressed, 0);}
         if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
+        
+        if (window->events & DWM_EVENT_REFRESH)   {window->events &= ~DWM_EVENT_REFRESH;   window->event_callback(window->id, DWM_EVENT_REFRESH, 0, 0);}
         
         if (window->events & DWM_EVENT_RESIZE)    {window->events &= ~DWM_EVENT_RESIZE;    window->event_callback(window->id, DWM_EVENT_RESIZE, window_sz_data, 0);}
         if (window->events & DWM_EVENT_DESTROY)   {window->events &= ~DWM_EVENT_DESTROY;   window->event_callback(window->id, DWM_EVENT_DESTROY, 0, 0);}
