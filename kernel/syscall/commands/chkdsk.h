@@ -15,7 +15,7 @@ int call_routine_chkdsk(int arg_count, char** args) {
     }
     
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, &partition);
+    fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
     
     print_int(partition.sector_size);
     print("B per sector\n");

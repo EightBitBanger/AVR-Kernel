@@ -1,9 +1,15 @@
-#include <kernel/arch/x86/drivers/ata.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <kernel/fs/basefs/io.h>
+#include <kernel/arch/x86/drivers/ata/ata.h>
+#include <kernel/arch/x86/drivers/ahci/ahci.h>
+
 extern uint32_t fs_device_address;
+
+extern uint16_t fs_device_type;
+
 uint32_t fs_sector_frame = 0xFFFFFFFF;
 
 static bool cache_dirty = false;
@@ -17,21 +23,48 @@ bool fs_cache_flush_and_fetch(uint32_t target_sector) {
     // Cast the device destination address to a usable byte pointer
     uint8_t* window_ptr = (uint8_t*)fs_device_address;
     
-    // Write-back check
-    if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
-        if (!ata_write_sector(fs_sector_frame, window_ptr)) {
+    // Legacy ATA
+    
+    if (fs_device_type == FS_DEVICE_TYPE_ATA) {
+        // Write-back check
+        if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
+            if (!ata_write_sector(fs_sector_frame, window_ptr)) {
+                return false;
+            }
+            cache_dirty = false;
+        }
+        
+        // Read the new target sector directly into the memory window
+        if (!ata_read_sector(target_sector, window_ptr)) {
             return false;
         }
-        cache_dirty = false;
+        
+        // Update tracking variables
+        fs_sector_frame = target_sector;
+    } 
+    
+    // AHCI
+    
+    else if (fs_device_type == FS_DEVICE_TYPE_AHCI) {
+        struct AHCI_Port_Registers* ahci_port = ahci_get_port(0);
+        
+        // Write-back check
+        if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
+            if (!ahci_write_sectors(ahci_port, target_sector, 1, window_ptr)) {
+                return false;
+            }
+            cache_dirty = false;
+        }
+        
+        // Read the new target sector directly into the memory window
+        if (!ahci_read_sectors(ahci_port, target_sector, 1, window_ptr)) {
+            return false;
+        }
+        
+        // Update tracking variables
+        fs_sector_frame = target_sector;
     }
     
-    // Read the new target sector directly into the memory window
-    if (!ata_read_sector(target_sector, window_ptr)) {
-        return false;
-    }
-    
-    // Update tracking variables
-    fs_sector_frame = target_sector;
     return true;
 }
 
@@ -79,8 +112,24 @@ void fs_mem_write(uint32_t address, const void* source, uint32_t size) {
 }
 
 void fs_cache_sync(void) {
-    if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
-        ata_write_sector(fs_sector_frame, (uint8_t*)fs_device_address);
-        cache_dirty = false;
+    
+    // Legacy ATA
+    
+    if (fs_device_type == FS_DEVICE_TYPE_ATA) {
+        if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
+            ata_write_sector(fs_sector_frame, (uint8_t*)fs_device_address);
+            cache_dirty = false;
+        }
+    } 
+    
+    // AHCI
+    
+    else if (fs_device_type == FS_DEVICE_TYPE_AHCI) {
+        struct AHCI_Port_Registers* ahci_port = ahci_get_port(0);
+        
+        if (cache_dirty && fs_sector_frame != 0xFFFFFFFF) {
+            ahci_write_sectors(ahci_port,  fs_sector_frame, 1, (uint8_t*)fs_device_address);
+            cache_dirty = false;
+        }
     }
 }

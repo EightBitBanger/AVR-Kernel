@@ -82,10 +82,10 @@ int call_routine_format(int arg_count, char** args) {
     print_int(sector_size);
     print(" sector size\n");
     
-    fs_device_format(device_address, total_capacity, sector_size);
+    fs_device_format(device_address, total_capacity, sector_size, FS_DEVICE_TYPE_ATA);
     
     struct FSPartitionBlock partition;
-    fs_device_open(device_address, &partition);
+    fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
     
     uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
     

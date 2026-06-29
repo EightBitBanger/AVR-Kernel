@@ -4,6 +4,59 @@
 
 uint32_t knode_root = KNODE_NULL;
 
+static uint8_t knode_is_valid_address(uint32_t directory_address) {
+    if (directory_address == KMALLOC_NULL || directory_address == 0) 
+        return 0;
+    
+    uint8_t flags = kmalloc_get_flags(directory_address);
+    
+    // Check if its not a directory
+    if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) 
+        return 0;
+    
+    // Check if its a directory extent
+    if ((flags & KMALLOC_FLAG_EXTENT) != 0) 
+        return 0;
+    
+    return 1;
+}
+
+static uint8_t knode_contains_reference_address(uint32_t directory_address, uint32_t reference_ptr) {
+    struct KernelDirectory directory;
+    
+    if (knode_is_valid_address(directory_address) == 0) 
+        return 0;
+    
+    if (reference_ptr == 0 || reference_ptr == KMALLOC_NULL) 
+        return 0;
+    
+    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
+    
+    uint16_t reference_index;
+    for (reference_index = 0; reference_index < directory.size; reference_index++) {
+        if (directory.reference[reference_index] == reference_ptr) 
+            return 1;
+    }
+    
+    uint32_t current_extent_address = directory.next;
+    
+    while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
+        struct KernelDirectoryExtent extent;
+        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
+        
+        uint16_t reference_index;
+        for (reference_index = 0; reference_index < extent.size; reference_index++) {
+            if (extent.reference[reference_index] == reference_ptr) {
+                return 1;
+            }
+        }
+        
+        current_extent_address = extent.next;
+    }
+    
+    return 0;
+}
+
 uint32_t create_knode(const char* name, uint32_t parent_address) {
     struct KernelDirectory kdir;
     memset(&kdir, 0x00, sizeof(struct KernelDirectory));
@@ -29,9 +82,12 @@ uint32_t create_knode(const char* name, uint32_t parent_address) {
     return knode_address;
 }
 
-void destroy_knode(uint32_t address, uint32_t parent_address) {
+bool destroy_knode(uint32_t address, uint32_t parent_address) {
+    if (!knode_is_valid_address(address)) 
+        return false;
     knode_remove_reference(parent_address, address);
     kfree(address);
+    return true;
 }
 
 void knode_get_name(uint32_t address, char* name) {
@@ -81,57 +137,6 @@ uint32_t create_extent(void) {
 
 void destroy_extent(uint32_t address) {
     kfree(address);
-}
-
-static uint8_t knode_is_valid_address(uint32_t directory_address) {
-    if (directory_address == KMALLOC_NULL || directory_address == 0) 
-        return 0;
-    
-    uint8_t flags = kmalloc_get_flags(directory_address);
-    
-    if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) 
-        return 0;
-    
-    if ((flags & KMALLOC_FLAG_EXTENT) != 0) 
-        return 0;
-    
-    return 1;
-}
-
-static uint8_t knode_contains_reference_address(uint32_t directory_address, uint32_t reference_ptr) {
-    struct KernelDirectory directory;
-    
-    if (knode_is_valid_address(directory_address) == 0) 
-        return 0;
-    
-    if (reference_ptr == 0 || reference_ptr == KMALLOC_NULL) 
-        return 0;
-    
-    kmem_read(&directory, directory_address, sizeof(struct KernelDirectory));
-    
-    uint16_t reference_index;
-    for (reference_index = 0; reference_index < directory.size; reference_index++) {
-        if (directory.reference[reference_index] == reference_ptr) 
-            return 1;
-    }
-    
-    uint32_t current_extent_address = directory.next;
-    
-    while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
-        struct KernelDirectoryExtent extent;
-        kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
-        
-        uint16_t reference_index;
-        for (reference_index = 0; reference_index < extent.size; reference_index++) {
-            if (extent.reference[reference_index] == reference_ptr) {
-                return 1;
-            }
-        }
-        
-        current_extent_address = extent.next;
-    }
-    
-    return 0;
 }
 
 uint8_t knode_add_reference(uint32_t directory_address, uint32_t reference_ptr) {
@@ -384,3 +389,9 @@ uint32_t knode_find_by_name(uint32_t directory_address, const char* name) {
     }
     return KMALLOC_NULL;
 }
+
+bool knode_check_is_valid(uint32_t address) {
+    if (!knode_is_valid_address(address)) 
+        return false;
+}
+

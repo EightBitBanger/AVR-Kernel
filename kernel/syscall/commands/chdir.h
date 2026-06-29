@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <kernel/util/string.h>
+#include <kernel/util/tok.h>
 
 #include <kernel/kernel.h>
 #include <kernel/fs/fs.h>
@@ -26,7 +27,10 @@ int call_routine_chdir(int arg_count, char** args) {
     strncpy(path_copy, args[0], sizeof(path_copy) - 1);
     path_copy[sizeof(path_copy) - 1] = '\0';
     
-    char* dirname = strtok(path_copy, "/");
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, path_copy, "/");
+    
+    char* dirname = cstr_tok_next(&tok);
     
     while (dirname != NULL) {
         if (fs_current.mount_device != KMALLOC_NULL) {
@@ -41,7 +45,7 @@ int call_routine_chdir(int arg_count, char** args) {
                     if (fs_current.mount_directory == FS_NULL)
                         fs_current.mount_directory = fs_current.mount_root;
                 }
-                dirname = strtok(NULL, "/");
+                dirname = cstr_tok_next(&tok);
                 continue;
             }
             
@@ -50,7 +54,7 @@ int call_routine_chdir(int arg_count, char** args) {
                 break;
             
             fs_current.mount_directory = reference;
-            dirname = strtok(NULL, "/");
+            dirname = cstr_tok_next(&tok);
             continue;
         }
         
@@ -70,14 +74,14 @@ int call_routine_chdir(int arg_count, char** args) {
             uint32_t reference_address = knode_get_reference(target_directory, 0);
             
             struct FSPartitionBlock header;
-            fs_device_open(reference_address, &header);
+            fs_device_open(reference_address, &header, FS_DEVICE_TYPE_ATA);
             
             fs_current.current_directory = target_directory;
             fs_current.mount_device      = reference_address;
             fs_current.mount_directory   = header.root_directory;
             fs_current.mount_root        = header.root_directory;
             
-            dirname = strtok(NULL, "/");
+            dirname = cstr_tok_next(&tok);
             continue;
         }
         
@@ -85,7 +89,7 @@ int call_routine_chdir(int arg_count, char** args) {
             break;
         
         fs_current.current_directory = target_directory;
-        dirname = strtok(NULL, "/");
+        dirname = cstr_tok_next(&tok);
     }
     
     kernel_set_working_directory(&fs_current);

@@ -164,6 +164,35 @@ void vmm_map_hardware_region(uint32_t phys_addr, uint32_t virt_addr, uint32_t si
     }
 }
 
+void* vmm_map_mmio_region(uint32_t phys_addr, uint32_t size_bytes, uint32_t flags) {
+    uint32_t page_offset = phys_addr & (PAGE_SIZE - 1);
+    uint32_t start_phys  = phys_addr & ~(PAGE_SIZE - 1);
+    uint32_t total_size  = size_bytes + page_offset;
+    uint32_t num_pages   = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+    
+    // Allocate a safe chunk of virtual address space inside VM_START -> VM_END
+    int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
+    if (virt_start_page == -1) {
+        return NULL; 
+    }
+    
+    uint32_t start_vaddr = VM_START + (virt_start_page * PAGE_SIZE);
+    
+    // Map the virtual pages explicitly to the hardware BAR frames
+    for (uint32_t i = 0; i < num_pages; i++) {
+        uint32_t current_phys = start_phys + (i * PAGE_SIZE);
+        uint32_t current_virt = start_vaddr + (i * PAGE_SIZE);
+        
+        vmm_map_page(current_phys, current_virt, flags);
+        
+        // Track the virtual pages as allocated in your bitmap tracker
+        size_t bit = (size_t)virt_start_page + i;
+        virt_bitmap[bit / 8] |= (1U << (bit % 8));
+    }
+    
+    return (void*)(start_vaddr + page_offset);
+}
+
 static int find_contiguous_bits(uint8_t* bitmap, size_t bitmap_size, size_t num_bits) {
     size_t count = 0;
     int start_bit = -1;
@@ -181,4 +210,59 @@ static int find_contiguous_bits(uint8_t* bitmap, size_t bitmap_size, size_t num_
         }
     }
     return -1;
+}
+
+uint32_t vmm_get_phys_addr(void* virtual_addr) {
+    uint32_t vaddr = (uint32_t)virtual_addr;
+    
+    // Extract the page directory (top 10 bits) and page table (middle 10 bits) indexes
+    uint32_t pd_index = vaddr >> 22;
+    uint32_t pt_index = (vaddr >> 12) & 0x3FFU;
+    
+    // Extract the lower 12 bits (the offset within the 4KB page)
+    uint32_t page_offset = vaddr & 0xFFFU;
+    
+    // Check if the page directory entry is present
+    if (!(page_directory[pd_index] & VM_PRESENT)) {
+        return 0; 
+    }
+    
+    // Lookup the page table entry from your static multi-dimensional array
+    uint32_t pte = static_page_tables[pd_index][pt_index];
+    
+    // Check if the individual page is actually marked present
+    if (!(pte & VM_PRESENT)) {
+        return 0;
+    }
+    
+    // Mask out the page flags to get the base physical frame address, 
+    // then append the original page offset.
+    return (pte & ~0xFFFU) + page_offset;
+}
+
+void* vmm_get_virt_addr(uint32_t physical_addr) {
+    uint32_t target_frame = physical_addr & ~0xFFFU;
+    uint32_t page_offset  = physical_addr & 0xFFFU;
+    
+    // Scan through the page directory
+    for (uint32_t pd_index = 0; pd_index < VM_PAGE_DIR_SIZE; pd_index++) {
+        // Only check if this page table is actually present
+        if (page_directory[pd_index] & VM_PRESENT) {
+            
+            // Scan through this specific page table's entries
+            for (uint32_t pt_index = 0; pt_index < VM_PAGE_TABLE_SIZE; pt_index++) {
+                uint32_t pte = static_page_tables[pd_index][pt_index];
+                
+                // If the page is present and matches our target physical frame
+                if ((pte & VM_PRESENT) && ((pte & ~0xFFFU) == target_frame)) {
+                    // Reconstruct the virtual address from the indices and offset
+                    uint32_t virtual_addr = (pd_index << 22) | (pt_index << 12) | page_offset;
+                    return (void*)virtual_addr;
+                }
+            }
+        }
+    }
+    
+    // Return NULL if no virtual mapping exists for this physical address
+    return NULL;
 }

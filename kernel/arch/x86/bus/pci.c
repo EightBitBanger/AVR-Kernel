@@ -2,13 +2,14 @@
 #include <kernel/arch/x86/heap.h>
 #include <kernel/arch/x86/bus/pci.h>
 #include <kernel/arch/x86/virtual/vmm.h>
-#include <kernel/kernel.h>
+#include <kernel/arch/x86/drivers/ahci/ahci.h>
+#include <kernel/arch/x86/drivers/ata/ata.h>
 
-#include <kernel/arch/x86/drivers/ata.h>
+#include <kernel/kernel.h>
+#include <kernel/knode.h>
 #include <kernel/fs/fs.h>
 
 #include <kernel/console/print.h>
-#include <kernel/knode.h>
 #include <kernel/util/string.h>
 
 //#define PCI_DEBUG_HARDWARE_DUMP
@@ -98,24 +99,6 @@ void pci_config_write(uint8_t bus, uint8_t device, uint8_t func, uint8_t offset,
 
 void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
     void* first_mapped_vaddr = NULL;
-    for (uint8_t bar_index = 0; bar_index < 6; bar_index++) {
-        uint8_t bar_offset = 0x10 + (bar_index * 4);
-        uint32_t original_bar = pci_config_read(bus, dev, func, bar_offset);
-        
-#ifdef PCI_DEBUG_HARDWARE_DUMP
-        
-        if (original_bar != 0) {
-            // Print out what the BAR actually contains
-            if (original_bar & 0x1) {
-                print("I/O  ::  ");
-            } else {
-                print("MMIO  ::  ");
-            }
-        }
-        
-#endif
-        
-    }
     
     for (uint8_t bar_index = 0; bar_index < 6; bar_index++) {
         uint8_t bar_offset = 0x10 + (bar_index * 4);
@@ -123,29 +106,29 @@ void* pci_map_device_bars(uint8_t bus, uint8_t dev, uint8_t func) {
         
         if (original_bar == 0) continue;
         
-        if ((original_bar & 0x1) == 0) { // MMIO Space
+        // Check if Bit 0 is 0 (MMIO Space)
+        if ((original_bar & 0x01) == 0) { 
             uint32_t physical_mmio_addr = original_bar & 0xFFFFFFF0;
             if (physical_mmio_addr == 0) 
                 continue;
             
+            // Determine the allocation size required by the hardware BAR
             pci_config_write(bus, dev, func, bar_offset, 0xFFFFFFFF);
             uint32_t size_mask = pci_config_read(bus, dev, func, bar_offset);
-            pci_config_write(bus, dev, func, bar_offset, original_bar);
+            pci_config_write(bus, dev, func, bar_offset, original_bar); // Restore original value
             
             size_mask &= 0xFFFFFFF0;
             if (size_mask == 0) continue;
             
             uint32_t bar_size_bytes = ~size_mask + 1;
-            size_t num_pages = (bar_size_bytes + (PAGE_SIZE - 1)) / PAGE_SIZE;
             
-            /*
-            void* virt_addr = alloc_virt_mmio(physical_mmio_addr, num_pages);
+            // Map via VMM using Cache-Disable (VM_PCD) to prevent stale registers
+            uint32_t mmio_flags = VM_PRESENT | VM_READWRITE | VM_PCD;
+            void* virt_addr = vmm_map_mmio_region(physical_mmio_addr, bar_size_bytes, mmio_flags);
+            
+            // Track the first successfully mapped virtual address to return
             if (virt_addr != NULL && first_mapped_vaddr == NULL) {
                 first_mapped_vaddr = virt_addr; 
-            }
-            */
-            if (first_mapped_vaddr == NULL) {
-                first_mapped_vaddr = (void*)physical_mmio_addr; 
             }
         }
     }
@@ -163,6 +146,52 @@ uint16_t pci_get_io_bar(uint8_t bus, uint8_t dev, uint8_t func, uint8_t bar_inde
     }
     
     return 0; // Not an I/O BAR or empty
+}
+
+
+void ahci_test_write(struct AHCI_Port_Registers* active_port) {
+    if (active_port == NULL) {
+        print("AHCI Test Error: active_port is NULL\n");
+        return;
+    }
+    
+    print("--- Starting AHCI Hex Editor Verification Test ---\n");
+    
+    // 1. Allocate a 512-byte temporary block in memory
+    uint8_t* test_buffer = (uint8_t*)malloc(512);
+    if (test_buffer == NULL) {
+        print("AHCI Test Error: Failed to allocate test buffer memory.\n");
+        return;
+    }
+    
+    // 2. Clear the buffer entirely
+    memset(test_buffer, 0, 512);
+    
+    // 3. Bake a highly distinct string pattern into the buffer
+    const char* magic_string = "DEADBEEF CHICKEN NUGGET TEST PATTERN - QEMU VIRTUAL DISK WRITE OK!";
+    size_t str_len = strlen(magic_string);
+    memcpy(test_buffer, magic_string, str_len);
+    
+    // Fill the tail end of the sector with recognizable incrementing hex bytes
+    for (int i = 128; i < 512; i++) {
+        test_buffer[i] = (uint8_t)(i & 0xFF);
+    }
+    
+    print("Attempting to write test pattern to LBA Sector 1...\n");
+    
+    // 4. Issue the write transaction to LBA 1 (1 sector count)
+    // Using LBA 1 preserves Sector 0 just in case you have structural data there
+    if (ahci_write_sectors(active_port, 1, 1, test_buffer)) {
+        print("SUCCESS: Sector 1 written successfully!\n");
+        print("Action Required: Close QEMU and open your disk image in a hex editor.\n");
+        print("Look at file offset 0x200 (512 bytes in) to find your string!\n");
+    } else {
+        print("FAILURE: AHCI controller rejected or timed out on the write verification transfer.\n");
+    }
+    
+    // 5. Clean up allocated resources
+    free(test_buffer);
+    print("--------------------------------------------------\n");
 }
 
 void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_directory) {
@@ -208,6 +237,7 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             uint8_t irq_line   = (uint8_t)(intr_reg & 0xFF);
             uint8_t irq_pin    = (uint8_t)((intr_reg >> 8) & 0xFF);
             
+            // Dynamic allocation map for BARs via VMM
             void* base_virtual_address = pci_map_device_bars(bus_number, dev, func);
             
             char device_node_name[16];
@@ -222,79 +252,169 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             knode_set_permissions(type_knode, KMALLOC_PERMISSION_READ);
             
 #ifdef PCI_DEBUG_HARDWARE_DUMP
-            
             char base_address[16];
             format_hex32_string(base_address, (uint32_t)base_virtual_address);
             
-            print( type_name );
+            print(type_name);
             print(": ");
-            print( base_address );
+            print(base_address);
             print("\n");
-            
 #endif
             
-            //
-            // Initiate ATA devices
-            
-            if (class_code == 0x01 && subclass == 0x01) { // Storage Controller, IDE
-                uint16_t primary_io_base = 0;
+            // Handle Storage Devices
+            if (class_code == 0x01) { 
                 
-                // Check Prog IF to see if it's Native Mode or Legacy Compatibility Mode
-                if (prog_if & 0x01) {
-                    // Native Mode: Read BAR 0 for Primary Channel Command Ports
-                    primary_io_base = pci_get_io_bar(bus_number, dev, func, 0);
-                } else {
-                    // Legacy Mode: Force the standard PC architecture ports
-                    primary_io_base = 0x1F0;
-                }
+                uint32_t pci_cmd = pci_config_read(bus_number, dev, func, 0x04);
+                pci_cmd |= (1 << 1) | (1 << 2); 
+                pci_config_write(bus_number, dev, func, 0x04, pci_cmd);
                 
-                if (primary_io_base != 0) {
-                    bool ata_present = ata_init(primary_io_base);
-                    if (ata_present) {
-                        
-                        {
-                        
-                        //
-                        // Quick and dirty format example
-                        
-                        uint32_t device_size = 1024 * 1024 * 32;
-                        
-                        uint32_t device_address = kmalloc( 512 );
-                        kmemset(device_address, 0x00, 512);
-                        
-                        fs_device_format(device_address, device_size, 512);
-                        
-                        struct FSPartitionBlock part;
-                        fs_device_open(device_address, &part);
-                        
-                        uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
-                        
-                        part.root_directory = root_directory;
-                        
-                        fs_mem_write(sizeof(struct FSDeviceHeader), &part, sizeof(struct FSPartitionBlock));
-                        
-                        fs_cache_sync();
-                        
+                // Legacy ATA (IDE) support
+                
+                if (subclass == 0x01) {
+                    uint16_t primary_io_base = 0;
+                    
+                    if (prog_if & 0x01) {
+                        primary_io_base = pci_get_io_bar(bus_number, dev, func, 0);
+                    } else {
+                        primary_io_base = 0x1F0;
+                    }
+                    
+                    if (primary_io_base != 0) {
+                        bool ata_present = ata_init(primary_io_base);
+                        if (ata_present) {
+                            char device_name[] = "ata ";
+                            device_name[3] = '0' + storage_device_index++;
+                            
+                            //
+                            // Quick and dirty format example
+                            /*
+                            uint32_t device_size = 1024 * 1024 * 32;
+                            
+                            uint32_t device_address = kmalloc( 512 );
+                            kmemset(device_address, 0x00, 512);
+                            
+                            fs_device_format(device_address, device_size, 512, FS_DEVICE_TYPE_ATA);
+                            
+                            struct FSPartitionBlock part;
+                            fs_device_open(device_address, &part, FS_DEVICE_TYPE_ATA);
+                            
+                            uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
+                            
+                            part.root_directory = root_directory;
+                            
+                            fs_mem_write(sizeof(struct FSDeviceHeader), &part, sizeof(struct FSPartitionBlock));
+                            
+                            fs_cache_sync();
+                            */
+                            
+                            
+                            {
+                            uint32_t mount_ptr = create_knode(device_name, mnt_directory);
+                            kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
+                            
+                            uint32_t block_device = (uint32_t)malloc(512);
+                            
+                            struct FSPartitionBlock part;
+                            fs_device_open(block_device, &part, FS_DEVICE_TYPE_ATA);
+                            
+                            ata_read_sector(0, (uint8_t*)block_device);
+                            knode_add_reference(mount_ptr, block_device);
+                            }
+                            
                         }
+                    }
+                } 
+                
+                // AHCI (SATA) Controller
+                
+                else if (subclass == 0x06) {
+                    // BAR 5 contains the physical ABAR
+                    uint32_t abar_phys = pci_config_read(bus_number, dev, func, 0x24); 
+                    if (abar_phys != 0 && (abar_phys & 0x01) == 0) {
                         
-                        char device_name[] = "ssd ";
-                        device_name[3] = '0' + storage_device_index++;
+                        print("AHCI Controller Detected\n");
                         
-                        uint32_t mount_ptr = create_knode(device_name, mnt_directory);
-                        kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
+                        // Enable PCI bus mastering (bit 2) and mmio space (bit 1)
+                        uint32_t pci_cmd = pci_config_read(bus_number, dev, func, 0x04);
+                        pci_cmd |= (1 << 2) | (1 << 1); 
+                        pci_config_write(bus_number, dev, func, 0x04, pci_cmd);
                         
-                        uint32_t block_device = (uint32_t)malloc( 512 );
+                        uint32_t phys_mmio_addr = abar_phys & 0xFFFFFFF0;
+                        uint32_t flags =  VM_PRESENT | VM_READWRITE | VM_PCD;
                         
-                        struct FSPartitionBlock part;
-                        fs_device_open(block_device, &part);
+                        struct AHCI_HBA_Memory_Space* ahci_base_vaddr = (struct AHCI_HBA_Memory_Space*)vmm_map_mmio_region(phys_mmio_addr, 4096, flags);
                         
-                        ata_read_sector(0, (uint8_t*)block_device);
-                        
-                        knode_add_reference(mount_ptr, block_device);
+                        if (ahci_base_vaddr != NULL) {
+                            ahci_init(ahci_base_vaddr);
+                            
+                            // Testing
+                            
+                            // Find which port has the drive we initialized in ahci_init
+                            
+                            struct AHCI_Port_Registers* active_port = NULL;
+                            for (int p = 0; p < 32; p++) {
+                                if (ahci_base_vaddr->ports_implemented & (1 << p)) {
+                                    if (ahci_base_vaddr->ports[p].signature == AHCI_DEV_SATA) {
+                                        active_port = &ahci_base_vaddr->ports[p];
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            
+                            
+                            if (active_port != NULL) {
+                                char device_name[] = "ahci ";
+                                device_name[4] = '0' + storage_device_index++;
+                                
+                                //ahci_test_write(active_port);
+                                
+                                // Allocate virtual storage buffer for the mount structure
+                                uint32_t block_device = (uint32_t)malloc(512);
+                                
+                                /*
+                                uint32_t device_size = 32768 * 4;
+                                fs_device_format(block_device, device_size, 512, FS_DEVICE_TYPE_AHCI);
+                                
+                                struct FSPartitionBlock part;
+                                fs_device_open(block_device, &part, FS_DEVICE_TYPE_AHCI);
+                                
+                                uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
+                                part.root_directory = root_directory;
+                                */
+                                
+                                // Try to read LBA sector 0
+                                if (ahci_read_sectors(active_port, 0, 1, (uint8_t*)block_device)) {
+                                    
+                                    // Create the mounted directory pointing to this device
+                                    uint32_t mount_ptr = create_knode(device_name, mnt_directory);
+                                    kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
+                                    
+                                    // Link the actual read data block to the knode directory tree
+                                    knode_add_reference(mount_ptr, KMALLOC_NULL);
+                                    
+                                    // Increment since it successfully mounted
+                                    storage_device_index++;
+                                    
+                                    print("SATA Drive successfully mounted.\n");
+                                } else {
+                                    print("AHCI Error: Failed to read sector 0. Aborting mount.\n");
+                                    free((void*)block_device); // Clean up the allocated memory to prevent memory leaks
+                                }
+                                
+                            }
+                            
+                            
+                            
+                        }
                     }
                 }
+                
+                
+                
             }
             
+            // Standard virtual VFS property nodes generation
             char value_buffer[16];
             uint32_t prop_dir;
             
@@ -337,9 +457,7 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
             knode_add_reference(prop_dir, device_subclass);
             knode_set_permissions(device_subclass, KMALLOC_PERMISSION_READ);
             
-            // Subsystem Properties (Only if valid/assigned)
             if (sub_v_id != 0x0000 && sub_v_id != 0xFFFF) {
-                
                 prop_dir = create_knode("sub_vendor", type_knode);
                 format_hex16_string(value_buffer, sub_v_id);
                 uint32_t sub_vendor = create_device(value_buffer);
@@ -353,10 +471,8 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                 knode_add_reference(prop_dir, sub_id_address);
                 knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
                 knode_set_permissions(sub_id_address, KMALLOC_PERMISSION_READ);
-                
             }
             
-            // Interrupt Pin & Line Configuration Context
             if (irq_pin > 0 && irq_pin <= 4) {
                 prop_dir = create_knode("pin", type_knode);
                 format_dec8_string(value_buffer, irq_pin);
@@ -372,13 +488,11 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                     knode_add_reference(prop_dir, device_address);
                     knode_set_permissions(prop_dir, KMALLOC_PERMISSION_READ);
                     knode_set_permissions(device_address, KMALLOC_PERMISSION_READ);
-                    
                 }
             }
             
-            // Identify and handle PCI-to-PCI Bridge devices internally via recursion
+            // Handle PCI-to-PCI Bridges
             if (class_code == 0x06 && subclass == 0x04) {
-                // Register 0x18 details: Primary, Secondary, and Subordinate bus assignments
                 uint32_t bus_reg = pci_config_read(bus_number, dev, func, 0x18);
                 uint8_t secondary_bus = (uint8_t)((bus_reg >> 8) & 0xFF);
                 
@@ -386,12 +500,10 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                 format_bus_string(sub_bus_name, secondary_bus);
                 
                 uint32_t secondary_bus_directory = create_knode(sub_bus_name, type_knode);
-                
                 knode_set_permissions(secondary_bus_directory, KMALLOC_PERMISSION_READ);
                 
                 pci_scan_bus(secondary_bus, secondary_bus_directory, mnt_directory);
             }
-            
         }
     }
 }
@@ -409,4 +521,3 @@ void pci_init(void) {
     
     pci_scan_bus(0, bus0_directory, mnt_directory);
 }
-

@@ -16,7 +16,7 @@ int call_routine_mk(int arg_count, char** args) {
         return 2;
     
     struct FSPartitionBlock partition;
-    if (fs_device_open(fs_current.mount_device, &partition) == FS_NULL) 
+    if (fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA) == FS_NULL) 
         return 3;
     
     uint32_t file_size = 0;

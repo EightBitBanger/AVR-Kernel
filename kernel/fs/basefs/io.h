@@ -1,6 +1,9 @@
 #ifndef BASE_IO_H
 #define BASE_IO_H
 
+#define FS_DEVICE_TYPE_ATA         0x0000
+#define FS_DEVICE_TYPE_AHCI        0x0001
+
 #ifdef KERNEL_PLATFORM_AVR
   #include <kernel/arch/avr/io.h>
   #include <kernel/arch/avr/heap.h>

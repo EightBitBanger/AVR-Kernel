@@ -7,6 +7,7 @@ uint32_t fs_pool_size       = 0;
 uint32_t fs_block_count     = 0;
 uint32_t fs_bitmap_size     = 0;
 uint32_t fs_reserved_blocks = 0;
+uint16_t fs_device_type     = 0;
 
 uint8_t  fs_frame_bitmap[BITMAP_FRAME_SIZE];
 uint32_t fs_frame_offset = FS_INVALID_FRAME;
@@ -27,7 +28,7 @@ uint8_t fs_device_get_partition(uint32_t device_address, struct FSPartitionBlock
     return 0;
 }
 
-uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition) {
+uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type) {
     struct FSDeviceHeader deviceHeader;
     fs_device_address = device_address;
     
@@ -38,6 +39,7 @@ uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partiti
     fs_pool_size   = partition->total_size;
     fs_block_count = fs_pool_size / fs_sector_size;
     fs_bitmap_size = (fs_block_count + 7UL) / 8UL;
+    fs_device_type = device_type;
     
     uint32_t metadata_size = sizeof(struct FSDeviceHeader) + sizeof(struct FSPartitionBlock) + fs_bitmap_size;
     fs_reserved_blocks = (metadata_size + fs_sector_size - 1UL) / fs_sector_size;
@@ -145,13 +147,13 @@ uint32_t fs_find_next(uint32_t prev_addr) {
     return FS_NULL;
 }
 
-void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t sector_size) {
+void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t sector_size, uint16_t device_type) {
     struct FSDeviceHeader devH = { .id = 0x13, .name = "fs" };
     struct FSPartitionBlock partH = {
         .total_size = capacity, 
         .sector_size = sector_size, 
         .magic = FS_MAGIC, 
-        .name = "SSD"
+        .name = "storage"
     };
     
     fs_device_address = device_address;
@@ -167,7 +169,7 @@ void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t secto
     for (uint32_t i = 0; i < b_size; i++) fs_writeb(b_addr + i, 0x00);
     
     // Re-open to initialize logic
-    fs_device_open(device_address, &partH);
+    fs_device_open(device_address, &partH, device_type);
     
     // Mark reserved blocks
     for (uint32_t i = 0; i < res_blocks; i++) fs_bitmap_set(i);

@@ -23,10 +23,10 @@
 void fs_init(void);
 
 // Initiate the device to a given size
-void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size);
+void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size, uint16_t device_type);
 
 // Open a device for IO operations
-uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition);
+uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type);
 
 // Get the number of used bytes on this device
 uint32_t fs_get_used_bytes(void);

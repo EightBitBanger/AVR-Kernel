@@ -1,5 +1,5 @@
-#ifndef KERNEL_VIRTUAL_MEMORY_MGR_H
-#define KERNEL_VIRTUAL_MEMORY_MGR_H
+#ifndef _KERNEL_VIRTUAL_MEMORY_MGR_H_
+#define _KERNEL_VIRTUAL_MEMORY_MGR_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -39,5 +39,14 @@ void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags)
 
 // Map a physical hardware address into a virtual address space
 void vmm_map_hardware_region(uint32_t phys_addr, uint32_t virt_addr, uint32_t size, uint32_t flags);
+
+// Map an MMIO region to a virtual memory address
+void* vmm_map_mmio_region(uint32_t phys_addr, uint32_t size_bytes, uint32_t flags);
+
+// Translate a virtual address into a physical address
+uint32_t vmm_get_phys_addr(void* virtual_addr);
+
+// Translate a physical address into a virtual address
+void* vmm_get_virt_addr(uint32_t physical_addr);
 
 #endif
