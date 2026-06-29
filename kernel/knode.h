@@ -5,9 +5,10 @@
 #define KNODE_NULL                  KMALLOC_NULL
 
 #include <stdint.h>
+#include <stdbool.h>
 
 uint32_t create_knode(const char* name, uint32_t parent_address);
-void destroy_knode(uint32_t address, uint32_t parent_address);
+bool destroy_knode(uint32_t address, uint32_t parent_address);
 
 void knode_get_name(uint32_t address, char* name);
 void knode_set_name(uint32_t address, const char* name);
@@ -29,5 +30,7 @@ void     destroy_extent(uint32_t address);
 
 uint32_t knode_get_parent(uint32_t directory_address);
 uint32_t knode_get_root(void);
+
+bool knode_check_is_valid(uint32_t address);
 
 #endif

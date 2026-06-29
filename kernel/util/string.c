@@ -216,7 +216,7 @@ char* strstr(const char* haystack, const char* needle) {
     return NULL;
 }
 
-size_t strspn(const char *str, const char *accept) {
+size_t strspn(const char* str, const char *accept) {
     const char *s = str;
     while (*s != '\0') {
         if (!is_delimiter(*s, accept)) {
@@ -227,7 +227,7 @@ size_t strspn(const char *str, const char *accept) {
     return (size_t)(s - str);
 }
 
-size_t strcspn(const char *str, const char *reject) {
+size_t strcspn(const char* str, const char *reject) {
     const char *s = str;
     while (*s != '\0') {
         if (is_delimiter(*s, reject)) {
@@ -240,12 +240,12 @@ size_t strcspn(const char *str, const char *reject) {
 
 // Memory Operations
 
-void* memset(void* s, int c, size_t n) {
-    unsigned char* p = (unsigned char*)s;
+void* memset(void* str, int value, size_t n) {
+    unsigned char* ptr = (unsigned char*)str;
     while (n--) {
-        *p++ = (unsigned char)c;
+        *ptr++ = (unsigned char)value;
     }
-    return s;
+    return str;
 }
 
 void* memcpy(void* dest, const void* src, size_t n) {

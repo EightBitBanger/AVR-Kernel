@@ -2,9 +2,13 @@
 #include <stdbool.h>
 #include <kernel/arch/x86/malloc.h>
 
+#include <kernel/knode.h>
+#include <kernel/fs/fs.h>
+
 #include <kernel/vfs/vfs.h>
 
 #include <kernel/util/string.h>
+#include <kernel/util/tok.h>
 #include <kernel/util/list.h>
 
 typedef struct {
@@ -20,6 +24,9 @@ static struct list_node* open_files_head = NULL;
 static struct list_node* open_files_tail = NULL;
 static File next_unique_id = 1;
 
+static uint32_t resolve_path_to_address(const char* path);
+static uint32_t resolve_parent_path_to_address(const char* path);
+
 static OpenFileDescriptor* vfs_find_descriptor_by_id(File id) {
     if (id == INVALID_FILE_ID) return NULL;
     
@@ -32,6 +39,31 @@ static OpenFileDescriptor* vfs_find_descriptor_by_id(File id) {
         current = current->next;
     }
     return NULL;
+}
+
+uint64_t vfs_device_get_capacity(const char* path) {
+    if (path == NULL || path[0] == '\0' || path[0] == ' ') 
+        return false;
+    
+    // Resolve the target file/directory's current internal address
+    uint32_t address = resolve_path_to_address(path);
+    if (address == 0xFFFFFFFF || address == 0) 
+        return false; // Target item does not exist
+    
+    if (knode_check_is_valid(address)) {
+        uint32_t device_address = knode_get_reference(address, 0);
+        
+        struct FSPartitionBlock part;
+        if (fs_device_open(address, &part, FS_DEVICE_TYPE_ATA) != 0) {
+            if (part.magic == FS_MAGIC) 
+                return part.total_size;
+        }
+    }
+    return 0;
+}
+
+uint64_t vfs_device_get_used(const char* path) {
+    return fs_get_used_bytes();
 }
 
 File vfs_open(const char* path, uint16_t flags) {
@@ -52,11 +84,13 @@ File vfs_open(const char* path, uint16_t flags) {
     uint32_t parent_fs_node = 0;
     char last_token[16] = {0};
     
-    char* token = strtok(path_scratch, "/");
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, path_scratch, "/");
     
+    char* token = cstr_tok_next(&tok);
     while (token != NULL) {
         if (strcmp(token, ".") == 0) {
-            token = strtok(NULL, "/");
+            token = cstr_tok_next(&tok);
             continue;
         }
         
@@ -81,7 +115,7 @@ File vfs_open(const char* path, uint16_t flags) {
                 uint32_t device_address = knode_get_reference(current_knode, 0);
                 if (device_address != KNODE_NULL && device_address != 0) {
                     struct FSPartitionBlock partition;
-                    if (fs_device_open(device_address, &partition) == 0) {
+                    if (fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA) == 0) {
                         current_fs_node = partition.root_directory;
                         in_file_system = true;
                     }
@@ -92,7 +126,7 @@ File vfs_open(const char* path, uint16_t flags) {
                 uint32_t parent = fs_directory_get_parent(current_fs_node);
                 struct FSPartitionBlock partition;
                 uint32_t device_address = knode_get_reference(current_knode, 0);
-                fs_device_open(device_address, &partition);
+                fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
                 
                 if (current_fs_node == partition.root_directory) {
                     in_file_system = false;
@@ -122,7 +156,7 @@ File vfs_open(const char* path, uint16_t flags) {
                 
                 if (found_ref == 0 || found_ref == FS_NULL) {
                     // Peek ahead to check if this is the final missing component
-                    char* next_token = strtok(NULL, "/");
+                    char* next_token = cstr_tok_next(&tok);
                     if (next_token == NULL && in_file_system && (flags & VFS_OPEN_CREATE)) {
                         // Handle file creation within physical file system
                         uint8_t default_perms = FS_PERMISSION_READ | FS_PERMISSION_WRITE;
@@ -140,7 +174,7 @@ File vfs_open(const char* path, uint16_t flags) {
                 current_fs_node = found_ref;
             }
         }
-        token = strtok(NULL, "/");
+        token = cstr_tok_next(&tok);
     }
     
     // Directory check
@@ -228,27 +262,55 @@ bool vfs_exists(const char* path) {
     return true;
 }
 
-void vfs_read(File file, void* buffer, uint32_t size) {
+bool vfs_file_read(File file, void* buffer, uint32_t size) {
     OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
-    if (!desc) return;
+    if (!desc) return false;
     
     if (desc->in_file_system) {
+        uint8_t parent_perm = 0;
+        fs_file_get_permissions(desc->address, &parent_perm);
+        
+        if (!(parent_perm & FS_PERMISSION_READ)) 
+            return false;
+        
         fs_file_read(&desc->handle, buffer, size);
+        return true;
     } else {
+        uint8_t parent_perm = 0;
+        parent_perm = kmalloc_get_permissions(desc->address);
+        
+        if (!(parent_perm & KMALLOC_PERMISSION_READ)) 
+            return false;
+        
         kmem_read(buffer, desc->address + desc->offset, size);
         desc->offset += size;
+        return true;
     }
 }
 
-void vfs_write(File file, const void* buffer, uint32_t size) {
+bool vfs_file_write(File file, const void* buffer, uint32_t size) {
     OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
-    if (!desc) return;
+    if (!desc) return false;
     
     if (desc->in_file_system) {
+        uint8_t parent_perm = 0;
+        fs_file_get_permissions(desc->address, &parent_perm);
+        
+        if (!(parent_perm & FS_PERMISSION_WRITE)) 
+            return false;
+        
         fs_file_write(&desc->handle, buffer, size);
+        return true;
     } else {
+        uint8_t parent_perm = 0;
+        parent_perm = kmalloc_get_permissions(desc->address);
+        
+        if (!(parent_perm & KMALLOC_PERMISSION_WRITE)) 
+            return false;
+        
         kmem_write(desc->address + desc->offset, buffer, size);
         desc->offset += size;
+        return true;
     }
 }
 
@@ -278,16 +340,24 @@ bool vfs_mkfile(const char* path, uint32_t size) {
     target_name[sizeof(target_name) - 1] = '\0';
     
     // Resolve parent directory address and check if it exists
-    uint32_t parent_address = resolve_path_to_address(parent_path);
-    if (parent_address == 0xFFFFFFFF || parent_address == 0) {
+    uint32_t parent = resolve_path_to_address(parent_path);
+    if (parent == 0xFFFFFFFF || parent == 0) {
         return false; // Leading path does not exist
     }
     
     // Ensure creations happen inside an active filesystem context
-    if (fs_check_directory_valid(parent_address)) {
-        fs_file_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, size, parent_address);
+    if (fs_check_directory_valid(parent)) {
+        uint8_t parent_perm = 0;
+        fs_file_get_permissions(parent,  &parent_perm);
+        
+        if (!(parent_perm & FS_PERMISSION_READ) || 
+            !(parent_perm & FS_PERMISSION_WRITE)) 
+            return false;
+        
+        fs_file_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, size, parent);
+        return true;
     }
-    return true;
+    return false;
 }
 
 bool vfs_mkdir(const char* path) {
@@ -315,15 +385,37 @@ bool vfs_mkdir(const char* path) {
     target_name[sizeof(target_name) - 1] = '\0';
     
     // Resolve parent directory address and check if it exists
-    uint32_t parent_address = resolve_path_to_address(parent_path);
-    if (parent_address == 0xFFFFFFFF || parent_address == 0) {
+    uint32_t parent = resolve_path_to_address(parent_path);
+    if (parent == 0xFFFFFFFF || parent == 0) {
         return false; // Leading path does not exist
     }
     
-    if (fs_check_directory_valid(parent_address)) {
-        fs_directory_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, parent_address);
+    // Check file system directory
+    if (fs_check_directory_valid(parent)) {
+        uint8_t parent_perm = 0;
+        fs_file_get_permissions(parent,  &parent_perm);
+        
+        if (!(parent_perm & FS_PERMISSION_READ) || 
+            !(parent_perm & FS_PERMISSION_WRITE)) 
+            return false;
+        
+        fs_directory_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, parent);
+        return true;
+    } 
+    
+    // Knode directory
+    else if (knode_check_is_valid(parent)) {
+        uint8_t parent_perm = 0;
+        knode_get_permissions(parent,  &parent_perm);
+        
+        if (!(parent_perm & KMALLOC_PERMISSION_READ) || 
+            !(parent_perm & KMALLOC_PERMISSION_WRITE)) 
+            return false;
+        
+        create_knode(target_name, parent);
+        return true;
     }
-    return true;
+    return false;
 }
 
 bool vfs_remove(const char* path) {
@@ -342,7 +434,7 @@ bool vfs_remove(const char* path) {
         uint8_t item_perm = 0;
         uint8_t parent_perm = 0;
         fs_file_get_permissions(address, &item_perm);
-        fs_file_get_permissions(address, &parent_perm);
+        fs_file_get_permissions(parent,  &parent_perm);
         
         if (!(item_perm & FS_PERMISSION_WRITE) || 
             !(parent_perm & FS_PERMISSION_READ) || 
@@ -351,16 +443,27 @@ bool vfs_remove(const char* path) {
         
         fs_directory_remove_reference(parent, address);
         
-        if (fs_file_delete(address)) {
+        if (!fs_file_delete(address)) {
             if (fs_directory_delete(address)) 
                 return true;
+        } else {
+            return true;
         }
         
     } else {
-        // KNODE
+        uint8_t item_perm = 0;
+        uint8_t parent_perm = 0;
+        knode_get_permissions(address, &item_perm);
+        knode_get_permissions(parent,  &parent_perm);
+        
+        if (!(item_perm & KMALLOC_PERMISSION_WRITE) || 
+            !(parent_perm & KMALLOC_PERMISSION_READ) || 
+            !(parent_perm & KMALLOC_PERMISSION_WRITE)) 
+            return false;
+        
+        if (destroy_knode(address, parent)) 
+            return true;
     }
-    
-    
     
     return false;
 }
@@ -407,55 +510,75 @@ bool vfs_truncate(const char* path, uint32_t new_size) {
     return false;
 }
 
-bool vfs_set_permissions(File file, uint8_t perm) {
-    OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
-    if (!desc) return false;
+bool vfs_set_permissions(const char* path, uint8_t perm) {
+    if (path == NULL || path[0] == '\0') {
+        return false;
+    }
     
-    uint8_t permissions = 0;
-    if (desc->in_file_system) {
+    uint32_t address = resolve_path_to_address(path);
+    if (address == 0xFFFFFFFF || address == 0) {
+        return false; // Path does not exist
+    }
+    
+    // Determine context: underlying physical file system or raw knode
+    if (fs_check_directory_valid(address) || fs_file_check(address)) {
+        uint8_t permissions = 0;
         if (perm & VFS_PERMISSION_EXECUTE)  permissions |= FS_PERMISSION_EXECUTE;
         if (perm & VFS_PERMISSION_READ)     permissions |= FS_PERMISSION_READ;
         if (perm & VFS_PERMISSION_WRITE)    permissions |= FS_PERMISSION_WRITE;
         
-        fs_file_set_permissions(desc->address, permissions);
-    } else {
+        fs_file_set_permissions(address, permissions);
+    } else if (kmalloc_is_valid(address)) {
+        uint8_t permissions = 0;
         if (perm & VFS_PERMISSION_EXECUTE)  permissions |= KMALLOC_PERMISSION_EXECUTABLE;
         if (perm & VFS_PERMISSION_READ)     permissions |= KMALLOC_PERMISSION_READ;
         if (perm & VFS_PERMISSION_WRITE)    permissions |= KMALLOC_PERMISSION_WRITE;
         
-        kmalloc_set_permissions(desc->address, permissions); 
+        kmalloc_set_permissions(address, permissions); 
+    } else {
+        return false; // Unknown address space context
     }
     
     return true; 
 }
 
-bool vfs_get_permissions(File file, uint8_t* perm) {
-    OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
-    if (!desc) return false;
+bool vfs_get_permissions(const char* path, uint8_t* perm) {
+    if (path == NULL || path[0] == '\0' || perm == NULL) {
+        return false;
+    }
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == 0xFFFFFFFF || address == 0) {
+        return false; // Path does not exist
+    }
     
     *perm = 0;
-    uint8_t permissions=0;
-    if (desc->in_file_system) {
-        fs_file_get_permissions(desc->address, &permissions);
+    
+    // Check if the address context is a filesystem block or memory knode
+    if (fs_check_directory_valid(address) || fs_file_check(address)) {
+        uint8_t permissions = 0;
+        fs_file_get_permissions(address, &permissions);
         
-        *perm = 0;
         if (permissions & FS_PERMISSION_EXECUTE) *perm |= VFS_PERMISSION_EXECUTE;
         if (permissions & FS_PERMISSION_READ)    *perm |= VFS_PERMISSION_READ;
         if (permissions & FS_PERMISSION_WRITE)   *perm |= VFS_PERMISSION_WRITE;
         
-    } else {
-        permissions = kmalloc_get_permissions(desc->address);
+    } else if (kmalloc_is_valid(address)) {
+        uint8_t permissions = 0;
+        permissions = kmalloc_get_permissions(address);
         
         if (permissions & KMALLOC_PERMISSION_EXECUTABLE) *perm |= VFS_PERMISSION_EXECUTE;
         if (permissions & KMALLOC_PERMISSION_READ)       *perm |= VFS_PERMISSION_READ;
         if (permissions & KMALLOC_PERMISSION_WRITE)      *perm |= VFS_PERMISSION_WRITE;
         
+    } else {
+        return false;
     }
-    
+
     return true;
 }
 
-uint32_t vfs_get_size(File file) {
+uint32_t vfs_file_get_size(File file) {
     OpenFileDescriptor* desc = vfs_find_descriptor_by_id(file);
     if (!desc) return false;
     // Check currently in a mounted file system
@@ -538,7 +661,7 @@ uint32_t vfs_directory_count(const char* path) {
     return 0;
 }
 
-uint32_t resolve_path_to_address(const char* path) {
+static uint32_t resolve_path_to_address(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return 0xFFFFFFFF;
     
@@ -547,19 +670,21 @@ uint32_t resolve_path_to_address(const char* path) {
     uint32_t current_fs_node = 0; // 0 means we are still in knode space
     bool in_file_system = false;
     
-    // Create a local copy of the path for destructive tokenization (strtok)
+    // Create a local copy of the path for tokenization
     char path_scratch[256];
     strncpy(path_scratch, path, sizeof(path_scratch) - 1);
     path_scratch[sizeof(path_scratch) - 1] = '\0';
     
     // Handle explicit starting points if necessary 
     // (Assuming standard absolute path starts with '/')
-    char* token = strtok(path_scratch, "/");
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, path_scratch, "/");
     
+    char* token = cstr_tok_next(&tok);
     while (token != NULL) {
         if (strcmp(token, ".") == 0) {
             // Skip current directory references
-            token = strtok(NULL, "/");
+            token = cstr_tok_next(&tok);
             continue;
         }
         
@@ -582,7 +707,7 @@ uint32_t resolve_path_to_address(const char* path) {
                 uint32_t device_address = knode_get_reference(current_knode, 0);
                 if (device_address != KMALLOC_NULL && device_address != 0) {
                     struct FSPartitionBlock partition;
-                    if (fs_device_open(device_address, &partition) == 0) {
+                    if (fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA) == 0) {
                         // Switch over to File System mode starting at the partition's root
                         current_fs_node = partition.root_directory;
                         in_file_system = true;
@@ -597,7 +722,7 @@ uint32_t resolve_path_to_address(const char* path) {
                 // If we attempt to go above the FS root, we fall back to the base knode
                 struct FSPartitionBlock partition;
                 uint32_t device_address = knode_get_reference(current_knode, 0);
-                fs_device_open(device_address, &partition);
+                fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
                 
                 if (current_fs_node == partition.root_directory) {
                     in_file_system = false;
@@ -631,14 +756,14 @@ uint32_t resolve_path_to_address(const char* path) {
             }
         }
         
-        token = strtok(NULL, "/");
+        token = cstr_tok_next(&tok);
     }
     
     // Return the correct address context based on where traversal ended
     return in_file_system ? current_fs_node : current_knode;
 }
 
-uint32_t resolve_parent_path_to_address(const char* path) {
+static uint32_t resolve_parent_path_to_address(const char* path) {
     if (path == NULL || path[0] == '\0') {
         return 0xFFFFFFFF;
     }

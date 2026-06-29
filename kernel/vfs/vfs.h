@@ -1,9 +1,6 @@
 #ifndef _VIRTUAL_FILE_SYSTEM_H_
 #define _VIRTUAL_FILE_SYSTEM_H_
 
-#include <kernel/knode.h>
-#include <kernel/fs/fs.h>
-
 #define PATH_TOKEN_MAX              64
 #define INVALID_FILE_ID              0
 
@@ -17,38 +14,45 @@
 
 typedef uint32_t File;
 
-// Open/close
+// Device
 
-File vfs_open(const char* path, uint16_t flags);
-void vfs_close(File file);
-bool vfs_exists(const char* path);
+// Get the capacity of a mounted file system
+uint64_t vfs_device_get_capacity(const char* path);
+
+// Get the amount of used space in a mounted file system
+uint64_t vfs_device_get_used(const char* path);
 
 // File
 
-void vfs_read(File file, void* buffer, uint32_t size);
-void vfs_write(File file, const void* buffer, uint32_t size);
+File vfs_open(const char* path, uint16_t flags);
+void vfs_close(File file);
+
+bool vfs_file_read(File file, void* buffer, uint32_t size);
+bool vfs_file_write(File file, const void* buffer, uint32_t size);
+
+uint32_t vfs_file_get_size(File file);
 
 // File system
-
-uint32_t vfs_get_size(File file);
-
-bool vfs_set_permissions(File file, uint8_t perm);
-bool vfs_get_permissions(File file, uint8_t* perm);
-
-bool vfs_is_directory(const char* path);
-bool vfs_is_directory_mounted(const char* path);
 
 bool vfs_mkfile(const char* path, uint32_t size);
 bool vfs_mkdir(const char* path);
 bool vfs_remove(const char* path);
 bool vfs_rename(const char* path, const char* name);
 
+bool vfs_exists(const char* path);
+
 bool vfs_truncate(const char* path, uint32_t new_size);
 
-// Directory
-uint32_t vfs_directory_count(const char* path);
+// Operations
 
-uint32_t resolve_path_to_address(const char* path);
-uint32_t resolve_parent_path_to_address(const char* path);
+bool vfs_set_permissions(const char* path, uint8_t perm);
+bool vfs_get_permissions(const char* path, uint8_t* perm);
+
+bool vfs_is_directory(const char* path);
+bool vfs_is_directory_mounted(const char* path);
+
+// Directory
+
+uint32_t vfs_directory_count(const char* path);
 
 #endif
