@@ -1,5 +1,5 @@
-#ifndef KERNEL_MEMORY_SLAB_ALLOCATOR_H
-#define KERNEL_MEMORY_SLAB_ALLOCATOR_H
+#ifndef _KERNEL_MEMORY_SLAB_ALLOCATOR_H_
+#define _KERNEL_MEMORY_SLAB_ALLOCATOR_H_
 
 struct SlabCache {
     size_t object_size;                // Size of objects this cache handles
@@ -16,8 +16,5 @@ struct SlabPage {
 void* slab_alloc(struct SlabCache* cache);
 
 void slab_free(struct SlabCache* cache, void* ptr);
-
-void* malloc(size_t size);
-void free(void* ptr);
 
 #endif

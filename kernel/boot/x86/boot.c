@@ -1,48 +1,42 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <kernel/arch/x86/io.h>
-#include <kernel/arch/x86/heap.h>
-#include <kernel/arch/x86/slab.h>
-#include <kernel/arch/x86/malloc.h>
-#include <kernel/arch/x86/bus/pci.h>
-#include <kernel/boot/x86/interrupt.h>
-#include <kernel/boot/x86/gdt.h>
+#include <kernel/kernel.h>
 
+// Platform
+#include <kernel/arch/x86/io.h>
+#include <kernel/boot/x86/gdt.h>
+#include <kernel/boot/x86/interrupt.h>
+#include <kernel/boot/x86/multiboot_info.h>
+
+// Memory
+#include <kernel/memory/malloc.h>
 #include <kernel/arch/x86/virtual/vmm.h>
 
-#include <kernel/arch/x86/drivers/ata/ata.h>
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+// Buses
+#include <kernel/arch/x86/bus/pci.h>
 
-#include <kernel/kernel.h>
+// Drivers
+#include <kernel/arch/x86/drivers/ata/ata.h>
+#include <kernel/arch/x86/drivers/ps2.h>
+
+// Utility
 #include <kernel/util/math.h>
 #include <kernel/util/string.h>
 #include <kernel/util/timer.h>
 
+// Console
 #include <kernel/console/print.h>
-#include <kernel/console/display.h>
-#include <kernel/console/keyboard.h>
-#include <kernel/console/mouse.h>
 #include <kernel/console/console.h>
 #include <kernel/console/virtual_key.h>
 
 #include <kernel/dwm/dwm.h>
 #include <kernel/panic/panic_error.h>
 
-#define BOOT_DELAY_MS  1000
+#define BOOT_DELAY_MS  500
 
-
+// Position in memory where the kernel ends
 extern char _kernel_program_end[];
-
-#define PS2_STATUS_REG         0x64
-#define PS2_DATA_REG           0x60
-#define PS2_STATUS_OUTPUT_FULL 0x01
-#define PS2_STATUS_MOUSE_DATA  0x20
-
-bool ps2_check_keyboard(void);
-void flush_keyboard_buffer(void);
-void ps2_route_console(void);
-
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -75,6 +69,10 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     pmm_init(mbi, _kernel_memory_end);
     vmm_init(mbi, _kernel_memory_end);
     
+    // Initialize the kernels personal heap block
+    heap_set_base_address(heap_start);
+    heap_init(block_size, heap_size);
+    
     // Initiate display and drawing
     draw_set_info((uint32_t)mbi);
     display_init();
@@ -94,10 +92,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         uint32_t vram_bytes = mbi->framebuffer_pitch * mbi->framebuffer_height;
         vmm_map_hardware_region(mbi->framebuffer_addr, front_buffer, vram_bytes, VM_WRITE_COMBINING);
     }
-    
-    // Initialize the kernels personal heap block
-    heap_set_base_address(heap_start);
-    heap_init(block_size, heap_size);
     
     // Initiate keyboard and mouse
     static char keyboard_string[255];
@@ -175,8 +169,8 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     uint16_t posy = 30;
     
     dwm_create_folder(posx, posy, "mount",      "/mnt"); posx += sep;
-    dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
-    dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
+    //dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
+    //dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
     
     //dwm_create_mount(posx, posy,  "ssd0",       "/mnt/ssd0");
     
@@ -208,36 +202,5 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
             dwm_event_send(DWM_EVENT_KEYBOARD);
         }
         
-    }
-}
-
-
-bool ps2_check_keyboard(void) {
-    uint8_t status = inb(PS2_STATUS_REG);
-    if (status & PS2_STATUS_OUTPUT_FULL) {
-        if (status & PS2_STATUS_MOUSE_DATA) {
-            mouse_event_handler();
-        } else {
-            return true; // Keyboard data is ready
-        }
-    }
-    return false;
-}
-
-void flush_keyboard_buffer(void) {
-    while (inb(PS2_STATUS_REG) & PS2_STATUS_OUTPUT_FULL) {
-        inb(PS2_DATA_REG);
-    }
-}
-
-void ps2_route_console(void) {
-    uint8_t status = inb(PS2_STATUS_REG);
-    if (status & PS2_STATUS_OUTPUT_FULL) {
-        if (status & PS2_STATUS_MOUSE_DATA) {
-            mouse_event_handler();
-        } else {
-            kb_event_handler();
-            draw_flush_display();
-        }
     }
 }

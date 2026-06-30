@@ -20,6 +20,7 @@ void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin) {
     struct MultibootMmapEntry* mmap = (struct MultibootMmapEntry*)mbi->mmap_addr;
     uint32_t mmap_end = mbi->mmap_addr + mbi->mmap_length;
     
+    // Free memory above the kernels core space
     while ((uint32_t)mmap < mmap_end) {
         if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
             uint64_t region_start = mmap->addr;
@@ -29,8 +30,8 @@ void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin) {
                 region_end = MAX_PHYS_MEMORY;
             }
             
-            // CRITICAL: Align region_start UP to the next page, and region_end DOWN
-            // This ensures we only mark safely accessible, fully-formed pages as free
+            // Align region_start UP to the next page, and region_end DOWN
+            // This ensures we only mark fully-formed pages as free
             uint64_t aligned_start = (region_start + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
             uint64_t aligned_end = region_end & ~(PAGE_SIZE - 1);
             
@@ -40,7 +41,7 @@ void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin) {
                 
                 uint32_t frame = addr / PAGE_SIZE;
                 
-                // Clear using 32-bit math matching the allocator
+                // Clear the allocation
                 pmm_bitmap[frame / 32] &= ~(1U << (frame % 32));
                 
                 if (frame >= total_frames) {
@@ -53,19 +54,21 @@ void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin) {
 }
 
 uint32_t pmm_alloc_frame(void) {
-    // No more typecasting tricks needed
     for (uint32_t i = 0; i < PHYS_BITMAP_SIZE; i++) {
-        if (pmm_bitmap[i] != 0xFFFFFFFF) {
-            for (int bit = 0; bit < 32; bit++) {
-                if ((pmm_bitmap[i] & (1U << bit)) == 0) {
-                    uint32_t frame = (i * 32) + bit;
-                    pmm_bitmap[i] |= (1U << bit); // Mark as used
-                    return frame * PAGE_SIZE;     // Returns physical address
-                }
+        if (pmm_bitmap[i] == 0xFFFFFFFF) 
+            continue;
+        
+        for (int bit = 0; bit < 32; bit++) {
+            if ((pmm_bitmap[i] & (1U << bit)) == 0) {
+                uint32_t frame = (i * 32) + bit;
+                pmm_bitmap[i] |= (1U << bit); // Mark as used
+                return frame * PAGE_SIZE;     // Returns physical address
             }
         }
     }
-    return 0xFFFFFFFF; // Truly out of memory
+    
+    // Out of physical frames
+    return 0xFFFFFFFF;
 }
 
 void pmm_free_frame(uint32_t phys_addr) {

@@ -15,17 +15,17 @@ static uint8_t virt_bitmap[VIRT_BITMAP_SIZE];
 
 static int find_contiguous_bits(uint8_t* bitmap, size_t bitmap_size, size_t num_bits);
 
-// Statically reserve a full page directory and all page tables in BSS using defines
+// Statically reserve a full page directory and all page tables in BSS
 uint32_t page_directory[VM_PAGE_DIR_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static uint32_t static_page_tables[VM_PAGE_DIR_SIZE][VM_PAGE_TABLE_SIZE] __attribute__((aligned(PAGE_SIZE)));
 
 void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     memset(virt_bitmap, 0x00, VIRT_BITMAP_SIZE);
     
-    // Completely clear the page directory so everything starts as "not present"
+    // Completely clear the page directory. Everything begins as "not present"
     memset(page_directory, 0, sizeof(page_directory));
     
-    // Clear out all static page tables to ensure no garbage data exists
+    // Clear out all static page tables to prevent garbage entries
     memset(static_page_tables, 0, sizeof(static_page_tables));
     
     // Handle Identity Mapping up to identity_map_size
@@ -41,7 +41,7 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
             }
         }
         
-        // Only link the directory entry and mark it present if this page table actually holds an identity mapping
+        // Only link the directory entry and mark it present if this page table holds an identity mapping
         if (dir_has_mappings) {
             page_directory[pd_idx] = ((uint32_t)&static_page_tables[pd_idx]) | VM_PRESENT | VM_READWRITE;
         }
@@ -54,7 +54,7 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     // Hand the root directory pointer over to the CPU's CR3 control register
     __asm__ volatile("mov %0, %%cr3" : : "r"(page_directory));
     
-    // Instruct the hardware MMU to flip on address translation execution
+    // Switch on the hardware MMU to activate address translation execution
     uint32_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 |= 0x80000000U; 
@@ -97,14 +97,14 @@ void vmm_free_pages(void* virtual_addr, size_t num_pages) {
     for (size_t i = 0; i < num_pages; i++) {
         uint32_t current_vaddr = vaddr + (i * PAGE_SIZE);
         
-        // Get the physical frame mapped here so we can return it to the PMM
+        // Get the physical frame so we can return it to the PMM
         uint32_t pd_index = current_vaddr >> 22;
         uint32_t pt_index = (current_vaddr >> 12) & 0x3FFU;
         uint32_t pte = static_page_tables[pd_index][pt_index];
         
         if (pte & VM_PRESENT) {
             uint32_t phys_frame = pte & ~0xFFFU;
-            pmm_free_frame(phys_frame); // Assuming this function exists in your PMM!
+            pmm_free_frame(phys_frame);
         }
         
         // Clear the mapping from the page tables
@@ -140,10 +140,10 @@ void vmm_map_page(uint32_t physical_addr, uint32_t virtual_addr, uint32_t flags)
         page_directory[pd_index] = ((uint32_t)&static_page_tables[pd_index]) | VM_PRESENT | VM_READWRITE;
     }
     
-    // Update the table entry directly via its pointer.
+    // Update the table entry directly via its pointer
     static_page_tables[pd_index][pt_index] = (physical_addr & ~0xFFFU) | flags;
     
-    // Clear out stale CPU caches for this specific address mapping alteration
+    // Flush the TLB
     __asm__ volatile("invlpg (%0)" : : "r"(virtual_addr) : "memory");
 }
 
@@ -155,7 +155,7 @@ void vmm_map_hardware_region(uint32_t phys_addr, uint32_t virt_addr, uint32_t si
     uint32_t total_size = size + page_offset;
     uint32_t num_pages = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
     
-    // Map pages to virtual kernel space
+    // Map pages to kernel space
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t current_phys = start_phys + (i * PAGE_SIZE);
         uint32_t current_virt = start_virt + (i * PAGE_SIZE);
@@ -170,7 +170,7 @@ void* vmm_map_mmio_region(uint32_t phys_addr, uint32_t size_bytes, uint32_t flag
     uint32_t total_size  = size_bytes + page_offset;
     uint32_t num_pages   = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
     
-    // Allocate a safe chunk of virtual address space inside VM_START -> VM_END
+    // Allocate a chunk of virtual address space inside VM_START -> VM_END
     int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
     if (virt_start_page == -1) {
         return NULL; 
@@ -223,17 +223,15 @@ uint32_t vmm_get_phys_addr(void* virtual_addr) {
     uint32_t page_offset = vaddr & 0xFFFU;
     
     // Check if the page directory entry is present
-    if (!(page_directory[pd_index] & VM_PRESENT)) {
-        return 0; 
-    }
+    if (!(page_directory[pd_index] & VM_PRESENT)) 
+        return 0;
     
     // Lookup the page table entry from your static multi-dimensional array
     uint32_t pte = static_page_tables[pd_index][pt_index];
     
     // Check if the individual page is actually marked present
-    if (!(pte & VM_PRESENT)) {
+    if (!(pte & VM_PRESENT)) 
         return 0;
-    }
     
     // Mask out the page flags to get the base physical frame address, 
     // then append the original page offset.
@@ -246,15 +244,16 @@ void* vmm_get_virt_addr(uint32_t physical_addr) {
     
     // Scan through the page directory
     for (uint32_t pd_index = 0; pd_index < VM_PAGE_DIR_SIZE; pd_index++) {
-        // Only check if this page table is actually present
+        // Check if this page table is present
         if (page_directory[pd_index] & VM_PRESENT) {
             
-            // Scan through this specific page table's entries
+            // Check through this specific page table of entries
             for (uint32_t pt_index = 0; pt_index < VM_PAGE_TABLE_SIZE; pt_index++) {
                 uint32_t pte = static_page_tables[pd_index][pt_index];
                 
                 // If the page is present and matches our target physical frame
                 if ((pte & VM_PRESENT) && ((pte & ~0xFFFU) == target_frame)) {
+                    
                     // Reconstruct the virtual address from the indices and offset
                     uint32_t virtual_addr = (pd_index << 22) | (pt_index << 12) | page_offset;
                     return (void*)virtual_addr;

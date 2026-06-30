@@ -3,13 +3,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+#include <kernel/boot/x86/multiboot_info.h>
 
 #define PAGE_SIZE 4096U
 
 void pmm_init(struct MultibootInfo* mbi, uint32_t physical_begin);
 
 uint32_t pmm_alloc_frame(void);
+
 void pmm_free_frame(uint32_t phys_addr);
 
 #endif

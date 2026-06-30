@@ -12,7 +12,7 @@ struct FreeNode {
 };
 
 static struct SlabPage* slab_grow(size_t object_size) {
-    // Get a fresh 4KB page from your VMM
+    // Get a fresh page from the virtual memory manager
     void* raw_page = vmm_alloc_pages(1);
     if (!raw_page) return NULL;
     
@@ -41,7 +41,7 @@ static struct SlabPage* slab_grow(size_t object_size) {
         struct FreeNode* next_node = (struct FreeNode*)((uint8_t*)current + object_size);
         current->next = next_node;
         
-        // Skip the first 4 bytes (the next pointer) so we don't destroy the list structure!
+        // Skip the first 4 bytes to maintain list structure
         uint8_t* payload = (uint8_t*)current + sizeof(struct FreeNode*);
         size_t payload_size = object_size - sizeof(struct FreeNode*);
         memset(payload, 0xAA, payload_size);
@@ -49,7 +49,7 @@ static struct SlabPage* slab_grow(size_t object_size) {
         current = next_node;
     }
     
-    //Terminate the last node and poison its payload too
+    // Terminate the last node and poison its payload
     current->next = NULL;
     uint8_t* payload = (uint8_t*)current + sizeof(struct FreeNode*);
     size_t payload_size = object_size - sizeof(struct FreeNode*);
@@ -76,14 +76,14 @@ void* slab_alloc(struct SlabCache* cache) {
     
     struct FreeNode* allocated_slot = page->free_list;
     
-    // Make sure we only check if the object size is actually larger than a pointer
+    // Make sure we check if the object size is larger than a pointer
     if (cache->object_size > sizeof(struct FreeNode*)) {
         uint8_t* payload = (uint8_t*)allocated_slot + sizeof(struct FreeNode*);
         size_t payload_size = cache->object_size - sizeof(struct FreeNode*);
         
         for (size_t i = 0; i < payload_size; i++) {
             if (payload[i] != 0xAA) {
-                kernel_crashout(0x00, (uint32_t)allocated_slot, PT_SEG_FAULT, "SEGMENTATION BUTT FUCKERY");
+                kernel_crashout(0x00, (uint32_t)allocated_slot, PT_SEG_FAULT, "SEGMENTATION FAULT");
                 return NULL;
             }
         }
@@ -107,7 +107,7 @@ void slab_free(struct SlabCache* cache, void* ptr) {
     struct FreeNode* current = page->free_list;
     while (current != NULL) {
         if (current == (struct FreeNode*)ptr) {
-            // Caught a double free! Trigger the panic screen.
+            
             kernel_crashout(0x00, (uint32_t)ptr, PT_SEG_FAULT, "double Free");
             return;
         }
@@ -124,7 +124,7 @@ void slab_free(struct SlabCache* cache, void* ptr) {
     page->num_allocated--;
     
     if (page->num_allocated == 0) {
-        // Unlink 'page' from cache->page_list
+        // Unlink page from cache->page_list
         struct SlabPage** prev = &cache->page_list;
         while (*prev != NULL && *prev != page) {
             prev = &(*prev)->next;
@@ -133,7 +133,7 @@ void slab_free(struct SlabCache* cache, void* ptr) {
             *prev = page->next;
         }
         
-        // This unmaps the page and returns the physical frame!
+        // Unmap the page and return the physical frame
         vmm_free_pages((void*)page, 1); 
     }
 }

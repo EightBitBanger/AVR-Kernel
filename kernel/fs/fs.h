@@ -12,7 +12,6 @@
 #include <kernel/fs/basefs/file.h>
 #include <kernel/fs/basefs/directory.h>
 
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 

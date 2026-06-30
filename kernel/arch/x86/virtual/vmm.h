@@ -3,8 +3,9 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+
 #include <kernel/arch/x86/virtual/pmm.h>
+#include <kernel/boot/x86/multiboot_info.h>
 
 // Core Control Flags
 #define VM_PRESENT       0x001U  // Bit 0: Page is in memory

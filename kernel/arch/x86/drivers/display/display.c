@@ -5,7 +5,7 @@
 #include <kernel/arch/x86/io.h>
 #include <kernel/arch/x86/drivers/display/char_rom.h>
 #include <kernel/arch/x86/drivers/display/draw.h>
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+#include <kernel/boot/x86/multiboot_info.h>
 
 #include <kernel/console/print.h>
 #include <kernel/console/display.h>

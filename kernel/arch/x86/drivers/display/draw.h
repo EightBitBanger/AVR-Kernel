@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <kernel/arch/x86/drivers/multiboot_info.h>
+#include <kernel/boot/x86/multiboot_info.h>
 
 #define COLOR(val) (uint16_t)((val) & 0xFFFF), (uint16_t)((val) >> 16)
 

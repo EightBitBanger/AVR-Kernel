@@ -1,5 +1,5 @@
-#ifndef KERNEL_CORE_H
-#define KERNEL_CORE_H
+#ifndef _KERNEL_CORE_H_
+#define _KERNEL_CORE_H_
 
 #include <kernel/device/driver.h>
 #include <kernel/device/device.h>
