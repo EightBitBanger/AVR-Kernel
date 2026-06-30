@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
-#include <kernel/arch/x86/malloc.h>
+#include <kernel/memory/malloc.h>
 
 #include <kernel/knode.h>
 #include <kernel/fs/fs.h>

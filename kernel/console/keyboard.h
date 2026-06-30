@@ -1,6 +1,8 @@
 #ifndef KEYBOARD_IO_H
 #define KEYBOARD_IO_H
 
+#include <stdint.h>
+
 void kb_init(void);
 
 uint16_t kb_getc(void);

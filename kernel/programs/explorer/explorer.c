@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include <kernel/arch/x86/malloc.h>
 #include <kernel/knode.h>
 #include <kernel/kernel.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/events.h>
+
+#include <kernel/memory/malloc.h>
 
 #include <kernel/programs/explorer/internal.h>
 #include <kernel/programs/explorer/explorer.h>

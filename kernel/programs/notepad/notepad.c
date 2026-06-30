@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include <kernel/arch/x86/malloc.h>
+#include <kernel/memory/malloc.h>
 
 #include <kernel/kernel.h>
 #include <kernel/dwm/dwm.h>

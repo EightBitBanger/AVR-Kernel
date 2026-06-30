@@ -8,7 +8,7 @@
 
 #include <kernel/programs/explorer/internal.h>
 
-#include <kernel/arch/x86/malloc.h>
+#include <kernel/memory/malloc.h>
 #include <kernel/knode.h>
 
 static struct ExplorerWindowState* get_window_state(WindowHandle handle);

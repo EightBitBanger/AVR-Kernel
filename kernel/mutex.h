@@ -1,5 +1,5 @@
-#ifndef KERNEL_MUTEX_H
-#define KERNEL_MUTEX_H
+#ifndef _KERNEL_MUTEX_H_
+#define _KERNEL_MUTEX_H_
 
 #include <stdint.h>
 #include <stdbool.h>

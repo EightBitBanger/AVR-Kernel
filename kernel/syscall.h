@@ -1,5 +1,5 @@
-#ifndef SYSCALL_COMMAND_SYSTEM_H
-#define SYSCALL_COMMAND_SYSTEM_H
+#ifndef _SYSCALL_COMMAND_SYSTEM_H_
+#define _SYSCALL_COMMAND_SYSTEM_H_
 
 #define  SYSCALL_EXECUTE           1
 // Navigation

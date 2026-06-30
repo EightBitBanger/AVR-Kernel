@@ -8,7 +8,7 @@
 
 #include <kernel/programs/notepad/internal.h>
 #include <kernel/programs/notepad/notepad.h>
-#include <kernel/arch/x86/malloc.h>
+#include <kernel/memory/malloc.h>
 
 // Background Bounds
 #define NOTEPAD_BG_X                 0
