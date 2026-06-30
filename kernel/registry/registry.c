@@ -1,117 +1,177 @@
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <kernel/util/string.h>
+#include <kernel/memory/malloc.h>
 
 #include <kernel/registry/registry.h>
+#include <kernel/util/string.h>
 
-// Assuming your slab/fallback framework provides these standard library hooks:
-extern void* malloc(size_t size);
-extern void  free(void* ptr);
+struct RegistryHive hkey_root = { NULL };
+struct RegistryHive hkey_user = { NULL };
+struct RegistryHive hkey_admin = { NULL };
 
-// Head of the registered objects tracked list
-static struct RegistryNode* registry_head = NULL;
+static void registry_free_value(struct RegistryValue* val) {
+    if (!val) return;
+    if (val->data) {
+        free(val->data);
+    }
+    free(val);
+}
 
-// Find a tracked pointer's metadata node
-static struct RegistryNode* find_node(void* ptr) {
-    if (!ptr) return NULL;
-    
-    struct RegistryNode* current = registry_head;
-    while (current != NULL) {
-        if (current->target_address == ptr) {
-            return current;
+struct RegistryKey* registry_create_key(struct RegistryKey* parent, const char* name, uint16_t permissions) {
+    if (!name) return NULL;
+
+    struct RegistryKey* new_key = (struct RegistryKey*)malloc(sizeof(struct RegistryKey));
+    if (!new_key) return NULL;
+
+    strncpy(new_key->name, name, REGISTRY_MAX_NAME_LEN);
+    new_key->permissions = permissions;
+    new_key->next = NULL;
+    new_key->child_keys = NULL;
+    new_key->values = NULL;
+
+    // Link into parent branch
+    if (parent) {
+        new_key->next = parent->child_keys;
+        parent->child_keys = new_key;
+    }
+
+    return new_key;
+}
+
+struct RegistryValue* registry_create_value(struct RegistryKey* parent, const char* name, uint16_t permissions, const void* data, size_t size) {
+    if (!parent || !name) return NULL;
+
+    struct RegistryValue* new_val = (struct RegistryValue*)malloc(sizeof(struct RegistryValue));
+    if (!new_val) return NULL;
+
+    strncpy(new_val->name, name, REGISTRY_MAX_NAME_LEN);
+    new_val->permissions = permissions;
+    new_val->data_len = size;
+    new_val->next = NULL;
+
+    if (data && size > 0) {
+        new_val->data = malloc(size);
+        if (!new_val->data) {
+            free(new_val);
+            return NULL;
         }
-        current = current->next;
+        memcpy(new_val->data, data, size);
+    } else {
+        new_val->data = NULL;
     }
-    return NULL;
+
+    // Link into parent key's value list
+    new_val->next = parent->values;
+    parent->values = new_val;
+
+    return new_val;
 }
 
-void* registry_alloc(size_t size, uint8_t type, uint8_t flags, uint8_t perm) {
-    if (size == 0) return NULL;
-    
-    // Allocate the actual data buffer using the unified allocator
-    void* data_ptr = malloc(size);
-    if (!data_ptr) return NULL;
-    
-    // Allocate the tracking node from the allocator as well
-    struct RegistryNode* tracker = (struct RegistryNode*)malloc(sizeof(struct RegistryNode));
-    if (!tracker) {
-        free(data_ptr); // Clean up to avoid memory leaks
-        return NULL;
+void registry_free_key(struct RegistryKey* key) {
+    if (!key) return;
+
+    // Recursively clean out all subkeys
+    struct RegistryKey* current_child = key->child_keys;
+    while (current_child) {
+        struct RegistryKey* next_child = current_child->next;
+        registry_free_key(current_child);
+        current_child = next_child;
     }
-    
-    // Populate metadata properties
-    tracker->target_address = data_ptr;
-    tracker->size           = size;
-    tracker->type           = type;
-    tracker->flags          = flags;
-    tracker->perm           = perm;
-    
-    // Link it into our global tracking list
-    tracker->next = registry_head;
-    registry_head = tracker;
-    
-    return data_ptr;
+
+    // Purge allocations for all attached values
+    struct RegistryValue* current_val = key->values;
+    while (current_val) {
+        struct RegistryValue* next_val = current_val->next;
+        registry_free_value(current_val);
+        current_val = next_val;
+    }
+
+    // Free the root of this key block
+    free(key);
 }
 
-void registry_free(void* ptr) {
+uint16_t registry_get_permissions(void* ptr) {
+    if (!ptr) return 0;
+    return ((struct RegistryKey*)ptr)->permissions; 
+}
+
+void registry_set_permissions(void* ptr, uint16_t permissions) {
     if (!ptr) return;
+    ((struct RegistryKey*)ptr)->permissions = permissions;
+}
+
+static void registry_export_key_recursive(struct RegistryKey* key, void* file_handle) {
+    if (!key) return;
     
-    struct RegistryNode* current = registry_head;
-    struct RegistryNode* previous = NULL;
+    // Write the key metadata out to disk
+    // vfs_write(file_handle, &key->name, REGISTRY_MAX_NAME_LEN);
+    // vfs_write(file_handle, &key->permissions, sizeof(key->permissions));
     
-    while (current != NULL) {
-        if (current->target_address == ptr) {
-            // Unlink from the linked list
-            if (previous == NULL) {
-                registry_head = current->next;
-            } else {
-                previous->next = current->next;
-            }
-            
-            // Free the actual data buffer
-            free(current->target_address);
-            
-            // Free the tracking node structure
-            free(current);
-            return;
+    // Count and write the number of values directly under this key
+    uint32_t val_count = 0;
+    struct RegistryValue* v = key->values;
+    while (v) {
+        val_count++;
+        v = v->next;
+    }
+    // vfs_write(file_handle, &val_count, sizeof(val_count));
+    
+    // Serialize each value associated with this key
+    v = key->values;
+    while (v) {
+        // vfs_write(file_handle, &v->name, REGISTRY_MAX_NAME_LEN);
+        // vfs_write(file_handle, &v->permissions, sizeof(v->permissions));
+        // vfs_write(file_handle, &v->data_len, sizeof(v->data_len));
+        if (v->data_len > 0 && v->data) {
+            // vfs_write(file_handle, v->data, v->data_len);
         }
-        previous = current;
-        current = current->next;
+        v = v->next;
+    }
+    
+    // Count and write the number of subkeys to know how many branches follow
+    uint32_t key_count = 0;
+    struct RegistryKey* child = key->child_keys;
+    while (child) {
+        key_count++;
+        child = child->next;
+    }
+    // vfs_write(file_handle, &key_count, sizeof(key_count));
+    
+    // Recursively export all child branches deeper in the tree
+    child = key->child_keys;
+    while (child) {
+        registry_export_key_recursive(child, file_handle);
+        child = child->next;
     }
 }
 
-uint8_t registry_get_type(void* ptr) {
-    struct RegistryNode* node = find_node(ptr);
-    return node ? node->type : 0;
+bool registry_hive_import(const char* path) {
+    if (!path) return false;
+
+    // Open file block example
+    // void* file = vfs_open(path, VFS_MODE_READ);
+    // if (!file) return false;
+
+    // Placeholder layout loop for parsing your file back into memory:
+    // uint32_t total_keys;
+    // vfs_read(file, &total_keys, sizeof(total_keys));
+    // loop... read elements, reconstruct structure topology via registry_create_key
+
+    // vfs_close(file);
+    return true;
 }
 
-void registry_set_type(void* ptr, uint8_t type) {
-    struct RegistryNode* node = find_node(ptr);
-    if (node) node->type = type;
-}
+bool registry_hive_export(const char* path) {
+    if (!path) return false;
 
-uint8_t registry_get_flags(void* ptr) {
-    struct RegistryNode* node = find_node(ptr);
-    return node ? node->flags : 0;
-}
+    // Mock open file system call
+    // void* file = vfs_open(path, VFS_MODE_WRITE | VFS_MODE_CREATE);
+    // if (!file) return false;
 
-void registry_set_flags(void* ptr, uint8_t flags) {
-    struct RegistryNode* node = find_node(ptr);
-    if (node) node->flags = flags;
-}
+    // Export our default master root key hive tree
+    if (hkey_root.root) {
+        // Example handling: registry_export_key_recursive(hkey_root.root, file);
+    }
 
-uint8_t registry_get_permissions(void* ptr) {
-    struct RegistryNode* node = find_node(ptr);
-    return node ? node->perm : 0;
-}
-
-void registry_set_permissions(void* ptr, uint8_t permissions) {
-    struct RegistryNode* node = find_node(ptr);
-    if (node) node->perm = permissions;
-}
-
-size_t registry_get_size(void* ptr) {
-    struct RegistryNode* node = find_node(ptr);
-    return node ? node->size : 0;
+    // Close down file descriptors
+    // vfs_close(file);
+    return true;
 }

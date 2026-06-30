@@ -1,5 +1,5 @@
-#ifndef KERNEL_EVENT_SYSTEM_H
-#define KERNEL_EVENT_SYSTEM_H
+#ifndef _KERNEL_EVENT_SYSTEM_H_
+#define _KERNEL_EVENT_SYSTEM_H_
 
 #include <kernel/programs/explorer/explorer.h>
 #include <kernel/programs/notepad/notepad.h>

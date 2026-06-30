@@ -1,45 +1,49 @@
-#ifndef KERNEL_REGISTRY_H
-#define KERNEL_REGISTRY_H
+#ifndef _KERNEL_REGISTRY_H_
+#define _KERNEL_REGISTRY_H_
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
-#define REGISTRY_FLAG_DIRTY       0x01
-#define REGISTRY_FLAG_MOUNT       0x02
-#define REGISTRY_FLAG_DIRECTORY   0x04
-#define REGISTRY_FLAG_EXTENT      0x08
+#define REGISTRY_PERMISSION_READ        0x01
+#define REGISTRY_PERMISSION_WRITE       0x02
 
-#define REGISTRY_PERMISSION_EXECUTABLE  0x01
-#define REGISTRY_PERMISSION_READ        0x02
-#define REGISTRY_PERMISSION_WRITE       0x04
-#define REGISTRY_PERMISSION_USER        0x08
+#define REGISTRY_MAX_NAME_LEN    16
 
-#define REGISTRY_TYPE_DEVICE            0x01
-#define REGISTRY_TYPE_DRIVER            0x02
-#define REGISTRY_TYPE_BLOCK             0x04
-#define REGISTRY_TYPE_RAW               0x08
-#define REGISTRY_TYPE_PROCBLOCK         0x10
+struct RegistryValue;
 
-struct RegistryNode {
-    void* target_address;             // The pointer returned by malloc()
-    struct RegistryNode* next;        // Linked list link
-    size_t            size;           // Size of the allocation
-    uint8_t           flags;          // Subsystem flags
-    uint8_t           type;           // Subsystem type
-    uint8_t           perm;           // Subsystem permissions
+struct RegistryKey {
+    char name[REGISTRY_MAX_NAME_LEN];
+    struct RegistryKey* next;          // Sibling keys under the same parent
+    struct RegistryKey* child_keys;    // Head of child keys list
+    struct RegistryValue* values;      // Head of values list inside this key
+    uint16_t permissions;
 };
 
-// Core API
-void* registry_alloc(size_t size, uint8_t type, uint8_t flags, uint8_t perm);
-void   registry_free(void* ptr);
+struct RegistryValue {
+    char name[REGISTRY_MAX_NAME_LEN];
+    struct RegistryValue* next;        // Sibling values under the same key
+    void* data;                        // Dynamic data payload
+    size_t data_len;                   // Length of the payload (useful for future serialization)
+    uint16_t permissions;
+};
 
-// Metadata Accessors
-uint8_t  registry_get_type(void* ptr);
-void     registry_set_type(void* ptr, uint8_t type);
-uint8_t  registry_get_flags(void* ptr);
-void     registry_set_flags(void* ptr, uint8_t flags);
-uint8_t  registry_get_permissions(void* ptr);
-void     registry_set_permissions(void* ptr, uint8_t permissions);
-size_t   registry_get_size(void* ptr);
+struct RegistryHive {
+    struct RegistryKey* root;
+};
+
+extern struct RegistryHive hkey_root;
+extern struct RegistryHive hkey_user;
+extern struct RegistryHive hkey_admin;
+
+struct RegistryKey* registry_create_key(struct RegistryKey* parent, const char* name, uint16_t permissions);
+struct RegistryValue* registry_create_value(struct RegistryKey* parent, const char* name, uint16_t permissions, const void* data, size_t size);
+void registry_free_key(struct RegistryKey* key);
+
+uint16_t registry_get_permissions(void* ptr);
+void registry_set_permissions(void* ptr, uint16_t permissions);
+
+bool registry_hive_import(const char* path);
+bool registry_hive_export(const char* path);
 
 #endif

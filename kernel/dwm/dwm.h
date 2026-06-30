@@ -34,8 +34,6 @@ typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lp
 void dwm_initiate(void);
 void dwm_update(void);
 
-void dwm_set_keyboard_char(uint16_t ch);
-
 // Windows
 
 WindowHandle dwm_create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc);
@@ -117,6 +115,10 @@ void dwm_event_send(wEvent event);
 // Send an even to a specific window
 void dwm_window_send_event(WindowHandle handle, wEvent event);
 
+// Get number of open windows
 uint32_t dwm_window_get_count(void);
+
+// Set the current key input
+void dwm_set_keyboard_char(uint16_t ch);
 
 #endif
