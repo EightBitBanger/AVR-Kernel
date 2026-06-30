@@ -1,5 +1,5 @@
-#ifndef DELAY_TIMER_H
-#define DELAY_TIMER_H
+#ifndef _DELAY_TIMER_H_
+#define _DELAY_TIMER_H_
 
 void timer_init(void);
 

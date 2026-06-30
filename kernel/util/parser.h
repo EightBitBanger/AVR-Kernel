@@ -1,5 +1,5 @@
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef _C_STRING_PARSER_H_
+#define _C_STRING_PARSER_H_
 
 #include <stdint.h>
 #include <stddef.h>

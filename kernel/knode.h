@@ -1,5 +1,5 @@
-#ifndef KNODE_DIRECTORY_H
-#define KNODE_DIRECTORY_H
+#ifndef _KNODE_DIRECTORY_H_
+#define _KNODE_DIRECTORY_H_
 
 #define KNODE_NAME_LENGTH_MAX       16
 #define KNODE_NULL                  KMALLOC_NULL

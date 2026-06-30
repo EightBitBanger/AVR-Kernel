@@ -1,3 +1,6 @@
+#ifndef _C_STRING_H_
+#define _C_STRING_H_
+
 #include <stdint.h>
 #include <stddef.h>
 
@@ -44,3 +47,5 @@ uint32_t stou(const char* str);
 void u8tox(uint8_t value, char* dest);
 void u16tox(uint16_t value, char* dest);
 void u32tox(uint32_t value, char* dest);
+
+#endif

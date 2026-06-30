@@ -1,17 +1,10 @@
 #include <kernel/syscall.h>
 #include <kernel/syscall/commands.h>
 
-// Call command table
-
 #include <kernel/console/display.h>
-int command_clear_display(int arg_count, char** args) {
-    display_clear();
-    display_cursor_set_line(0);
-    display_cursor_set_position(0);
-}
-int command_execute(int arg_count, char** args) {
-    
-}
+
+int command_clear_display(int arg_count, char** args);
+int command_execute(int arg_count, char** args);
 
 struct CommandFunction {const char* name; uint16_t id; CommandFunction function; uint8_t flags;};
 static const struct CommandFunction command_table[] = {
@@ -77,4 +70,16 @@ int syscall(uint16_t id, char** args) {
         return command_table[i].function(agr_count, args);
     }
     return 0;
+}
+
+int command_clear_display(int arg_count, char** args) {
+    display_clear();
+    display_cursor_set_line(0);
+    display_cursor_set_position(0);
+}
+
+int command_execute(int arg_count, char** args) {
+    print("Execute "); // TODO execute a program by name
+    print(args[0]);
+    print("\n");
 }

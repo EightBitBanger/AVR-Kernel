@@ -1,17 +1,18 @@
-#ifndef _STRING_TOKENIZER_H_
-#define _STRING_TOKENIZER_H_
-
 /*
+
 Thread safe C string tokenizer implementation.
 
 */
+
+#ifndef _STRING_TOKENIZER_H_
+#define _STRING_TOKENIZER_H_
 
 #include <stdint.h>
 #include <stddef.h>
 
 typedef struct {
-    char *next_token;
-    const char *delim;
+    char* next_token;
+    const char* delim;
 } cstr_tok_t;
 
 // Initializes the tokenizer with a string and its delimiters

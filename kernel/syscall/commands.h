@@ -4,8 +4,6 @@
 #include <kernel/syscall/commands/list.h>
 #include <kernel/syscall/commands/chdir.h>
 
-//#include <kernel/syscall/commands/graph.h>
-
 #include <kernel/syscall/commands/mkfile.h>
 #include <kernel/syscall/commands/mkdir.h>
 #include <kernel/syscall/commands/remove.h>
@@ -19,8 +17,13 @@
 #include <kernel/syscall/commands/chkdsk.h>
 
 /*
+
 #include <kernel/syscall/commands/execute.h>
 #include <kernel/syscall/commands/boot.h>
+
+// arch/AVR graphics demo
+//#include <kernel/syscall/commands/graph.h>
+
 */
 
 #endif
