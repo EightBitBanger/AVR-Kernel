@@ -50,7 +50,7 @@ void kernel_init(void) {
         device_mount = reference;
         
         struct FSPartitionBlock part;
-        fs_device_open(device_mount, &part);
+        fs_device_open(device_mount, &part, FS_DEVICE_TYPE_EEPROM);
         
         fs_current.current_directory = mount_point;
         fs_current.mount_device      = mount_device;

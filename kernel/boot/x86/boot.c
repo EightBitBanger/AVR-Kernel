@@ -19,17 +19,20 @@
 // Drivers
 #include <kernel/arch/x86/drivers/ata/ata.h>
 #include <kernel/arch/x86/drivers/ps2.h>
+#include <kernel/arch/x86/drivers/rng.h>
 
 // Utility
 #include <kernel/util/math.h>
 #include <kernel/util/string.h>
 #include <kernel/util/timer.h>
+#include <kernel/util/random.h>
 
 // Console
 #include <kernel/console/print.h>
 #include <kernel/console/console.h>
 #include <kernel/console/virtual_key.h>
 
+#include <kernel/registry/registry.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/panic/panic_error.h>
 
@@ -68,6 +71,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Paging
     pmm_init(mbi, _kernel_memory_end);
     vmm_init(mbi, _kernel_memory_end);
+    
+    // Random number generation
+    //rand_init();
     
     // Initialize the kernels personal heap block
     heap_set_base_address(heap_start);
@@ -113,7 +119,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     print("kernel v0.0.0\n");
     draw_flush_display();
     
-    
     //
     // Command console / boot options
     
@@ -151,6 +156,14 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Scan PCI bus for available hardware
     pci_init();
     
+    rand_init();
+    
+    // Get primary knode directories
+    uint32_t root_node = knode_get_root();
+    uint32_t dev_directory = knode_find_by_name(root_node, "dev");
+    uint32_t mnt_directory = knode_find_by_name(root_node, "mnt");
+    uint32_t pci_directory = create_knode("pci", dev_directory);
+    
     // Courtesy delay for boot output
     uint64_t old_ms = timer_get_ms();
     while ((timer_get_ms() - old_ms) <= BOOT_DELAY_MS);
@@ -158,6 +171,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Blank the screen in preparation for pure graphics mode
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
+    
+    //
+    // Load the registry
+    
+    registry_hive_initiate("/mnt/ata0/sys");
     
     //
     // Initiate the DWM graphical environment
@@ -168,17 +186,42 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     uint16_t posx = 30;
     uint16_t posy = 30;
     
-    dwm_create_folder(posx, posy, "mount",      "/mnt"); posx += sep;
-    //dwm_create_folder(posx, posy, "devices",    "/dev/pci"); posx += sep;
-    //dwm_create_folder(posx, posy, "processes",  "/proc"); posx += sep;
+    //
+    // Load desktop icons
     
-    //dwm_create_mount(posx, posy,  "ssd0",       "/mnt/ssd0");
+    const char* path_mnt = "/mnt";
+    const char* path_sys = "/sys";
     
-    
+    // Get mounted devices
+    uint32_t number_of_mounts = knode_get_reference_count(mnt_directory);
+    for (unsigned int i=0; i < number_of_mounts; i++) {
+        uint32_t address = knode_get_reference(mnt_directory, i);
+        
+        char name[16];
+        knode_get_name(address, name);
+        
+        char path[128];
+        strncpy(path, path_mnt, 128);
+        strncat(path, "/", 128);
+        strncat(path, name, 128);
+        
+        // Find a system partition
+        char path_system[128];
+        strncpy(path_system, path, 128);
+        strncat(path_system, path_sys, 128);
+        
+        if (vfs_directory_check(path_system)) {
+            
+            dwm_create_mount(posx, posy, name, path); posx += sep;
+        }
+        
+        
+    }
     
     // User event call back messaging
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
+    
     
     // TODO scalable vector font or MSDF
     

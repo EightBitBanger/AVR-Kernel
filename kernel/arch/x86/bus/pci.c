@@ -286,29 +286,8 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                             device_name[3] = '0' + storage_device_index++;
                             
                             //
-                            // Quick and dirty format example
-                            /*
-                            uint32_t device_size = 1024 * 1024 * 32;
+                            // Mount the file system into the knode structure
                             
-                            uint32_t device_address = kmalloc( 512 );
-                            kmemset(device_address, 0x00, 512);
-                            
-                            fs_device_format(device_address, device_size, 512, FS_DEVICE_TYPE_ATA);
-                            
-                            struct FSPartitionBlock part;
-                            fs_device_open(device_address, &part, FS_DEVICE_TYPE_ATA);
-                            
-                            uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
-                            
-                            part.root_directory = root_directory;
-                            
-                            fs_mem_write(sizeof(struct FSDeviceHeader), &part, sizeof(struct FSPartitionBlock));
-                            
-                            fs_cache_sync();
-                            */
-                            
-                            
-                            {
                             uint32_t mount_ptr = create_knode(device_name, mnt_directory);
                             kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
                             
@@ -319,7 +298,6 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                             
                             ata_read_sector(0, (uint8_t*)block_device);
                             knode_add_reference(mount_ptr, block_device);
-                            }
                             
                         }
                     }
