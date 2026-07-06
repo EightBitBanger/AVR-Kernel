@@ -6,8 +6,19 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_mk(int arg_count, char** args) {
+    
+    // TODO convert to VFS functions
+    
     if (arg_count == 0) 
         return 1;
+    
+    /*
+    for (unsigned int i=0; i < arg_count; i++) {
+        print(args[i]);
+        print("\n");
+    }
+    return 0;
+    */
     
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);

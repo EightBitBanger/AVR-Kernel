@@ -23,6 +23,7 @@ void fs_init(void);
 
 // Initiate the device to a given size
 void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size, uint16_t device_type);
+void fs_device_format_low(uint32_t device_address, uint32_t capacity);
 
 // Open a device for IO operations
 uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type);
@@ -38,7 +39,7 @@ uint32_t fs_find_next(uint32_t previous_address);
 
 // Bitmap allocation tracking
 void fs_bitmap_flush(void);
-uint32_t fs_bitmap_get_size();
+uint32_t fs_bitmap_get_size(void);
 
 // Low level allocation
 uint32_t fs_alloc(uint32_t size);

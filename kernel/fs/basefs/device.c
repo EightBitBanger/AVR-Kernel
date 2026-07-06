@@ -176,6 +176,15 @@ void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t secto
     fs_bitmap_flush();
 }
 
+void fs_device_format_low(uint32_t device_address, uint32_t capacity) {
+    uint8_t clear_byte = 0x00;
+    
+    for (uint64_t address_range=0; address_range < capacity; address_range++) 
+        fs_writeb(address_range, clear_byte);
+    
+    fs_cache_sync();
+}
+
 bool fs_check_directory_valid(uint32_t address) {
     struct FSFileHeader header;
     fs_mem_read(address, &header, sizeof(struct FSFileHeader));

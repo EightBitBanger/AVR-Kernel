@@ -6,6 +6,9 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_rm(int arg_count, char** args) {
+    
+    // TODO convert to VFS functions
+    
     if (arg_count == 0) 
         return 1;
     

@@ -22,6 +22,26 @@ static bool fs_file_alloc_header_read(uint32_t payload_address, struct FSAllocHe
     return true;
 }
 
+// Helper to determine max references for a directory header based on its allocation size
+static uint32_t fs_directory_header_max_refs(uint32_t directory_address) {
+    struct FSAllocHeader alloc_header;
+    if (!fs_file_alloc_header_read(directory_address, &alloc_header))
+        return 0;
+    if (alloc_header.size <= sizeof(struct FSDirectoryHeader))
+        return 0;
+    return (alloc_header.size - sizeof(struct FSDirectoryHeader)) / sizeof(uint32_t);
+}
+
+// Helper to determine max references for an extent based on its allocation size
+static uint32_t fs_directory_extent_max_refs(uint32_t extent_address) {
+    struct FSAllocHeader alloc_header;
+    if (!fs_file_alloc_header_read(extent_address, &alloc_header))
+        return 0;
+    if (alloc_header.size <= sizeof(struct FSDirectoryExtent))
+        return 0;
+    return (alloc_header.size - sizeof(struct FSDirectoryExtent)) / sizeof(uint32_t);
+}
+
 bool fs_directory_header_read(uint32_t directory_address, struct FSDirectoryHeader* directory) {
     struct FSAllocHeader alloc_header;
     
@@ -56,17 +76,18 @@ void fs_directory_extent_write(uint32_t extent_address, const struct FSDirectory
     fs_mem_write(extent_address, extent, sizeof(struct FSDirectoryExtent));
 }
 
-uint32_t fs_directory_extent_create(uint32_t prev_address) {
+// Pass the initial capacity you want when allocating an extent
+uint32_t fs_directory_extent_create(uint32_t prev_address, uint32_t initial_capacity) {
     struct FSDirectoryExtent extent;
     uint32_t                 extent_address;
     
-    extent_address = fs_alloc(sizeof(struct FSDirectoryExtent));
+    extent_address = fs_alloc(sizeof(struct FSDirectoryExtent) + (initial_capacity * sizeof(uint32_t)));
     if (extent_address == FS_NULL)
         return FS_NULL;
     
     memset(&extent, 0x00, sizeof(struct FSDirectoryExtent));
-    extent.prev = prev_address;
-    extent.next = FS_NULL;
+    extent.extent.prev = prev_address;
+    extent.extent.next = FS_NULL;
     extent.reference_count = 0;
     
     fs_directory_extent_write(extent_address, &extent);
@@ -86,28 +107,30 @@ void fs_directory_extent_unlink_and_free(uint32_t directory_address, uint32_t ex
     if (!fs_directory_extent_read(extent_address, &extent))
         return;
     
-    if (extent.prev == directory_address) {
-        directory.next = extent.next;
+    if (extent.extent.prev == directory_address) {
+        directory.extent.next = extent.extent.next;
         fs_directory_header_write(directory_address, &directory);
-    } else if (extent.prev != FS_NULL) {
-        if (fs_directory_extent_read(extent.prev, &prev_extent)) {
-            prev_extent.next = extent.next;
-            fs_directory_extent_write(extent.prev, &prev_extent);
+    } else if (extent.extent.prev != FS_NULL) {
+        if (fs_directory_extent_read(extent.extent.prev, &prev_extent)) {
+            prev_extent.extent.next = extent.extent.next;
+            fs_directory_extent_write(extent.extent.prev, &prev_extent);
         }
     }
     
-    if (extent.next != FS_NULL) {
-        if (fs_directory_extent_read(extent.next, &next_extent)) {
-            next_extent.prev = extent.prev;
-            fs_directory_extent_write(extent.next, &next_extent);
+    if (extent.extent.next != FS_NULL) {
+        if (fs_directory_extent_read(extent.extent.next, &next_extent)) {
+            next_extent.extent.prev = extent.extent.prev;
+            fs_directory_extent_write(extent.extent.next, &next_extent);
         }
     }
     
     fs_free(extent_address);
 }
 
+// Pass the initial capacity you want when creating a directory
 uint32_t fs_directory_create(const char* name, uint8_t permissions, uint32_t parent_directory) {
-    uint32_t address = fs_alloc(sizeof(struct FSDirectoryHeader));
+    uint32_t initial_capacity = 24;
+    uint32_t address = fs_alloc(sizeof(struct FSDirectoryHeader) + (initial_capacity * sizeof(uint32_t)));
     if (address == FS_NULL)
         return address;
     
@@ -120,8 +143,8 @@ uint32_t fs_directory_create(const char* name, uint8_t permissions, uint32_t par
     directory.block.attributes  = FS_ATTRIBUTE_DIRECTORY;
     directory.block.permissions = permissions;
     directory.parent            = parent_directory;
-    directory.next              = FS_NULL;
-    directory.prev              = FS_NULL;
+    directory.extent.next       = FS_NULL;
+    directory.extent.prev       = FS_NULL;
     directory.reference_count   = 0;
     
     fs_directory_header_write(address, &directory);
@@ -136,7 +159,7 @@ bool fs_directory_delete(uint32_t address) {
     if (!fs_directory_header_read(address, &directory))
         return false;
     
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     
     while (extent_address != FS_NULL) {
         struct FSDirectoryExtent extent;
@@ -144,7 +167,7 @@ bool fs_directory_delete(uint32_t address) {
         if (!fs_directory_extent_read(extent_address, &extent))
             break;
         
-        next_extent_address = extent.next;
+        next_extent_address = extent.extent.next;
         fs_free(extent_address);
         extent_address = next_extent_address;
     }
@@ -160,6 +183,7 @@ uint8_t fs_directory_add_reference(uint32_t directory_address, uint32_t referenc
     uint32_t                 extent_address;
     uint32_t                 new_extent_address;
     uint32_t                 index;
+    uint32_t                 current_ref;
     
     if (reference_address == FS_NULL)
         return 1;
@@ -167,54 +191,66 @@ uint8_t fs_directory_add_reference(uint32_t directory_address, uint32_t referenc
     if (!fs_directory_header_read(directory_address, &directory))
         return 2;
     
+    uint32_t dir_max_refs = fs_directory_header_max_refs(directory_address);
+    
     for (index = 0; index < directory.reference_count; index++) {
-        if (directory.reference[index].ref == reference_address)
+        uint32_t ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (index * sizeof(uint32_t));
+        fs_mem_read(ref_offset, &current_ref, sizeof(uint32_t));
+        if (current_ref == reference_address)
             return 0;
     }
     
-    if (directory.reference_count < FS_DIRECTORY_REF_MAX) {
-        directory.reference[directory.reference_count].ref = reference_address;
+    if (directory.reference_count < dir_max_refs) {
+        uint32_t ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (directory.reference_count * sizeof(uint32_t));
+        fs_mem_write(ref_offset, &reference_address, sizeof(uint32_t));
         directory.reference_count++;
         fs_directory_header_write(directory_address, &directory);
         return 0;
     }
     
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     
     while (extent_address != FS_NULL) {
         if (!fs_directory_extent_read(extent_address, &extent))
             return 3;
+            
+        uint32_t ext_max_refs = fs_directory_extent_max_refs(extent_address);
         
         for (index = 0; index < extent.reference_count; index++) {
-            if (extent.reference[index].ref == reference_address)
+            uint32_t ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (index * sizeof(uint32_t));
+            fs_mem_read(ref_offset, &current_ref, sizeof(uint32_t));
+            if (current_ref == reference_address)
                 return 0;
         }
         
-        if (extent.reference_count < FS_DIRECTORY_EX_REF_MAX) {
-            extent.reference[extent.reference_count].ref = reference_address;
+        if (extent.reference_count < ext_max_refs) {
+            uint32_t ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (extent.reference_count * sizeof(uint32_t));
+            fs_mem_write(ref_offset, &reference_address, sizeof(uint32_t));
             extent.reference_count++;
             fs_directory_extent_write(extent_address, &extent);
             return 0;
         }
         
-        if (extent.next == FS_NULL)
+        if (extent.extent.next == FS_NULL)
             break;
         
-        extent_address = extent.next;
+        extent_address = extent.extent.next;
     }
     
-    if (directory.next == FS_NULL) {
-        new_extent_address = fs_directory_extent_create(directory_address);
+    // Fallback constants used here purely to size new blocks if an old one filled up
+    if (directory.extent.next == FS_NULL) {
+        new_extent_address = fs_directory_extent_create(directory_address, 12); 
         if (new_extent_address == FS_NULL)
             return 4;
         
-        directory.next = new_extent_address;
+        directory.extent.next = new_extent_address;
         fs_directory_header_write(directory_address, &directory);
         
         if (!fs_directory_extent_read(new_extent_address, &extent))
             return 5;
         
-        extent.reference[0].ref = reference_address;
+        uint32_t ref_offset = new_extent_address + sizeof(struct FSDirectoryExtent);
+        fs_mem_write(ref_offset, &reference_address, sizeof(uint32_t));
         extent.reference_count = 1;
         fs_directory_extent_write(new_extent_address, &extent);
         
@@ -224,17 +260,18 @@ uint8_t fs_directory_add_reference(uint32_t directory_address, uint32_t referenc
     if (!fs_directory_extent_read(extent_address, &tail_extent))
         return 6;
     
-    new_extent_address = fs_directory_extent_create(extent_address);
+    new_extent_address = fs_directory_extent_create(extent_address, 12);
     if (new_extent_address == FS_NULL)
         return 7;
     
-    tail_extent.next = new_extent_address;
+    tail_extent.extent.next = new_extent_address;
     fs_directory_extent_write(extent_address, &tail_extent);
     
     if (!fs_directory_extent_read(new_extent_address, &extent))
         return 8;
     
-    extent.reference[0].ref = reference_address;
+    uint32_t ref_offset = new_extent_address + sizeof(struct FSDirectoryExtent);
+    fs_mem_write(ref_offset, &reference_address, sizeof(uint32_t));
     extent.reference_count = 1;
     fs_directory_extent_write(new_extent_address, &extent);
     
@@ -247,6 +284,8 @@ uint8_t fs_directory_remove_reference(uint32_t directory_address, uint32_t refer
     uint32_t                 extent_address;
     uint32_t                 index;
     uint32_t                 shift_index;
+    uint32_t                 current_ref;
+    uint32_t                 next_ref;
     
     if (reference_address == FS_NULL)
         return 1;
@@ -255,39 +294,55 @@ uint8_t fs_directory_remove_reference(uint32_t directory_address, uint32_t refer
         return 2;
     
     for (index = 0; index < directory.reference_count; index++) {
-        if (directory.reference[index].ref != reference_address)
+        uint32_t ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (index * sizeof(uint32_t));
+        fs_mem_read(ref_offset, &current_ref, sizeof(uint32_t));
+        
+        if (current_ref != reference_address)
             continue;
         
         for (shift_index = index; shift_index + 1UL < directory.reference_count; shift_index++) {
-            directory.reference[shift_index] = directory.reference[shift_index + 1UL];
+            uint32_t next_ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + ((shift_index + 1UL) * sizeof(uint32_t));
+            uint32_t curr_ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (shift_index * sizeof(uint32_t));
+            fs_mem_read(next_ref_offset, &next_ref, sizeof(uint32_t));
+            fs_mem_write(curr_ref_offset, &next_ref, sizeof(uint32_t));
         }
         
         if (directory.reference_count > 0) {
             directory.reference_count--;
-            directory.reference[directory.reference_count].ref = FS_NULL;
+            uint32_t last_ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (directory.reference_count * sizeof(uint32_t));
+            uint32_t null_ref = FS_NULL;
+            fs_mem_write(last_ref_offset, &null_ref, sizeof(uint32_t));
         }
         
         fs_directory_header_write(directory_address, &directory);
         return 0;
     }
     
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     
     while (extent_address != FS_NULL) {
         if (!fs_directory_extent_read(extent_address, &extent))
             return 3;
         
         for (index = 0; index < extent.reference_count; index++) {
-            if (extent.reference[index].ref != reference_address)
+            uint32_t ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (index * sizeof(uint32_t));
+            fs_mem_read(ref_offset, &current_ref, sizeof(uint32_t));
+            
+            if (current_ref != reference_address)
                 continue;
             
             for (shift_index = index; shift_index + 1UL < extent.reference_count; shift_index++) {
-                extent.reference[shift_index] = extent.reference[shift_index + 1UL];
+                uint32_t next_ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + ((shift_index + 1UL) * sizeof(uint32_t));
+                uint32_t curr_ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (shift_index * sizeof(uint32_t));
+                fs_mem_read(next_ref_offset, &next_ref, sizeof(uint32_t));
+                fs_mem_write(curr_ref_offset, &next_ref, sizeof(uint32_t));
             }
             
             if (extent.reference_count > 0) {
                 extent.reference_count--;
-                extent.reference[extent.reference_count].ref = FS_NULL;
+                uint32_t last_ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (extent.reference_count * sizeof(uint32_t));
+                uint32_t null_ref = FS_NULL;
+                fs_mem_write(last_ref_offset, &null_ref, sizeof(uint32_t));
             }
             
             if (extent.reference_count == 0) {
@@ -299,7 +354,7 @@ uint8_t fs_directory_remove_reference(uint32_t directory_address, uint32_t refer
             return 0;
         }
         
-        extent_address = extent.next;
+        extent_address = extent.extent.next;
     }
     
     return 4;
@@ -315,24 +370,26 @@ uint32_t fs_directory_get_reference(uint32_t directory_address, uint32_t index) 
         return address;
     
     if (index < directory.reference_count) {
-        address = directory.reference[index].ref;
+        uint32_t ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (index * sizeof(uint32_t));
+        fs_mem_read(ref_offset, &address, sizeof(uint32_t));
         return address;
     }
     
     index -= directory.reference_count;
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     
     while (extent_address != FS_NULL) {
         if (!fs_directory_extent_read(extent_address, &extent))
             return address;
         
         if (index < extent.reference_count) {
-            address = extent.reference[index].ref;
+            uint32_t ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (index * sizeof(uint32_t));
+            fs_mem_read(ref_offset, &address, sizeof(uint32_t));
             return address;
         }
         
         index -= extent.reference_count;
-        extent_address = extent.next;
+        extent_address = extent.extent.next;
     }
     
     return address;
@@ -348,13 +405,13 @@ uint32_t fs_directory_get_reference_count(uint32_t directory_address) {
     
     total_count = (uint32_t)directory.reference_count;
     
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     while (extent_address != FS_NULL) {
         if (!fs_directory_extent_read(extent_address, &extent)) 
-            break; // Possibly corrupt extent chain
+            break; 
         
         total_count += (uint32_t)extent.reference_count;
-        extent_address = extent.next;
+        extent_address = extent.extent.next;
     }
     return total_count;
 }
@@ -384,7 +441,8 @@ uint32_t fs_directory_find(uint32_t directory_address, const char* name) {
         return FS_NULL;
     
     for (index = 0; index < directory.reference_count; index++) {
-        reference_address = directory.reference[index].ref;
+        uint32_t ref_offset = directory_address + sizeof(struct FSDirectoryHeader) + (index * sizeof(uint32_t));
+        fs_mem_read(ref_offset, &reference_address, sizeof(uint32_t));
         
         if (reference_address == FS_NULL)
             continue;
@@ -395,14 +453,15 @@ uint32_t fs_directory_find(uint32_t directory_address, const char* name) {
             return reference_address;
     }
     
-    extent_address = directory.next;
+    extent_address = directory.extent.next;
     
     while (extent_address != FS_NULL) {
         if (!fs_directory_extent_read(extent_address, &extent))
             return FS_NULL;
         
         for (index = 0; index < extent.reference_count; index++) {
-            reference_address = extent.reference[index].ref;
+            uint32_t ref_offset = extent_address + sizeof(struct FSDirectoryExtent) + (index * sizeof(uint32_t));
+            fs_mem_read(ref_offset, &reference_address, sizeof(uint32_t));
             
             if (reference_address == FS_NULL)
                 continue;
@@ -413,7 +472,7 @@ uint32_t fs_directory_find(uint32_t directory_address, const char* name) {
                 return reference_address;
         }
         
-        extent_address = extent.next;
+        extent_address = extent.extent.next;
     }
     
     return FS_NULL;

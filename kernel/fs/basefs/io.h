@@ -3,6 +3,8 @@
 
 #define FS_DEVICE_TYPE_ATA         0x0000
 #define FS_DEVICE_TYPE_AHCI        0x0001
+#define FS_DEVICE_TYPE_EEPROM      0x0002
+#define FS_DEVICE_TYPE_RAW         0x0003
 
 #ifdef KERNEL_PLATFORM_AVR
   #include <kernel/arch/avr/io.h>
