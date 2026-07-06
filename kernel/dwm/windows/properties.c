@@ -51,14 +51,14 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     
     File file = vfs_open(file_path, VFS_OPEN_READ);
     if (file != 0) {
-        size = vfs_file_get_size(file);
+        size = vfs_get_size(file);
         
         vfs_close(file);
     }
     
     uint16_t type_index = 0;
     if (vfs_is_directory(file_path)) {
-        if (vfs_is_directory_mounted(file_path)) {
+        if (vfs_directory_check_mounted(file_path)) {
             type_index = 1;
             strncpy(target_type, "Storage", DWM_MAX_PATH_LEN);
         } else {
@@ -103,7 +103,7 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
         
     case 2: // Folder
         
-        size_t item_count = vfs_directory_count(file_path);
+        size_t item_count = vfs_directory_get_count(file_path);
         
         itos(item_count, target_size);
         size_t size_length = strnlen(target_size, DWM_MAX_PATH_LEN);
