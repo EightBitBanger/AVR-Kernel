@@ -47,37 +47,39 @@ struct NotepadWindowState* allocate_notepad_window_state(WindowHandle handle, co
     new_node->next = notepad_window_list_head;
     notepad_window_list_head = new_node;
     
-    uint8_t permissions=0;
+    uint8_t permissions = 0;
     vfs_get_permissions(path, &permissions);
     
     if (!(permissions & VFS_PERMISSION_READ)) {
-        
         dwm_summon_message_error("Read error", "Access denied", "", "image_error");
-    } else {
-        // Load the file
-        File file = vfs_open(path, VFS_OPEN_READ);
-        if (file == INVALID_FILE_ID) 
-            return new_node;
-        
-        uint32_t size = vfs_file_get_size(file);
-        if (size > (MAX_TEXT_LEN - 1)) 
-            size = MAX_TEXT_LEN - 1;
-        
-        vfs_file_read(file, new_node->text_buffer, size);
-        vfs_close(file);
-        
-        // Cap length at the first null-terminator if it exists early
-        uint32_t actual_length = 0;
-        while (actual_length < size && new_node->text_buffer[actual_length] != '\0') {
-            actual_length++;
-        }
-        new_node->text_length = actual_length;
-        new_node->text_buffer[actual_length] = '\0';
+        // Allocate a small default buffer for empty files
+        new_node->text_capacity = 2048;
+        new_node->text_buffer = (char*)malloc(new_node->text_capacity);
+        if (new_node->text_buffer) new_node->text_buffer[0] = '\0';
         return new_node;
     }
     
-    new_node->text_length = 0;
-    new_node->text_buffer[0] = '\0';
+    File file = vfs_open(path, VFS_OPEN_READ);
+    if (file == VFS_INVALID_FILE) {
+        new_node->text_capacity = 2048;
+        new_node->text_buffer = (char*)malloc(new_node->text_capacity);
+        if (new_node->text_buffer) new_node->text_buffer[0] = '\0';
+        return new_node;
+    }
+    
+    uint32_t size = vfs_get_size(file);
+    
+    new_node->text_capacity = size + 2048; 
+    new_node->text_buffer = (char*)malloc(new_node->text_capacity);
+    if (!new_node->text_buffer) {
+        vfs_close(file);
+        return new_node;
+    }
+    
+    vfs_read(file, new_node->text_buffer, size);
+    vfs_close(file);
+    
+    new_node->text_length = size;
     
     return new_node;
 }
@@ -92,6 +94,10 @@ void free_notepad_window_state(WindowHandle handle) {
                 notepad_window_list_head = current->next;
             } else {
                 previous->next = current->next;
+            }
+            // Free the dynamic text buffer first to avoid leaks
+            if (current->text_buffer) {
+                free(current->text_buffer);
             }
             free(current);
             return;

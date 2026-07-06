@@ -11,6 +11,7 @@
 // Matching definitions from the kernel driver mappings
 #define KBD_CUSTOM_BACKSPACE    0x01
 #define KBD_CUSTOM_ENTER        0x02
+#define KBD_SCANCODE_DELETE     0x53
 
 // Native PS/2 Scan Code Set 1 Arrow Keys
 #define KBD_SCANCODE_UP         0x48
@@ -102,18 +103,20 @@ static uint32_t get_index_from_layout_pos(struct NotepadWindowState* state, uint
 }
 
 static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowState* state, uint32_t wparam) {
-    // Extract both ASCII character representation and raw fallback scan codes
     char ascii_char = (char)(wparam & 0xFF);
     uint16_t scancode = (uint8_t)((wparam >> 8) & 0xFF);
     
-    // Fallback If wparam contains a packed scancode in the upper byte,
-    // or if ascii_char is 0, extract the raw scancode directly from wparam.
     if (scancode == 0 && ascii_char == 0) {
         scancode = (uint8_t)(wparam & 0xFF); 
     }
     
-    // Handle Arrow Key Navigation
-    if (ascii_char == 0 || scancode == KBD_SCANCODE_LEFT || scancode == KBD_SCANCODE_RIGHT || 
+    // Filter out key releases
+    if ((scancode & 0x80) || (wparam & 0x80000000)) {
+        return; 
+    }
+    
+    // 1. PROCESS ARROW NAVIGATION KEYS FIRST
+    if (scancode == KBD_SCANCODE_LEFT || scancode == KBD_SCANCODE_RIGHT || 
         scancode == KBD_SCANCODE_UP || scancode == KBD_SCANCODE_DOWN) {
         
         uint16_t window_width = dwm_window_get_width(handle);
@@ -146,14 +149,25 @@ static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowSta
                 return;
                 
             case KBD_SCANCODE_DOWN:
-                // Move down if there's a subsequent line to navigate to
                 state->cursor_index = get_index_from_layout_pos(state, max_chars, cur_row + 1, cur_col);
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 return;
         }
     }
     
-    // Process Backspace at cursor position
+    // 2. PROCESS DELETE KEY
+    if (scancode == KBD_SCANCODE_DELETE) {
+        if (state->cursor_index < state->text_length && state->text_length > 0) {
+            for (uint32_t i = state->cursor_index; i < state->text_length - 1; i++) {
+                state->text_buffer[i] = state->text_buffer[i + 1];
+            }
+            state->text_length--;
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        }
+        return;
+    }
+    
+    // 3. PROCESS BACKSPACE KEY
     if (ascii_char == KBD_CUSTOM_BACKSPACE) {
         if (state->cursor_index > 0 && state->text_length > 0) {
             for (uint32_t i = state->cursor_index - 1; i < state->text_length; i++) {
@@ -166,24 +180,61 @@ static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowSta
         return;
     }
     
-    // Process standard inputs if buffer space permits
-    if (state->text_length < (MAX_TEXT_LEN - 1)) {
+    // If it was a non-navigation special key with ascii_char == 0, drop it here
+    if (ascii_char == 0) {
+        return;
+    }
+    
+    // Process Backspace (Removes character BEFORE the cursor)
+    if (ascii_char == KBD_CUSTOM_BACKSPACE) {
+        if (state->cursor_index > 0 && state->text_length > 0) {
+            for (uint32_t i = state->cursor_index - 1; i < state->text_length; i++) {
+                state->text_buffer[i] = state->text_buffer[i + 1];
+            }
+            state->text_length--;
+            state->cursor_index--;
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        }
+        return;
+    }
+    
+    // Delete
+    if (scancode == KBD_SCANCODE_DELETE) {
+        if (state->cursor_index < state->text_length && state->text_length > 0) {
+            for (uint32_t i = state->cursor_index; i < state->text_length - 1; i++) {
+                state->text_buffer[i] = state->text_buffer[i + 1];
+            }
+            state->text_length--;
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        }
+        return;
+    }
+    
+    // Dynamic array expanding bounds check
+    if (state->text_length >= (state->text_capacity - 1)) {
+        uint32_t new_capacity = state->text_capacity * 2;
+        char* new_buf = (char*)realloc(state->text_buffer, new_capacity);
+        if (new_buf) {
+            state->text_buffer = new_buf;
+            state->text_capacity = new_capacity;
+        }
+    }
+    
+    // Process binary input streams
+    if (state->text_length < (state->text_capacity - 1)) {
         if (ascii_char == KBD_CUSTOM_ENTER) {
             ascii_char = '\n';
         }
         
-        if ((ascii_char >= ' ' && ascii_char <= '~') || ascii_char == '\n' || ascii_char == '\t') {
-            for (uint32_t i = state->text_length; i > state->cursor_index; i--) {
-                state->text_buffer[i] = state->text_buffer[i - 1];
-            }
-            
-            state->text_buffer[state->cursor_index] = ascii_char;
-            state->text_length++;
-            state->cursor_index++;
-            state->text_buffer[state->text_length] = '\0';
-            
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        for (uint32_t i = state->text_length; i > state->cursor_index; i--) {
+            state->text_buffer[i] = state->text_buffer[i - 1];
         }
+        
+        state->text_buffer[state->cursor_index] = ascii_char;
+        state->text_length++;
+        state->cursor_index++;
+        
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
     }
 }
 
@@ -246,12 +297,10 @@ static void handle_notepad_redraw(WindowHandle handle, struct NotepadWindowState
     
     dwm_draw_rect_filled(NOTEPAD_BG_X, NOTEPAD_BG_Y, window_width, window_height, notepad_bg);
     
-    // Draw Menu Bar Accent
     dwm_draw_rect_filled(0, 0, window_width, MENUBAR_HEIGHT, 0xFF1C1C2A);
     dwm_draw_line(0, MENUBAR_HEIGHT - 1, window_width, 0, 0xFF444466);
     dwm_draw_text(MENUBAR_TEXT_X, MENUBAR_TEXT_Y, "File", 0xFFFFFFFF);
     
-    // Layout boundaries Setup
     uint16_t max_chars_per_line = (window_width - (TEXT_PADDING_X * 2)) / TEXT_FONT_CHAR_WIDTH;
     if (max_chars_per_line == 0) max_chars_per_line = 1;
     
@@ -279,7 +328,14 @@ static void handle_notepad_redraw(WindowHandle handle, struct NotepadWindowState
         if (target == '\n') {
             force_flush = true;
         } else {
-            line_scratchpad[scratch_idx++] = target;
+            // Binary safety: Safe visualization of unprintable or null bytes
+            if (target == '\0') {
+                line_scratchpad[scratch_idx++] = ' '; // Render null as space or '.'
+            } else if (target < 32 || target > 126) {
+                line_scratchpad[scratch_idx++] = '.'; // Safe substitution for control characters
+            } else {
+                line_scratchpad[scratch_idx++] = target;
+            }
             current_col++;
             
             if (current_col >= max_chars_per_line || scratch_idx >= (sizeof(line_scratchpad) - 1)) {
@@ -357,29 +413,21 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
                 } else {
                     
                     File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                    if (file != INVALID_FILE_ID) {
-                        uint32_t size = vfs_file_get_size(file);
+                    if (file != VFS_INVALID_FILE) {
+                        uint32_t size = vfs_get_size(file);
                         
                         // Check file resize
                         if (state->text_length > size) {
                             size = state->text_length;
-                            vfs_close(file);
                             
                             // Resize file
-                            vfs_truncate(state->file_path, state->text_length);
-                            
-                            file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                            if (file == INVALID_FILE_ID) {
-                                if (!vfs_mkfile(state->file_path, size)) {
-                                    dwm_summon_message_box("File Menu", "Unable to save file");
-                                } else {
-                                    // Open new file
-                                    file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                                }
+                            if (!vfs_truncate(state->file_path, state->text_length)) {
+                                
+                                dwm_summon_message_box("File Menu", "Unable to save file");
                             }
                         }
                         
-                        vfs_file_write(file, state->text_buffer, size);
+                        vfs_write(file, state->text_buffer, size);
                         vfs_close(file);
                     }
                 }

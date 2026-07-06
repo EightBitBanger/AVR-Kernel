@@ -440,7 +440,9 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
             case 2: { // New File
                 char new_file_path[128];
                 generate_unique_name(state, new_file_path, "/new_file");
-                vfs_mkfile(new_file_path, 0);
+                
+                File file = vfs_open(new_file_path, VFS_OPEN_CREATE);
+                vfs_close(file);
                 
                 if (state->fs_current != 0) {
                     populate_state_from_file_system(state, state->knode_current, state->fs_current);

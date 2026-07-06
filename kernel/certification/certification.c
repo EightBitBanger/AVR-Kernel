@@ -8,8 +8,7 @@ uint32_t crypt_checksum(const struct FSBlockHeader* block) {
     uint32_t hash = 2166136261U;
     const uint8_t* data = (const uint8_t*)block;
     
-    // Total size of FSBlockHeader is 32 bytes. 
-    // We hash the first 28 bytes (skipping the 4-byte certificate at the end).
+    // Skip the 4-byte certificate at the end
     size_t hash_length = sizeof(struct FSBlockHeader) - sizeof(block->certificate);
     
     for (size_t i = 0; i < hash_length; i++) {
@@ -55,7 +54,7 @@ void security_init(uint32_t seed) {
 /**
  * @brief Generates a certificate tied to this specific kernel instance session.
  */
-uint32_t security_gen_session_cert(const struct FSBlockHeader *block) {
+uint32_t security_gen_session_cert(const struct FSBlockHeader* block) {
     uint32_t hash = KERNEL_BOOT_SECRET;
     const uint8_t *data = (const uint8_t *)block;
     size_t hash_length = sizeof(struct FSBlockHeader) - sizeof(block->certificate);
@@ -71,6 +70,6 @@ uint32_t security_gen_session_cert(const struct FSBlockHeader *block) {
 /**
  * @brief Verifies the block was signed during this kernel session.
  */
-bool security_verify_session_cert(const struct FSBlockHeader *block) {
+bool security_verify_session_cert(const struct FSBlockHeader* block) {
     return (block->certificate == security_gen_session_cert(block));
 }

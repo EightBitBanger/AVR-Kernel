@@ -20,7 +20,8 @@ struct NotepadWindowState {
     uint16_t win_height;
     
     char window_title[MAX_TITLE_LEN];
-    char text_buffer[MAX_TEXT_LEN];
+    char* text_buffer;
+    uint32_t text_capacity;
     uint32_t text_length;
     
     uint32_t cursor_index;
