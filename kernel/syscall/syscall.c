@@ -61,10 +61,11 @@ int syscall(uint16_t id, char** args) {
         int agr_count=0;
         if (args != NULL) {
             for (uint32_t a=0; a < 16; a++) {
-                if (args[a][0] == '\0') 
+                if (args[a] == NULL || args[a][0] == '\0') 
                     break;
                 agr_count++;
             }
+            
         }
         
         return command_table[i].function(agr_count, args);

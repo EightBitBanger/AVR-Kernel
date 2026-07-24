@@ -27,6 +27,12 @@ int rand(void) {
 }
 
 void rand_init(void) {
+    rand_seed(42);
+    
+    /*
+    
+    // TODO put this in cryptography
+    
     const char* rand_file_path = "/mnt/ata0/sys/urand";
     vfs_set_permissions(rand_file_path, VFS_PERMISSION_READ | VFS_PERMISSION_WRITE);
     
@@ -60,4 +66,5 @@ void rand_init(void) {
     vfs_close(file);
     
     vfs_set_permissions(rand_file_path, VFS_PERMISSION_READ);
+    */
 }
