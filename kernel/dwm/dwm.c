@@ -474,7 +474,6 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH;
     
-    window_object->events = 0;
     window_object->event_callback = proc;
     
     if (workspace.window_tail != NULL) {

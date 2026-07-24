@@ -401,7 +401,7 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
                 dwm_summon_message_box("File Menu", "Opening file dialog...");
                 break;
                 
-            case 2: // Save
+            case 2: {// Save
                 
                 uint8_t permissions=0;
                 vfs_get_permissions(state->file_path, &permissions);
@@ -432,7 +432,7 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
                     }
                 }
                 break;
-                
+            }
             case 3: // Clear
                 state->text_length = 0;
                 state->cursor_index = 0;

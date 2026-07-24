@@ -3,11 +3,28 @@
 #include <kernel/console/display.h>
 #include <kernel/util/list.h>
 #include <kernel/util/string.h>
+#include <kernel/util/timer.h>
+
+// Window buffer resize multiple
+#define DWM_BUFFER_CHUNK_SIZE 256
 
 void dwm_update_icon_dragging(struct WindowContext* ctx) {
     if (dragdrop.dragged_icon == NULL) return;
-    
+    if (dragdrop.dragged_icon == NULL) return;
+
     if (ctx->left_button_pressed) {
+        // Calculate distance from initial click
+        int dx = ctx->mouse.x - dragdrop.drag_start_x;
+        int dy = ctx->mouse.y - dragdrop.drag_start_y;
+
+        // Require at least 4 pixels of movement before starting the drag (4^2 = 16)
+        if (!dragdrop.is_dragging) {
+            if ((dx * dx + dy * dy) < 16) {
+                return; // Suppress micro-jitter during clicks
+            }
+            dragdrop.is_dragging = true;
+        }
+        
         int new_x = ctx->mouse.x - dragdrop.icon_drag_offset_x;
         int new_y = ctx->mouse.y - dragdrop.icon_drag_offset_y;
         int display_w = display_get_width();
@@ -127,50 +144,35 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
         // Check if dimension shifts have actually happened
         if (dragdrop.dragged_resizing->w != target_w || dragdrop.dragged_resizing->h != target_h) {
             
-            // Invalidate old window space configuration to clear out previous borders
+            // Invalidate old window space configuration
             dwm_invalidate_region(dragdrop.dragged_resizing->x - border_ext, 
-                                  dragdrop.dragged_resizing->y - border_ext, 
-                                  dragdrop.dragged_resizing->w + (border_ext * 2), 
-                                  dragdrop.dragged_resizing->h + (border_ext * 2));
+                                dragdrop.dragged_resizing->y - border_ext, 
+                                dragdrop.dragged_resizing->w + (border_ext * 2), 
+                                dragdrop.dragged_resizing->h + (border_ext * 2));
             
-            // Commit the new target geometry properties
-            dragdrop.dragged_resizing->w = target_w;
-            dragdrop.dragged_resizing->h = target_h;
+            // Resize the actual frame buffer
+            dwm_resize_window_buffer(dragdrop.dragged_resizing, target_w, target_h);
             
             // Synchronize any nested hierarchical layouts attached to it
             dwm_sync_child_positions(dragdrop.dragged_resizing);
             
-            // Flag the resize event so the window's callback receives it
-            dwm_window_send_event(dragdrop.dragged_resizing->id, DWM_EVENT_RESIZE);
+            // Event throttle timer
+            static uint64_t last_resize_ms = 0;
+            uint64_t current_ms = timer_get_ms();
             
-            // Request a complete paint pass and invalidate the updated boundaries
-            dragdrop.dragged_resizing->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
-            dwm_invalidate_region(dragdrop.dragged_resizing->x - border_ext, 
-                                  dragdrop.dragged_resizing->y - border_ext, 
-                                  dragdrop.dragged_resizing->w + (border_ext * 2), 
-                                  dragdrop.dragged_resizing->h + (border_ext * 2));
+            if (current_ms - last_resize_ms >= 100) {
+                dwm_window_send_event(dragdrop.dragged_resizing->id, DWM_EVENT_RESIZE);
+                last_resize_ms = current_ms;
+            }
             
+            // Update surface boundaries for the compositor clipping
             int border_offset = 0;
-            
             dragdrop.dragged_resizing->surface_w = dragdrop.dragged_resizing->w;
             dragdrop.dragged_resizing->surface_h = dragdrop.dragged_resizing->h - (dragdrop.dragged_resizing->titlebar_height + border_offset);
-            dragdrop.dragged_resizing->buffer_w  = target_w; 
-            dragdrop.dragged_resizing->buffer_h  = target_h - dragdrop.dragged_resizing->titlebar_height - border_offset;
-            
             dragdrop.dragged_resizing->surface_x = dragdrop.dragged_resizing->x;
             dragdrop.dragged_resizing->surface_y = dragdrop.dragged_resizing->y + dragdrop.dragged_resizing->titlebar_height + 1;
             
-            // Reallocate internal window back-buffer surface dimensions
-            uint32_t frame_buffer_sz = dragdrop.dragged_resizing->buffer_w * dragdrop.dragged_resizing->buffer_h * sizeof(uint32_t);
-            if (dragdrop.dragged_resizing->frame_buffer != NULL) {
-                free(dragdrop.dragged_resizing->frame_buffer);
-            }
-            dragdrop.dragged_resizing->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
-            if (dragdrop.dragged_resizing->frame_buffer != NULL) {
-                memset(dragdrop.dragged_resizing->frame_buffer, 0x11, frame_buffer_sz);
-            }
-            
-            // Update the positioning coordinates of the resize handle button itself
+            // Update the positioning coordinates of the resize handle and system buttons
             for (struct list_node* node = dragdrop.dragged_resizing->buttons_head; node != NULL; node = node->next) {
                 struct WindowButton* btn = (struct WindowButton*)node->data;
                 if (btn->event == DWM_EVENT_RESIZE) {
@@ -178,18 +180,16 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
                     btn->y = dragdrop.dragged_resizing->h - btn->height;
                 }
                 
-                // Update system button (Close/Minimize) positions if window width changes
                 if (btn->event == DWM_EVENT_CLOSE) {
                     btn->x = dragdrop.dragged_resizing->w - btn->width;
                 }
                 if (btn->event == DWM_EVENT_MINIMIZE) {
                     struct Image* button_close = dwm_resource_find("ui_close");
-                    btn->x = dragdrop.dragged_resizing->w - button_close->width - btn->width;
+                    if (button_close != NULL) {
+                        btn->x = dragdrop.dragged_resizing->w - button_close->width - btn->width;
+                    }
                 }
             }
-            
-            // Synchronize any nested hierarchical layouts attached to it
-            dwm_sync_child_positions(dragdrop.dragged_resizing);
             
             // Request a complete paint pass and invalidate the updated boundaries
             dragdrop.dragged_resizing->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDRAW | DWM_WFLAG_REDECORATE);
@@ -202,6 +202,67 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
         // Drag click released - conclude the sizing operations safely
         dragdrop.dragged_resizing = NULL;
     }
+}
+
+void dwm_resize_window_buffer(struct WindowObject* window, int new_w, int new_h) {
+    if (window == NULL) return;
+    
+    // Check if we need to expand the actual memory buffer
+    if (new_w > window->buffer_w || new_h > window->buffer_h) {
+        
+        // Calculate new capacity by snapping to our chunk size
+        int new_capacity_w = window->buffer_w;
+        int new_capacity_h = window->buffer_h;
+        
+        while (new_capacity_w < new_w) new_capacity_w += DWM_BUFFER_CHUNK_SIZE;
+        while (new_capacity_h < new_h) new_capacity_h += DWM_BUFFER_CHUNK_SIZE;
+        
+        uint32_t* new_buffer = (uint32_t*)malloc(new_capacity_w * new_capacity_h * sizeof(uint32_t));
+        
+        // Copy the old pixel data into the new buffer
+        if (window->frame_buffer != NULL) {
+            for (int y = 0; y < window->h; y++) {
+                // We MUST copy row-by-row because the buffer_w (stride) has changed!
+                memcpy(&new_buffer[y * new_capacity_w], 
+                    &window->frame_buffer[y * window->buffer_w], 
+                    window->w * sizeof(uint32_t));
+            }
+            free(window->frame_buffer);
+        }
+        
+        window->frame_buffer = new_buffer;
+        window->buffer_w = new_capacity_w;
+        window->buffer_h = new_capacity_h;
+    }
+    
+    // Fill the newly exposed "L-shape" with a background color
+    // (Wait for the client app to catch up and draw its actual UI)
+    uint32_t bg_color = 0xFFCCCCCC; // Use your theme's default window background color here
+    
+    // Fill the new bottom rectangle
+    if (new_h > window->h) {
+        for (int y = window->h; y < new_h; y++) {
+            for (int x = 0; x < new_w; x++) {
+                window->frame_buffer[y * window->buffer_w + x] = bg_color;
+            }
+        }
+    }
+    
+    // Fill the new right rectangle
+    if (new_w > window->w) {
+        for (int y = 0; y < window->h; y++) { // Only go up to the old height (bottom rect handles the rest)
+            for (int x = window->w; x < new_w; x++) {
+                window->frame_buffer[y * window->buffer_w + x] = bg_color;
+            }
+        }
+    }
+    
+    // Update logical dimensions
+    window->w = new_w;
+    window->h = new_h;
+    
+    // Flag the window so the compositor knows the boundaries changed and needs a redecoration
+    window->flags |= (DWM_WFLAG_REDECORATE | DWM_WFLAG_REFRESH);
 }
 
 void dwm_cascade_child_positions(struct WindowObject* parent) {

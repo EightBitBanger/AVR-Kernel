@@ -11,8 +11,6 @@ struct WindowObject {
     
     uint16_t flags;
     uint16_t style;
-    uint16_t events;
-    
     char title[DWM_MAX_TITLE_LEN];
     
     // Child windows
@@ -42,7 +40,6 @@ struct WindowObject {
     
     uint16_t local_x;
     uint16_t local_y;
-    
     uint16_t max_width;
     uint16_t max_height;
     
@@ -60,8 +57,6 @@ struct WindowObject {
     // Layout
     uint8_t border_width;
     uint8_t titlebar_height;
-    
-    // TODO implement color scheming to get rid of these values in this struct
     
     // Colors
     uint32_t border_color;

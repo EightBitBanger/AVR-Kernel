@@ -29,6 +29,8 @@
 #include <kernel/dwm/windows/message_error.h>
 #include <kernel/dwm/windows/dialog_delete.h>
 
+#include <kernel/dwm/dwm_dispatch.h>
+
 typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
 
 void dwm_initiate(void);
@@ -106,11 +108,7 @@ uint16_t dwm_get_titlebar_height(WindowHandle handle);
 
 void dwm_window_set_focus(WindowHandle handle);
 
-// Send an event message to the currently focused window
-void dwm_event_send_focused(wEvent event);
-
-// Send an event message to all windows
-void dwm_event_send(wEvent event);
+WindowHandle dwm_window_get_focus(void);
 
 // Send an even to a specific window
 void dwm_window_send_event(WindowHandle handle, wEvent event);

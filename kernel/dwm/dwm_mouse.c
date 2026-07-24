@@ -17,7 +17,6 @@ static struct WindowObject* last_clicked_window = NULL;
 static uint64_t last_window_click_time = 0;
 
 void dwm_update_mouse(struct WindowContext* ctx) {
-    // Check for hover states first (always runs regardless of clicks)
     dwm_handle_context_menu_hover(ctx);
     
     bool is_new_left_click = ctx->left_button_pressed && !input.last_left_button_pressed;
@@ -25,10 +24,8 @@ void dwm_update_mouse(struct WindowContext* ctx) {
     
     if (!is_new_left_click && !is_new_right_click) return;
     
-    // Check context menu FIRST before windows grab focus
     if (dwm_handle_context_menu_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
-    
     if (dwm_handle_window_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
     
@@ -36,25 +33,15 @@ void dwm_update_mouse(struct WindowContext* ctx) {
 }
 
 bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
-    // Kick off the recursive search starting from the top-most desktop window
     struct WindowObject* clicked_win = dwm_find_clicked_window(workspace.window_tail, ctx->mouse.x, ctx->mouse.y);
-    
     if (clicked_win == NULL) return false;
-    
-    // Assign the mouse event to the specific window that was clicked
-    clicked_win->events |= DWM_EVENT_MOUSE;
     
     // Window double click detection
     if (is_new_left_click) {
         uint64_t current_time = timer_get_ms();
-        
         if (clicked_win == last_clicked_window && 
             (current_time - last_window_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
-            
-            // Mark a flag on the window context or environment that a double click occurred
-            context.window_context.is_double_click = true; 
-            
-            // Reset tracking so a third click isn't automatically a double click
+            context.window_context.is_double_click = true;
             last_clicked_window = NULL;
             last_window_click_time = 0;
         } else {
@@ -66,21 +53,29 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         context.window_context.is_double_click = false;
     }
     
-    // Shift focus/z-order tracking to its top-level root parent
+    // Post mouse event message to target window
+    int mx = ctx->mouse.x - clicked_win->surface_x;
+    int my = ctx->mouse.y - clicked_win->surface_y;
+    uint32_t mouse_data = ((uint32_t)(uint16_t)my << 16) | ((uint32_t)(uint16_t)mx & 0xFFFF);
+    int32_t mouse_state = 0;
+    if (ctx->left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
+    if (ctx->right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
+    if (context.window_context.is_double_click) mouse_state |= DWM_STATE_MOUSE_DOUBLE_CLK;
+    
+    dwm_post_message(clicked_win->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);
+    
+    // Shift focus/z-order tracking to top-level root parent
     struct WindowObject* root_win = clicked_win;
     while (root_win->parent != NULL) {
         root_win = root_win->parent;
     }
     
     struct WindowObject* old_focused = (workspace.window_tail != NULL) ? (struct WindowObject*)workspace.window_tail->data : NULL;
-    
     if (old_focused != root_win) {
         dwm_set_focus(root_win);
-        root_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE); 
-        
+        root_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         if (old_focused) {
             old_focused->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
-            
             int old_abs_x, old_abs_y;
             dwm_get_absolute_position(old_focused, &old_abs_x, &old_abs_y);
             dwm_invalidate_region(old_abs_x - old_focused->border_width, 
@@ -103,40 +98,30 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     // Check window buttons
     for (struct list_node* node = clicked_win->buttons_head; node != NULL; node = node->next) {
         struct WindowButton* btn = (struct WindowButton*)node->data;
-        
-        // Compute button bounds
         int btn_min_x = clicked_win->x + btn->x;
         int btn_max_x = btn_min_x + btn->width;
         int btn_min_y = clicked_win->y + btn->y;
         int btn_max_y = btn_min_y + btn->height;
-        
         if (ctx->mouse.x >= btn_min_x && ctx->mouse.x <= btn_max_x &&
             ctx->mouse.y >= btn_min_y && ctx->mouse.y <= btn_max_y) {
             
             if (btn->event == DWM_EVENT_RESIZE) {
                 dragdrop.dragged_resizing = clicked_win;
-                // Calculate offset between the cursor and the button
                 dragdrop.resize_offset_x = (clicked_win->x + clicked_win->w) - ctx->mouse.x;
                 dragdrop.resize_offset_y = (clicked_win->y + clicked_win->h) - ctx->mouse.y;
                 return true;
-            } else {
-                clicked_win->events |= btn->event;
-            }
-            
-            if (is_new_left_click) {
-                clicked_win->events |= btn->event;
+            } else if (is_new_left_click) {
+                dwm_post_message(clicked_win->id, btn->event, 0, 0);
             }
             return true;
         }
     }
     
-    // Calculate full titlebar boundaries
+    // Titlebar drag tracking
     int title_min_x = clicked_abs_x;
     int title_max_x = clicked_abs_x + clicked_win->w;
     int title_min_y = clicked_abs_y;
     int title_max_y = clicked_abs_y + clicked_win->titlebar_height - 1;
-    
-    // Window dragging initiate
     if ((!(clicked_win->style & DWM_WSTYLE_NOBORDERS)) && 
         ctx->mouse.x >= title_min_x && ctx->mouse.x <= title_max_x && 
         ctx->mouse.y >= title_min_y && ctx->mouse.y <= title_max_y) {
@@ -148,7 +133,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
             dragdrop.dragged_window = clicked_win;
     }
     
-    return true; 
+    return true;
 }
 
 void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
@@ -174,23 +159,32 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
         context.focused_icon = clicked_icon;
         
         if (is_new_left_click) {
-            
-            // Double click timer
             uint32_t current_time = timer_get_ms();
             
-            if (clicked_icon == context.last_focused_icon && (current_time - context.last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
+            // Calculate spatial distance between clicks
+            int dx = ctx->mouse.x - dragdrop.drag_start_x;
+            int dy = ctx->mouse.y - dragdrop.drag_start_y;
+            bool is_close_enough = (dx * dx + dy * dy) <= 25; // Within 5 pixels
+            
+            if (clicked_icon == context.last_focused_icon && 
+                is_close_enough && 
+                (current_time - context.last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
                 
+                // Register double click!
                 kernel_event_send(KEVENT_EXECUTE, "explorer", context.focused_icon->path);
-                
                 context.focused_icon = NULL;
                 context.last_focused_icon = NULL;
                 context.last_icon_click_time = 0;
-                
+                dragdrop.dragged_icon = NULL;
             } else {
+                // Initialize potential drag state
                 dragdrop.dragged_icon = clicked_icon;
-                
+                dragdrop.drag_start_x = ctx->mouse.x;
+                dragdrop.drag_start_y = ctx->mouse.y;
+                dragdrop.is_dragging = false;
                 dragdrop.icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
                 dragdrop.icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
+                
                 context.last_focused_icon = clicked_icon;
                 context.last_icon_click_time = current_time;
             }

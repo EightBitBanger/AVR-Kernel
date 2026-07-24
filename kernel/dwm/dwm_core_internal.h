@@ -64,6 +64,11 @@ struct DWMDragDrop {
     int icon_drag_offset_x;
     int icon_drag_offset_y;
     
+    // Add click origin coordinates for hysteresis
+    int drag_start_x;
+    int drag_start_y;
+    bool is_dragging;
+    
     struct WindowObject* dragged_resizing;
     int resize_offset_x;
     int resize_offset_y;
@@ -172,6 +177,7 @@ struct WindowObject* dwm_get_window_by_id(uint32_t id);
 
 struct WindowObject* dwm_get_root_parent(struct WindowObject* window);
 
+void dwm_resize_window_buffer(struct WindowObject* window, int new_w, int new_h);
 void dwm_upload_window_buffer_to_backbuffer(struct WindowObject* window, uint32_t* frame_buffer, uint32_t screen_stride, 
                                             int clip_x, int clip_y, int clip_w, int clip_h);
 

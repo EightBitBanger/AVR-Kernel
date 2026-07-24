@@ -2,108 +2,20 @@
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/util/list.h>
 
-void dwm_event_send_focused(wEvent event) {
-    struct WindowObject* window = (struct WindowObject*)workspace.window_tail->data;
-    if (window == NULL) return;
-    
-    window->events |= event;
-}
-
-void dwm_event_send(wEvent event) {
-    // Iterate through all windows starting from the head of the list
-    for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
-        struct WindowObject* window = (struct WindowObject*)node->data;
-        if (window != NULL) {
-            window->events |= event;
-        }
-    }
-}
-
-void dwm_process_window_events(struct WindowObject* window) {
-    if (window == NULL) return;
-    
-    // Keep global mouse coordinates for the hit-test bounds check
-    int mouse_world_x = context.window_context.mouse.x;
-    int mouse_world_y = context.window_context.mouse.y;
-    
-    int win_x = window->x;
-    int win_y = window->y;
-    int win_w = window->w;
-    int win_h = window->h;
-    
-    // If it's a child window, clamp its active event zone to the parent's surface
-    if (window->parent != NULL) {
-        int px = window->parent->surface_x;
-        int py = window->parent->surface_y;
-        int pw = window->parent->surface_w;
-        int ph = window->parent->surface_h;
-        
-        // Intersect window bounds with parent surface bounds
-        int ix1 = (win_x > px) ? win_x : px;
-        int iy1 = (win_y > py) ? win_y : py;
-        int ix2 = (win_x + win_w < px + pw) ? win_x + win_w : px + pw;
-        int iy2 = (win_y + win_h < py + ph) ? win_y + win_h : py + ph;
-        
-        // Update our hit-test bounds to the clipped intersection rectangle
-        win_x = ix1;
-        win_y = iy1;
-        win_w = ix2 - ix1;
-        win_h = iy2 - iy1;
-    }
-    
-    // Hit-test passed, convert to surface-local coordinates for user packing
-    int mx = mouse_world_x - window->surface_x;
-    int my = mouse_world_y - window->surface_y;
-    
-    // Pack data down for the callback function
-    uint32_t window_sz_data = ((uint32_t)(uint16_t)window->h << 16) | ((uint32_t)(uint16_t)window->w & 0xFFFF);
-    
-    uint32_t mouse_data = ((uint32_t)(uint16_t)my << 16) | ((uint32_t)(uint16_t)mx & 0xFFFF);
-    int32_t mouse_state = 0;
-    if (context.window_context.left_button_pressed)  mouse_state |= DWM_STATE_MOUSE_BTN_LEFT;
-    if (context.window_context.right_button_pressed) mouse_state |= DWM_STATE_MOUSE_BTN_RIGHT;
-    
-    // On double click event
-    if (context.window_context.is_double_click) {
-        mouse_state |= DWM_STATE_MOUSE_DOUBLE_CLK;
-    }
-    
-    if (window->event_callback != NULL && window->events != 0) {
-        
-        if (window->events & DWM_EVENT_KEYBOARD)  {window->events &= ~DWM_EVENT_KEYBOARD;  window->event_callback(window->id, DWM_EVENT_KEYBOARD, input.last_key_pressed, 0);}
-        if (window->events & DWM_EVENT_MOUSE)     {window->events &= ~DWM_EVENT_MOUSE;     window->event_callback(window->id, DWM_EVENT_MOUSE, mouse_data, mouse_state);}
-        
-        if (window->events & DWM_EVENT_REFRESH)   {window->events &= ~DWM_EVENT_REFRESH;   window->event_callback(window->id, DWM_EVENT_REFRESH, 0, 0);}
-        
-        if (window->events & DWM_EVENT_RESIZE)    {window->events &= ~DWM_EVENT_RESIZE;    window->event_callback(window->id, DWM_EVENT_RESIZE, window_sz_data, 0);}
-        if (window->events & DWM_EVENT_DESTROY)   {window->events &= ~DWM_EVENT_DESTROY;   window->event_callback(window->id, DWM_EVENT_DESTROY, 0, 0);}
-        
-        if (window->events & DWM_EVENT_REDRAW)    {window->events &= ~DWM_EVENT_REDRAW;
-            dwm_invalidate_region(window->x, window->y, window->w, window->h);
-            window->flags |= (DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
-        }
-        
-    }
-}
-
 void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index) {
-    
     switch (ctxmenu.menu_directive) {
-        
-    case DWM_CONTEXT_MENU_USER: // Inform the user of the selected context menu item
-        
-        ctxmenu.handle->event_callback(ctxmenu.handle->id, DWM_EVENT_CONTEXT_MENU, index, 0);
+    case DWM_CONTEXT_MENU_USER:
+        if (ctxmenu.handle != NULL) {
+            dwm_post_message(ctxmenu.handle->id, DWM_EVENT_CONTEXT_MENU, index, 0);
+        }
         break;
         
-    case DWM_CONTEXT_MENU_DESKTOP: // Desktop context menu callback
-        
+    case DWM_CONTEXT_MENU_DESKTOP:
         dwm_desktop_context_callback(ctx, index);
         break;
         
-    case DWM_CONTEXT_MENU_ICON: // Icon context menu callback
-        
+    case DWM_CONTEXT_MENU_ICON:
         dwm_icon_context_callback(ctx, index);
         break;
     }
-    
 }

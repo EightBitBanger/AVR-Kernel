@@ -376,7 +376,6 @@ bool registry_hive_initiate(const char* path) {
         if (!hkey_root.root)  hkey_root.root  = registry_create_key(NULL, "hkey_root",  perms);
         
         struct RegistryKey* softwareKey = registry_create_key(hkey_root.root, "software", perms);
-        
         registry_hive_export(&hkey_root, hkr_fpath);
     }
     
@@ -391,6 +390,4 @@ bool registry_hive_initiate(const char* path) {
         
         registry_hive_export(&hkey_user, hku_fpath);
     }
-    
-    
 }

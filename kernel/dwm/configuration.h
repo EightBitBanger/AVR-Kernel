@@ -4,7 +4,7 @@
 // Double click rate
 
 #define ICON_DOUBLE_CLICK_THRESHOLD_MS        500
-#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS      300
+#define WINDOW_DOUBLE_CLICK_THRESHOLD_MS      500
 
 // Name lengths
 

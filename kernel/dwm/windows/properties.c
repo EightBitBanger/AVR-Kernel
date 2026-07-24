@@ -86,7 +86,7 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
         
         break;
         
-    case 1: // Storage
+    case 1:{ // Storage
         char* target_used = (char*)malloc(DWM_MAX_PATH_LEN);
         char* target_free = (char*)malloc(DWM_MAX_PATH_LEN);
         
@@ -100,15 +100,16 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
         dwm_window_resource_add(msg_handle->id, "used", target_used);
         dwm_window_resource_add(msg_handle->id, "free", target_free);
         break;
+    }
+    case 2:{ // Folder
         
-    case 2: // Folder
-        
-        size_t item_count = vfs_directory_get_count(file_path);
+        size_t item_count = vfs_directory_get_item_count(file_path);
         
         itos(item_count, target_size);
         size_t size_length = strnlen(target_size, DWM_MAX_PATH_LEN);
         
         break;
+    }
     }
     
     // File name

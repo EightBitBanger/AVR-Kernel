@@ -412,6 +412,14 @@ void dwm_window_set_focus(WindowHandle handle) {
     }
 }
 
+WindowHandle dwm_window_get_focus(void) {
+    if (workspace.window_tail == NULL || workspace.window_tail->data == NULL) 
+        return 0;
+    
+    struct WindowObject* focused_window = (struct WindowObject*)workspace.window_tail->data;
+    return focused_window->id;
+}
+
 void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sprite) {
     struct Image* img = malloc(sizeof(struct Image));
     if (!img) return;
@@ -432,8 +440,13 @@ void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sp
 void dwm_window_send_event(WindowHandle handle, wEvent event) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) return;
-    
-    window->events |= event;
+
+    uint32_t wparam = 0;
+    if (event == DWM_EVENT_RESIZE) {
+        wparam = ((uint32_t)(uint16_t)window->h << 16) | ((uint32_t)(uint16_t)window->w & 0xFFFF);
+    }
+
+    dwm_post_message(handle, event, wparam, 0);
 }
 
 uint32_t dwm_window_get_count(void) {
