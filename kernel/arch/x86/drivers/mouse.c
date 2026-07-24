@@ -4,8 +4,9 @@
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/console/display.h>
 #include <kernel/console/mouse.h>
+#include <kernel/util/timer.h>
 
-static int8_t mouse_packet[3]; 
+static uint8_t mouse_packet[3];
 
 bool mouse_left_clicked   = false;
 bool mouse_right_clicked  = false;
@@ -26,6 +27,10 @@ uint8_t mouse_cycle = 0;
 
 int32_t mouse_x = 0;
 int32_t mouse_y = 0;
+
+static MouseEvent mouse_queue[MOUSE_QUEUE_SIZE];
+static volatile uint32_t mouse_queue_head = 0; // Written by the IRQ
+static volatile uint32_t mouse_queue_tail = 0; // Read by the DWM
 
 Point mouse_get_position(void) {
     return (Point){mouse_x, mouse_y};
@@ -87,8 +92,8 @@ void mouse_initiate(void) {
     mouse_wait(0);
     status = inb(0x60);
     
-    status &= ~(1 << 0); // Clear Bit 0 (Disable Keyboard Interrupt / IRQ 1)
-    status &= ~(1 << 1); // Clear Bit 1 (Disable Mouse Interrupt / IRQ 12)
+    status |=  (1 << 0); // Bit 0 (Keyboard Interrupt / IRQ 1)
+    status |=  (1 << 1); // Bit 1 (Mouse Interrupt / IRQ 12)
     status |=  (1 << 5); // Ensure bit 5 is set
     
     // Write the modified Configuration Byte back
@@ -104,54 +109,94 @@ void mouse_initiate(void) {
     // Tell the mouse hardware to start streaming data packets
     mouse_write(0xF4);
     mouse_read(); // Clear the Acknowledge byte (0xFA)
+    
+    // Flush any leftover ACK/data bytes before enabling IRQs
+    while (inb(0x64) & 1) {
+        inb(0x60);
+    }
+}
+
+void mouse_enqueue_event(int32_t x, int32_t y, bool left, bool right, bool middle) {
+    uint32_t next_head = (mouse_queue_head + 1) % MOUSE_QUEUE_SIZE;
+    
+    // If the queue is full, we drop the oldest event to keep fresh data flowing.
+    // Alternatively, you could just return and drop the new event.
+    if (next_head == mouse_queue_tail) {
+        mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE; 
+    }
+    
+    mouse_queue[mouse_queue_head].x = x;
+    mouse_queue[mouse_queue_head].y = y;
+    mouse_queue[mouse_queue_head].left_button = left;
+    mouse_queue[mouse_queue_head].right_button = right;
+    mouse_queue[mouse_queue_head].middle_button = middle;
+    mouse_queue[mouse_queue_head].timestamp = timer_get_ms();
+    
+    // Update head last so the consumer doesn't read incomplete data
+    mouse_queue_head = next_head; 
+}
+
+bool mouse_dequeue_event(MouseEvent* out_event) {
+    // If head == tail, the buffer is empty
+    if (mouse_queue_head == mouse_queue_tail) {
+        return false; 
+    }
+    
+    *out_event = mouse_queue[mouse_queue_tail];
+    mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
+    
+    return true;
 }
 
 void mouse_event_handler(void) {
+    uint8_t status = inb(0x64);
+    
+    // Only process if data is ready (Bit 0) AND originated from the mouse (Bit 5)
+    if (!(status & 0x01) || !(status & 0x20)) {
+        return;
+    }
+    
     uint8_t input_byte = inb(0x60);
     
-    mouse_packet[mouse_cycle] = (int8_t)input_byte;
+    // Stream Realignment Check:
+    // Byte 0 MUST have bit 3 (0x08) set to 1.
+    // If we are looking for Byte 0 (cycle 0) and bit 3 is 0, this is out-of-sync data. Discard it!
+    if (mouse_cycle == 0 && !(input_byte & 0x08)) {
+        return;
+    }
+    
+    mouse_packet[mouse_cycle] = input_byte;
     mouse_cycle++;
     
+    // Process complete 3-byte packet
     if (mouse_cycle == 3) {
-        mouse_cycle = 0;
+        mouse_cycle = 0; // Reset state machine for next packet
         
-        if ((mouse_packet[0] & 0x08) == 0) 
-            return; 
+        // Ignore invalid overflow packets (Bit 6 = X overflow, Bit 7 = Y overflow)
+        if (mouse_packet[0] & 0xC0) {
+            return;
+        }
         
+        // Extract button states
         mouse_left_clicked   = (mouse_packet[0] & 0x01) ? true : false;
         mouse_right_clicked  = (mouse_packet[0] & 0x02) ? true : false;
         mouse_middle_clicked = (mouse_packet[0] & 0x04) ? true : false;
         
-        int16_t rel_x = (int16_t)mouse_packet[1];
-        int16_t rel_y = (int16_t)mouse_packet[2];
+        // Parse relative byte values
+        int16_t rel_x = (uint8_t)mouse_packet[1];
+        int16_t rel_y = (uint8_t)mouse_packet[2];
         
-        if (mouse_packet[0] & 0x10) rel_x |= 0xFF00;
-        if (mouse_packet[0] & 0x20) rel_y |= 0xFF00;
+        // Apply 16-bit two's complement sign extension based on Byte 0 sign flags
+        if (mouse_packet[0] & 0x10) rel_x |= 0xFF00; // Bit 4 = X Sign
+        if (mouse_packet[0] & 0x20) rel_y |= 0xFF00; // Bit 5 = Y Sign
         
-        // Calculate dynamic acceleration
+        // Update coordinates smoothly (1 pixel = 1 << 8 = 256 sub-pixel units)
+        // Multiplier scaling factor for speed tuning (1 = standard 1:1 mouse speed)
+        int32_t speed = 1; 
+        fixed_mouse_x += ((int32_t)rel_x * speed) << 8;
+        fixed_mouse_y -= ((int32_t)rel_y * speed) << 8; // Y axis is inverted in screen space
         
-        int16_t abs_x = rel_x < 0 ? -rel_x : rel_x;
-        int16_t abs_y = rel_y < 0 ? -rel_y : rel_y;
-        
-        int32_t current_mul_x = horizontal_precision;
-        int32_t current_mul_y = vertical_precision;
-        
-        int32_t horz_precision = horizontal_precision;
-        int32_t vert_precision = vertical_precision;
-        
-        int32_t horz_mul = horizontal_mul;
-        int32_t vert_mul = vertical_mul;
-        
-        if (abs_x > acceleration_max) abs_x = acceleration_max;
-        if (abs_y > acceleration_max) abs_y = acceleration_max;
-        
-        current_mul_x = ((horz_precision * horz_mul) * abs_x) >> 1;
-        current_mul_y = ((vert_precision * vert_mul) * abs_y) >> 1;
-        
-        fixed_mouse_x += (int32_t)rel_x * current_mul_x;
-        fixed_mouse_y -= (int32_t)rel_y * current_mul_y;
-        
-        // Use -1 to prevent overflow tracking past screen boundaries
+        // Screen boundary clamping
         int32_t max_x = ((int32_t)display_get_width() << 8) - 1;
         int32_t max_y = ((int32_t)display_get_height() << 8) - 1;
         
@@ -162,5 +207,7 @@ void mouse_event_handler(void) {
         
         mouse_x = fixed_mouse_x >> 8;
         mouse_y = fixed_mouse_y >> 8;
+        
+        mouse_enqueue_event(mouse_x, mouse_y, mouse_left_clicked, mouse_right_clicked, mouse_middle_clicked);
     }
 }

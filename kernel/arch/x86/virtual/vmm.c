@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #define VM_START          0x10000000U           
-#define VM_END            0x40000000U           
+#define VM_END            0x20000000U           
 #define VM_SIZE           (VM_END - VM_START)
 #define VIRT_BITMAP_SIZE  (VM_SIZE / PAGE_SIZE / 8)
 

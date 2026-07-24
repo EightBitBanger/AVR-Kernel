@@ -5,6 +5,9 @@
 #include <kernel/arch/x86/io.h>
 #include <kernel/util/timer.h>
 
+#include <kernel/scheduler/scheduler.h>
+extern void scheduler_context(void);
+
 volatile uint64_t current_ms = 0;
 
 void timer_init(void) {
@@ -24,8 +27,6 @@ uint64_t timer_get_ms(void) {
 }
 
 void isr_callback_timer_handler(void) {
-    
-    current_ms++;
-    
     outb(0x20, 0x20); // End of Interrupt
+    current_ms++;
 }

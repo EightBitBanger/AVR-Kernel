@@ -35,11 +35,33 @@
 #include <kernel/registry/registry.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/panic/panic_error.h>
+#include <kernel/scheduler/scheduler.h>
 
 #define BOOT_DELAY_MS  500
 
 // Position in memory where the kernel ends
 extern char _kernel_program_end[];
+
+void run_allocator_stress_test(void);
+
+
+void thread_dwm_main(void) {
+    while (1) {
+        dwm_update();
+        kernel_event_update();
+        
+        thread_yield();
+    }
+}
+
+void dummy_runner(void) {
+    while(1){
+        
+        
+        //thread_yield();
+        thread_sleep(100);
+    }
+}
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -67,17 +89,21 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // Set millisecond timer
     timer_init();
+    __asm__ __volatile__("sti");
     
     // Paging
     pmm_init(mbi, _kernel_memory_end);
     vmm_init(mbi, _kernel_memory_end);
     
     // Random number generation
-    //rand_init();
+    rand_init();
     
     // Initialize the kernels personal heap block
     heap_set_base_address(heap_start);
     heap_init(block_size, heap_size);
+    
+    // Fire up the scheduler
+    scheduler_init();
     
     // Initiate display and drawing
     draw_set_info((uint32_t)mbi);
@@ -119,6 +145,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     print("kernel v0.0.0\n");
     draw_flush_display();
     
+    
     //
     // Command console / boot options
     
@@ -127,23 +154,20 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
         uint64_t old_ms = timer_get_ms();
         while ((timer_get_ms() - old_ms) <= BOOT_DELAY_MS) {
+            
             // Check keyboard data ready
-            if (ps2_check_keyboard()) {
+            if (kb_get_current_char() == 'c') {
+                activate_console = true;
                 
-                if (kb_getc() == 'c') {
-                    activate_console = true;
-                    
-                    // Scan PCI bus for available hardware
-                    // before entering the console
-                    pci_init();
-                    
-                    flush_keyboard_buffer();
-                    
-                    console_prompt_print();
-                    draw_flush_display();
-                    break;
-                }
+                // Scan PCI bus for available hardware
+                // before entering the console
+                pci_init();
+                
+                kb_flush();
+                
+                console_prompt_print();
                 draw_flush_display();
+                break;
             }
         }
         
@@ -155,8 +179,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // Scan PCI bus for available hardware
     pci_init();
-    
-    rand_init();
     
     // Get primary knode directories
     uint32_t root_node = knode_get_root();
@@ -171,6 +193,35 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Blank the screen in preparation for pure graphics mode
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
+    
+    //
+    // Find the home directory
+    
+    const char* path_mnt = "/mnt";
+    const char* path_sys = "/sys";
+    
+    char home_path[128];
+    memset(home_path, '\0', sizeof(home_path));
+    uint32_t item_count = vfs_directory_get_item_count(path_mnt);
+    for (unsigned int i=0; i < item_count; i++) {
+        char temp_path[128];
+        strncpy(temp_path, path_mnt, 128);
+        
+        char item_name[16];
+        if (!vfs_directory_get_item(path_mnt, i, item_name)) 
+            continue;
+        
+        strncat(temp_path, "/", 128);
+        strncat(temp_path, item_name, 128);
+        
+        strncat(temp_path, path_sys, 128);
+        
+        if (vfs_directory_check(temp_path)) {
+            //print(temp_path);
+            //print("\n");
+        }
+    }
+    
     
     //
     // Load the registry
@@ -188,9 +239,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     //
     // Load desktop icons
-    
-    const char* path_mnt = "/mnt";
-    const char* path_sys = "/sys";
     
     // Get mounted devices
     uint32_t number_of_mounts = knode_get_reference_count(mnt_directory);
@@ -218,6 +266,10 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
     }
     
+    
+    //
+    // TODOs
+    
     // User event call back messaging
     //  wEvent GetMessage();
     //  int16_t DispatchEvent()
@@ -229,21 +281,17 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // TODO key combination binding
     
+    //detach();
+    
+    for (unsigned int i=0; i < 24; i++) 
+        thread_create(dummy_runner, PRIORITY_IDLE);
+    
+    thread_create(thread_dwm_main, PRIORITY_NORMAL);
+    
+    // Kernel main thread
     while(1) {
         
-        dwm_update();
         
-        kernel_event_update();
-        
-        // TODO move to interrupt handlers later on
-        if (ps2_check_keyboard()) {
-            
-            uint16_t last_key_pressed = kb_getc();
-            
-            dwm_set_keyboard_char(last_key_pressed);
-            
-            dwm_event_send(DWM_EVENT_KEYBOARD);
-        }
-        
+        thread_yield();
     }
 }

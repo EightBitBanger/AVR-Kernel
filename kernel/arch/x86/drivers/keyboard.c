@@ -15,6 +15,10 @@ static volatile char current_character  = 0x00;
 static volatile char last_character     = 0x00;
 static volatile uint8_t isr_key_ready   = 0;
 
+extern char* keyboard_string;
+extern uint8_t keyboard_length;
+extern uint8_t keyboard_length_max;
+
 static bool is_ctrl_pressed = false;
 static bool is_alt_pressed  = false;
 static bool is_shift_pressed = false;
@@ -60,24 +64,23 @@ uint8_t kb_get_current_char(void) {
     return current_character;
 }
 
+void kb_flush(void) {
+    last_character = 0;
+    current_character = 0;
+    isr_key_ready = 0;
+}
+
 void kb_clear_input_state(void) {
     isr_key_ready = 0;
 }
 
-extern char* keyboard_string;
-extern uint8_t keyboard_length;
-extern uint8_t keyboard_length_max;
-
 void kb_event_handler(void) {
-    current_character = kb_getc();
-    
     if (current_character == 0x00) {
-        last_character = 0x00; 
+        last_character = 0x00;
+        isr_key_ready = 0;
         return;
     }
-    
-    if (current_character == last_character) 
-        return;
+    isr_key_ready = 0;
     
     last_character = current_character;
     char ch = current_character;
@@ -134,9 +137,6 @@ void kb_event_handler(void) {
         char input[2] = {ch, '\0'};
         print(input);
     }
-}
-
-void kb_get_raw(uint8_t* low_byte, uint8_t* high_byte) {
 }
 
 uint16_t kb_getc(void) {
@@ -209,12 +209,15 @@ uint16_t kb_getc(void) {
         
         if (scancode < sizeof(scancode_to_ascii_set1)) {
             if (is_shift_pressed) {
-                return (uint16_t)scancode_to_ascii_shifted_set1[scancode];
+                current_character = scancode_to_ascii_shifted_set1[scancode];
             } else {
-                return (uint16_t)scancode_to_ascii_set1[scancode];
+                current_character = scancode_to_ascii_set1[scancode];
             }
         }
+        
+        return (uint16_t)current_character;
     }
     
+    current_character = 0x00;
     return 0;
 }

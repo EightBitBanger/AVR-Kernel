@@ -34,7 +34,7 @@ struct WorkingDirectory {
 
 struct LocalPaths {
     char path[PATH_LENGTH_MAX];
-    char home[PATH_LENGTH_MAX];
+    char home[PATH_LENGTH_MAX]; // TODO home directory should reference a mounted device with a system directory
 };
 
 void kernel_get_working_directory(struct WorkingDirectory* out_dir);
