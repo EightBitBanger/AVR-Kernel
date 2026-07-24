@@ -48,6 +48,8 @@ static void clear_screen(uint32_t color) {
 }
 
 void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t type, const char* extra) {
+    __asm__ __volatile__("cli");
+    
     clear_screen(COLOR_BG);
     
     TextContext ctx = {

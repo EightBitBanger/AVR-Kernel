@@ -22,10 +22,6 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
 
 OpenFileDescriptor* vfs_file_find_open(File id);
 
-// Check if a directory is a mount point
 bool vfs_directory_check_mounted(const char* path);
-
-// Get the number of items in a directory
-uint32_t vfs_directory_get_count(const char* path);
 
 #endif

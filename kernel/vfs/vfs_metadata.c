@@ -26,6 +26,7 @@ bool vfs_set_permissions(const char* path, uint8_t perm) {
         if (perm & VFS_PERMISSION_WRITE)    permissions |= FS_PERMISSION_WRITE;
         
         fs_file_set_permissions(address, permissions);
+        return true;
     } else if (kmalloc_is_valid(address)) {
         uint8_t permissions = 0;
         if (perm & VFS_PERMISSION_EXECUTE)  permissions |= KMALLOC_PERMISSION_EXECUTABLE;
@@ -33,11 +34,9 @@ bool vfs_set_permissions(const char* path, uint8_t perm) {
         if (perm & VFS_PERMISSION_WRITE)    permissions |= KMALLOC_PERMISSION_WRITE;
         
         kmalloc_set_permissions(address, permissions);
-    } else {
-        return false;
+        return true;
     }
-    
-    return true; 
+    return false;
 }
 
 bool vfs_get_permissions(const char* path, uint8_t* perm) {
@@ -58,6 +57,7 @@ bool vfs_get_permissions(const char* path, uint8_t* perm) {
         if (permissions & FS_PERMISSION_READ)    *perm |= VFS_PERMISSION_READ;
         if (permissions & FS_PERMISSION_WRITE)   *perm |= VFS_PERMISSION_WRITE;
         
+        return true;
     } else if (kmalloc_is_valid(address)) {
         uint8_t permissions = 0;
         permissions = kmalloc_get_permissions(address);
@@ -65,10 +65,7 @@ bool vfs_get_permissions(const char* path, uint8_t* perm) {
         if (permissions & KMALLOC_PERMISSION_EXECUTABLE) *perm |= VFS_PERMISSION_EXECUTE;
         if (permissions & KMALLOC_PERMISSION_READ)       *perm |= VFS_PERMISSION_READ;
         if (permissions & KMALLOC_PERMISSION_WRITE)      *perm |= VFS_PERMISSION_WRITE;
-        
-    } else {
-        return false;
+        return true;
     }
-    
-    return true;
+    return false;
 }

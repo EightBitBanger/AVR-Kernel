@@ -161,7 +161,7 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
 }
 
 void console_process_command(char* keyboard_str) {
-    char* args[16];
+    char* args[16] = {NULL};
     int arg_count = 0;
     char* command;
     
@@ -219,13 +219,31 @@ void console_process_command(char* keyboard_str) {
         char* fs_path = cstr_tok_next(&tok);
         while (fs_path != NULL && result != 0) {
             
-            syscall(SYSCALL_CHDIR, (char*[]){fs_path, NULL});
+            print(path);
+            print("\n");
+            
+            //char path_local[64];
+            
+            /*
+            memset(path_local, '\0', sizeof(path_local));
+            
+            strncpy(path_local, fs_path, sizeof(path_local) - 1);
+            strncat(path_local, "/", sizeof(path_local) - strlen(path_local) - 1);
+            strncat(path_local, args[0], sizeof(path_local) - strlen(path_local) - 1);
+            
+            // 4. Temporarily swap the command name with the full path in your arguments array
+            // This ensures any extra arguments (args[1], args[2], etc.) are passed to the program!
+            char* original_command = args[0];
+            args[0] = path_local;
             
             result = syscall(SYSCALL_EXECUTE, args);
             
-            syscall(SYSCALL_CHDIR, (char*[]){old_path, NULL});
+            // Restore the original command name just in case this path failed 
+            // and the loop needs to check the next directory
+            args[0] = original_command;
             
             fs_path = cstr_tok_next(&tok);
+            */
         }
         
         if (result != 0) 

@@ -61,6 +61,8 @@ bool vfs_file_get_certificate(const char* path, uint32_t certificate);
 
 // Directory
 bool vfs_directory_check(const char* path);
-uint32_t vfs_directory_get_count(const char* path);
+
+uint32_t vfs_directory_get_item_count(const char* path);
+bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out);
 
 #endif

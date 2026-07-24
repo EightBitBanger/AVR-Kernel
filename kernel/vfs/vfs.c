@@ -89,17 +89,39 @@ bool vfs_directory_check_mounted(const char* path) {
     return false;
 }
 
-uint32_t vfs_directory_get_count(const char* path) {
+uint32_t vfs_directory_get_item_count(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
     
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) 
         return false;
+    
     if (fs_check_directory_valid(address)) {
         return fs_directory_get_reference_count(address);
     } else {
         return knode_get_reference_count(address);
     }
     return 0;
+}
+
+bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == KNODE_NULL || address == FS_NULL) 
+        return false;
+    
+    if (fs_check_directory_valid(address)) {
+        uint32_t item_address = fs_directory_get_reference(address, index);
+        
+        fs_file_get_name(item_address, name_out);
+        return true;
+    } else {
+        uint32_t item_address = knode_get_reference(address, index);
+        knode_get_name(item_address, name_out);
+        return true;
+    }
+    return false;
 }
