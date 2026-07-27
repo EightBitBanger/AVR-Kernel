@@ -362,6 +362,11 @@ static void handle_notepad_redraw(WindowHandle handle, struct NotepadWindowState
     dwm_draw_line(cursor_render_x, cursor_render_y, 0, TEXT_FONT_LINE_HEIGHT, 0xFF3FFF3F);
 }
 
+void dialog_callback(const char* path, bool cancelled) {
+    
+}
+
+
 void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     struct NotepadWindowState* state = get_notepad_window_state(handle);
     if (!state) return;
@@ -429,6 +434,13 @@ void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam
                         
                         vfs_write(file, state->text_buffer, size);
                         vfs_close(file);
+                        
+                        //WindowHandle dialog_window = dwm_summon_file_dialog("Save file", state->file_path, DIALOG_FILE_MODE_SAVE, dialog_callback);
+                        
+                    } else {
+                        
+                        // File not valid, prompt to save file
+                        
                     }
                 }
                 break;

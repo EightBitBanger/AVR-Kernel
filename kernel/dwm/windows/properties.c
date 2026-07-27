@@ -3,9 +3,55 @@
 
 #include <kernel/util/string.h>
 #include <kernel/util/parser.h>
+#include <kernel/util/tok.h>
+
+#include <kernel/knode.h>
+#include <kernel/memory/malloc.h>
 
 #include <kernel/vfs/vfs.h>
 #include <kernel/events.h>
+
+// Helper to determine the character length of the VFS knode prefix before a mount point
+static uint16_t get_knode_path_len(const char* file_path) {
+    if (!file_path || file_path[0] != '/') {
+        return file_path ? (uint16_t)strlen(file_path) : 0;
+    }
+
+    char path_scratch[DWM_MAX_PATH_LEN];
+    strncpy(path_scratch, file_path, DWM_MAX_PATH_LEN - 1);
+    path_scratch[DWM_MAX_PATH_LEN - 1] = '\0';
+
+    uint32_t current_knode = knode_get_root();
+    uint16_t knode_path_len = (uint16_t)strlen(file_path);
+    uint16_t current_pos = 0;
+
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, path_scratch, "/");
+
+    char* token = cstr_tok_next(&tok);
+    while (token != NULL) {
+        if (current_knode == KNODE_NULL || current_knode == 0) {
+            break;
+        }
+
+        uint32_t found_node = knode_find_by_name(current_knode, token);
+        if (found_node != KNODE_NULL && found_node != 0) {
+            uint8_t flags = kmalloc_get_flags(found_node);
+            if ((flags & KMALLOC_FLAG_DIRECTORY) && (flags & KMALLOC_FLAG_MOUNT)) {
+                // Found the partition mount point; cut off the knode prefix here
+                knode_path_len = (current_pos == 0) ? 1 : current_pos;
+                break;
+            }
+            current_knode = found_node;
+            current_pos += 1 + (uint16_t)strlen(token);
+        } else {
+            break;
+        }
+        token = cstr_tok_next(&tok);
+    }
+
+    return knode_path_len;
+}
 
 WindowHandle dwm_summon_properties(const char* title, const char* name, const char* file_path, uint16_t icon_index) {
     WindowClass wclass_props;
@@ -89,16 +135,22 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     case 1:{ // Storage
         char* target_used = (char*)malloc(DWM_MAX_PATH_LEN);
         char* target_free = (char*)malloc(DWM_MAX_PATH_LEN);
+        char* target_total = (char*)malloc(DWM_MAX_PATH_LEN);
         
         uint32_t used = vfs_device_get_used(file_path);
-        itos(used, target_used);
-        size_t len = strnlen(target_used, DWM_MAX_PATH_LEN);
-        target_used[len] = '\0';
+        uint32_t total = vfs_device_get_capacity(file_path);
+        uint32_t free = total - used;
         
-        target_free[0] = '\0';
+        itos(used, target_used);
+        itos(free, target_free);
+        itos(total, target_total);
+        target_used[ strnlen(target_used, DWM_MAX_PATH_LEN) ] = '\0';
+        target_free[ strnlen(target_free, DWM_MAX_PATH_LEN) ] = '\0';
+        target_total[ strnlen(target_total, DWM_MAX_PATH_LEN) ] = '\0';
         
         dwm_window_resource_add(msg_handle->id, "used", target_used);
         dwm_window_resource_add(msg_handle->id, "free", target_free);
+        dwm_window_resource_add(msg_handle->id, "total", target_total);
         break;
     }
     case 2:{ // Folder
@@ -194,6 +246,7 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
     uint32_t color_divider       = 0xFF04C004; 
     uint32_t color_text_primary  = 0xFFFFFFFF; 
     uint32_t color_text_value    = 0xFF3FFF3F; 
+    uint32_t color_text_mount    = 0xFFFDA008; 
     uint32_t color_text_inactive = 0xFF8888AA; 
     uint32_t color_border_active = 0xFF04C004; 
     uint32_t color_border_normal = 0xFF444466; 
@@ -216,7 +269,22 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
             if (current_tab == 0) {
                 char* path_str = (char*)dwm_window_resource_get_by_name(handle, "path");
                 dwm_draw_text(15, 110, "Path", color_text_primary);
-                if (path_str != NULL) dwm_draw_text(15, 124, path_str, color_text_value);
+                if (path_str != NULL) {
+                    uint16_t path_len = (uint16_t)strlen(path_str);
+                    uint16_t knode_len = get_knode_path_len(path_str);
+
+                    if (knode_len >= path_len) {
+                        dwm_draw_text(15, 124, path_str, color_text_value);
+                    } else {
+                        char base_buffer[DWM_MAX_PATH_LEN];
+                        memset(base_buffer, 0, DWM_MAX_PATH_LEN);
+                        strncpy(base_buffer, path_str, knode_len);
+
+                        dwm_draw_text(15, 124, base_buffer, color_text_value);
+                        int16_t mount_offset_x = 15 + (knode_len * 6); // 6px character font offset
+                        dwm_draw_text(mount_offset_x, 124, path_str + knode_len, color_text_mount);
+                    }
+                }
                 
                 char* name_str = (char*)dwm_window_resource_get_by_name(handle, "name");
                 if (name_str != NULL) dwm_draw_text(90, 78, name_str, color_text_value);
@@ -240,12 +308,38 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                 } else if (type_index == 5) { 
                     char* used_str = (char*)dwm_window_resource_get_by_name(handle, "used");
                     char* free_str = (char*)dwm_window_resource_get_by_name(handle, "free");
+                    char* total_str = (char*)dwm_window_resource_get_by_name(handle, "total");
                     
                     dwm_draw_text(15, 150, "Used", color_text_primary);
                     dwm_draw_text(15, 165, "Free", color_text_primary);
+                    dwm_draw_text(15, 180, "Total", color_text_primary);
                     
                     if (used_str != NULL) dwm_draw_text(90, 150, used_str, color_text_value);
                     if (free_str != NULL) dwm_draw_text(90, 165, free_str, color_text_value);
+                    if (total_str != NULL) dwm_draw_text(90, 180, total_str, color_text_value);
+                    
+                    // Draw usage pie
+                    uint32_t used  = stoi(used_str);
+                    uint32_t total = stoi(total_str);
+                    
+                    // Prevent division by zero if total space is reported as 0
+                    if (total > 0) {
+                        // Calculate used percentage (0 to 100)
+                        uint32_t used_percent = (used * 100) / total;
+                        
+                        // Ensure it doesn't accidentally exceed 100 due to rounding or weird data
+                        if (used_percent > 100) {
+                            used_percent = 100;
+                        }
+                        
+                        uint32_t free_percent = 100 - used_percent;
+                        
+                        // Draw usage pie dynamically
+                        uint32_t values[] = { used_percent, free_percent };
+                        uint32_t colors[] = { 0xFFF700F7, 0xFF0000F6 }; // Used color, Free color
+                        
+                        draw_pie_chart_isometric(150, 250, 45, 10, values, colors, sizeof(values) / sizeof(uint32_t));
+                    }
                 } else { 
                     char* size_str = (char*)dwm_window_resource_get_by_name(handle, "size");
                     dwm_draw_text(15, 150, "Size", color_text_primary);
@@ -289,10 +383,6 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
             // Security tab
             else if (current_tab == 2) {
                 dwm_draw_text(15, 60, "Advanced Security Settings", color_text_primary);
-                
-                
-                
-                
             }
             
             // ------------------------------------------
@@ -462,10 +552,6 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                             }
                         }
                     }
-                }
-                // Click processing inside security tab
-                else if (current_tab == 2) {
-                    // Implement handling for items inside your Security tab here if interactive
                 }
             }
             

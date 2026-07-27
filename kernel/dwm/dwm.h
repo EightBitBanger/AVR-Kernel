@@ -28,6 +28,7 @@
 #include <kernel/dwm/windows/message_box.h>
 #include <kernel/dwm/windows/message_error.h>
 #include <kernel/dwm/windows/dialog_delete.h>
+#include <kernel/dwm/windows/dialog_file.h>
 
 #include <kernel/dwm/dwm_dispatch.h>
 
