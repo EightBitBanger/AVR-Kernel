@@ -11,6 +11,15 @@
 #include <kernel/util/parser.h>
 #include <kernel/util/tok.h>
 
+#ifdef KERNEL_PLATFORM_AVR
+  #include <kernel/arch/avr/io.h>
+  #include <kernel/arch/avr/heap.h>
+#endif
+
+#ifdef KERNEL_PLATFORM_X86
+  #include <kernel/arch/x86/heap.h>
+#endif
+
 char* keyboard_string;
 uint8_t keyboard_length;
 uint8_t keyboard_length_max;
