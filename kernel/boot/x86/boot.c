@@ -334,7 +334,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         thread_create(thread_mem_test_c, PRIORITY_HIGH);
     }
     */
-    thread_create(thread_dwm_main, PRIORITY_NORMAL);
+    thread_create(thread_dwm_main, PRIORITY_REALTIME);
     
     // Kernel main thread
     while(1) {

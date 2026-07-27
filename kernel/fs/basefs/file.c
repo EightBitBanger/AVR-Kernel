@@ -224,7 +224,7 @@ uint32_t fs_file_read(FileHandle* file, void* destination, uint32_t size) {
     bytes_to_read = size;
     if ((file->position + bytes_to_read) > file_size)
         bytes_to_read = file_size - file->position;
-        
+    
     fs_mem_read(file->address, &f_header, sizeof(struct FSFileHeader));
     
     uint32_t current_extent_addr = f_header.extent.next;

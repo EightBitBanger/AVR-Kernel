@@ -45,10 +45,6 @@ uint32_t fs_bitmap_get_size(void);
 uint32_t fs_alloc(uint32_t size);
 void fs_free(uint32_t address);
 
-// File IO
-void fs_mem_write(uint32_t address, const void* source, uint32_t size);
-void fs_mem_read(uint32_t address, void* destination, uint32_t size);
-
 // Check if the directory is valid
 bool fs_check_directory_valid(uint32_t address);
 
