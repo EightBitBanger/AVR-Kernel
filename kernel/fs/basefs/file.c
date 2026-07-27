@@ -7,42 +7,30 @@
 bool fs_file_check(uint32_t address) {
     struct FSAllocHeader alloc;
     struct FSFileHeader  file;
-    
     if (address == FS_NULL)
         return false;
     
     fs_mem_read(address - sizeof(struct FSAllocHeader), &alloc, sizeof(struct FSAllocHeader));
     if (alloc.size < sizeof(struct FSFileHeader))
         return false;
-    
     fs_mem_read(address, &file, sizeof(struct FSFileHeader));
     
     if (file.block.attributes & FS_ATTRIBUTE_DIRECTORY) 
         return false;
-    
     return true;
 }
 
 static bool fs_file_struct_is_valid(const FileHandle* file) {
     if (file == NULL)
         return false;
-    
     if (!file->is_open)
         return false;
-    
     if (!fs_file_check(file->address))
         return false;
-    
     return true;
 }
 
 
-#include <kernel/fs/fs.h>
-#include <kernel/fs/basefs/file.h>
-#include <kernel/fs/config.h>
-#include <kernel/util/string.h>
-
-// Assuming these helpers match your implementation style:
 static bool fs_file_extent_read(uint32_t extent_address, struct FSFileExtent* extent) {
     struct FSAllocHeader alloc_header;
     if (extent_address == FS_NULL) return false;
@@ -50,7 +38,7 @@ static bool fs_file_extent_read(uint32_t extent_address, struct FSFileExtent* ex
     fs_mem_read(extent_address - sizeof(struct FSAllocHeader), &alloc_header, sizeof(struct FSAllocHeader));
     if (alloc_header.size < sizeof(struct FSFileExtent))
         return false;
-        
+    
     fs_mem_read(extent_address, extent, sizeof(struct FSFileExtent));
     return true;
 }
@@ -102,7 +90,7 @@ bool fs_file_delete(uint32_t address) {
     
     if (!fs_file_check(address))
         return false;
-        
+    
     fs_mem_read(address, &file, sizeof(struct FSFileHeader));
     extent_address = file.extent.next;
     

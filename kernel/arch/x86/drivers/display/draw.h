@@ -77,4 +77,7 @@ void draw_glyph(const uint8_t* glyph_map, int glyph_index, uint16_t glyph_width,
 void draw_sprite(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x, int y, uint32_t colorkey);
 void draw_sprite_blend(const uint32_t* sprite_data, int sprite_w, int sprite_h, int x, int y, uint32_t colorkey);
 
+void draw_pie_chart(int center_x, int center_y, int radius, const uint32_t* slices, const uint32_t* colors, size_t count);
+void draw_pie_chart_isometric(int center_x, int center_y, int radius, int depth, const uint32_t* slices, const uint32_t* colors, size_t count);
+
 #endif

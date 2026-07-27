@@ -6,6 +6,23 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+
+struct FSDeviceContext {
+    bool is_open;
+    bool frame_dirty;
+    
+    uint32_t device_address;
+    uint32_t sector_size;
+    uint32_t pool_size;
+    uint32_t block_count;
+    uint32_t bitmap_size;
+    uint32_t reserved_blocks;
+    uint16_t device_type;
+    
+    uint32_t frame_offset;
+    uint8_t  frame_bitmap[BITMAP_FRAME_SIZE];
+};
+
 struct __attribute__((packed)) FSDeviceHeader {
     uint8_t id;
     char name[10];

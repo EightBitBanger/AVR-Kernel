@@ -26,13 +26,13 @@ void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t s
 void fs_device_format_low(uint32_t device_address, uint32_t capacity);
 
 // Open a device for IO operations
-uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type);
+struct FSDeviceContext fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type);
 
 // Get the number of used bytes on this device
-uint32_t fs_get_used_bytes(void);
+uint32_t fs_get_used_bytes(struct FSDeviceContext* device_context);
 
 // Get the device partition block
-uint8_t fs_device_get_partition(uint32_t device_address, struct FSPartitionBlock* part);
+uint8_t fs_device_get_partition(struct FSDeviceContext* device_context, struct FSPartitionBlock* part);
 
 // Find raw allocations
 uint32_t fs_find_next(uint32_t previous_address);

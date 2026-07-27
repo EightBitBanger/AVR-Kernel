@@ -16,13 +16,6 @@ void kernel_init(void) {
     uint32_t root_node = create_knode("", 0);
     knode_set_root(root_node);
     
-    struct WorkingDirectory fs_current;
-    struct LocalPaths fs_paths;
-    fs_current.current_directory = root_node;
-    fs_current.mount_device      = FS_NULL;
-    fs_current.mount_directory   = FS_NULL;
-    fs_current.mount_root        = FS_NULL;
-    
     uint32_t proc = create_knode("proc", root_node);
     uint32_t dev  = create_knode("dev", root_node);
     uint32_t mnt  = create_knode("mnt", root_node);
@@ -32,6 +25,16 @@ void kernel_init(void) {
     knode_set_permissions(mnt,  KMALLOC_PERMISSION_READ);
     
     hardware_identify_devices(dev, mnt, dev);
+    
+    struct WorkingDirectory fs_current;
+    struct LocalPaths fs_paths;
+    fs_current.current_directory = root_node;
+    fs_current.mount_device      = FS_NULL;
+    fs_current.mount_directory   = FS_NULL;
+    fs_current.mount_root        = FS_NULL;
+    
+    memset(fs_paths.home, '\0', PATH_LENGTH_MAX);
+    memset(fs_paths.path, '\0', PATH_LENGTH_MAX);
     
     kernel_set_local_paths(&fs_paths);
     kernel_set_working_directory(&fs_current);

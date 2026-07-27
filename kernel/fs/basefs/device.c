@@ -1,62 +1,64 @@
 #include <kernel/fs/fs.h>
 #include <kernel/util/string.h>
 
-uint32_t fs_device_address  = 0;
-uint32_t fs_sector_size     = 0;
-uint32_t fs_pool_size       = 0;
-uint32_t fs_block_count     = 0;
-uint32_t fs_bitmap_size     = 0;
-uint32_t fs_reserved_blocks = 0;
-uint16_t fs_device_type     = 0;
+struct FSDeviceContext device_context;
 
-uint8_t  fs_frame_bitmap[BITMAP_FRAME_SIZE];
-uint32_t fs_frame_offset = FS_INVALID_FRAME;
-bool     fs_frame_dirty = false;
-
-struct Bus fs_bus;
-
-void fs_init(void) {
-    fs_bus.write_waitstate = 1;
-    fs_bus.read_waitstate  = 2;
-}
-
-
-uint8_t fs_device_get_partition(uint32_t device_address, struct FSPartitionBlock* part) {
-    fs_device_address = device_address;
-    fs_mem_read(sizeof(struct FSDeviceHeader), part, sizeof(struct FSPartitionBlock));
+uint8_t fs_device_get_partition(struct FSDeviceContext* device_context, struct FSPartitionBlock* part) {
+    uint32_t offset = sizeof(struct FSDeviceHeader);
+    fs_mem_read(offset, part, sizeof(struct FSPartitionBlock));
     if (part->magic != FS_MAGIC) return 1;
     return 0;
 }
 
-uint8_t fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type) {
+struct FSDeviceContext fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type) {
     struct FSDeviceHeader deviceHeader;
-    fs_device_address = device_address;
+    device_context.device_address = device_address;
     
-    fs_mem_read(0, &deviceHeader, sizeof(struct FSDeviceHeader));
-    if (fs_device_get_partition(device_address, partition) != 0) return 1;
+    struct FSDeviceContext new_context;
+    memset(&new_context, 0x00, sizeof(struct FSDeviceContext));
+    new_context.device_address = device_address;
     
-    fs_sector_size = partition->sector_size;
-    fs_pool_size   = partition->total_size;
-    fs_block_count = fs_pool_size / fs_sector_size;
-    fs_bitmap_size = (fs_block_count + 7UL) / 8UL;
-    fs_device_type = device_type;
+    if (fs_device_get_partition(&new_context, partition) != 0) 
+        return new_context;
     
-    uint32_t metadata_size = sizeof(struct FSDeviceHeader) + sizeof(struct FSPartitionBlock) + fs_bitmap_size;
-    fs_reserved_blocks = (metadata_size + fs_sector_size - 1UL) / fs_sector_size;
+    device_context.sector_size = partition->sector_size;
+    device_context.pool_size   = partition->total_size;
+    device_context.block_count = device_context.pool_size / device_context.sector_size;
+    device_context.bitmap_size = (device_context.block_count + 7UL) / 8UL;
+    device_context.device_type = device_type;
+    
+    uint32_t metadata_size = sizeof(struct FSDeviceHeader) + sizeof(struct FSPartitionBlock) + device_context.bitmap_size;
+    device_context.reserved_blocks = (metadata_size + device_context.sector_size - 1UL) / device_context.sector_size;
     
     // Invalidate window to force load on first access
-    fs_frame_offset = 0xFFFFFFFF;
-    fs_frame_dirty = false;
+    device_context.frame_offset = 0xFFFFFFFF;
+    device_context.frame_dirty = false;
     
-    return 0;
+    new_context.is_open          = true;
+    
+    new_context.device_address   = device_address;
+    new_context.sector_size      = partition->sector_size;
+    
+    new_context.pool_size        = partition->total_size;
+    new_context.block_count      = new_context.pool_size / new_context.sector_size;
+    new_context.bitmap_size      = (new_context.block_count + 7UL) / 8UL;
+    new_context.device_type      = device_type;
+    
+    uint32_t meta_sz = sizeof(struct FSDeviceHeader) + sizeof(struct FSPartitionBlock) + new_context.bitmap_size;
+    new_context.reserved_blocks  = (meta_sz + new_context.sector_size - 1UL) / new_context.sector_size;
+    
+    new_context.frame_offset     = 0xFFFFFFFF;
+    new_context.frame_dirty      = false;
+    
+    return new_context;
 }
 
-uint32_t fs_get_used_bytes(void) {
+uint32_t fs_get_used_bytes(struct FSDeviceContext* device_context) {
     uint32_t used_bytes = 0;
     
     // First, account for the metadata block overhead (headers + bitmap area)
     // expressed in bytes up to the end of the reserved blocks.
-    used_bytes += fs_reserved_blocks * fs_sector_size;
+    used_bytes += device_context->reserved_blocks * device_context->sector_size;
     
     // Iterate through all active allocations in the system
     uint32_t current_alloc = fs_find_next(FS_NULL);
@@ -70,8 +72,8 @@ uint32_t fs_get_used_bytes(void) {
         // Calculate how many actual bytes this allocation occupies on disk.
         // Because the filesystem allocates in whole-sector runs, we calculate 
         // the rounded sector footprint to accurately reflect disk consumption.
-        uint32_t blocks_used = (sizeof(struct FSAllocHeader) + header.size + fs_sector_size - 1UL) / fs_sector_size;
-        used_bytes += blocks_used * fs_sector_size;
+        uint32_t blocks_used = (sizeof(struct FSAllocHeader) + header.size + device_context->sector_size - 1UL) / device_context->sector_size;
+        used_bytes += blocks_used * device_context->sector_size;
         
         // Move to the next allocation
         current_alloc = fs_find_next(current_alloc);
@@ -82,10 +84,10 @@ uint32_t fs_get_used_bytes(void) {
 
 uint32_t fs_alloc(uint32_t size) {
     struct FSAllocHeader header;
-    uint32_t blocks_needed = (sizeof(struct FSAllocHeader) + size + fs_sector_size - 1UL) / fs_sector_size;
+    uint32_t blocks_needed = (sizeof(struct FSAllocHeader) + size + device_context.sector_size - 1UL) / device_context.sector_size;
     uint32_t run_start = 0, run_length = 0;
     
-    for (uint32_t i = fs_reserved_blocks; i < fs_block_count; i++) {
+    for (uint32_t i = device_context.reserved_blocks; i < device_context.block_count; i++) {
         if (!fs_bitmap_get(i)) {
             if (run_length == 0) run_start = i;
             if (++run_length >= blocks_needed) {
@@ -94,7 +96,7 @@ uint32_t fs_alloc(uint32_t size) {
                 }
                 fs_bitmap_flush(); // Important to commit allocation
                 
-                uint32_t addr = run_start * fs_sector_size;
+                uint32_t addr = run_start * device_context.sector_size;
                 header.size = size;
                 fs_mem_write(addr, &header, sizeof(struct FSAllocHeader));
                 return addr + sizeof(struct FSAllocHeader);
@@ -112,8 +114,8 @@ void fs_free(uint32_t address) {
     struct FSAllocHeader header;
     fs_mem_read(alloc_addr, &header, sizeof(struct FSAllocHeader));
     
-    uint32_t blocks = (sizeof(struct FSAllocHeader) + header.size + fs_sector_size - 1UL) / fs_sector_size;
-    uint32_t start_block = alloc_addr / fs_sector_size;
+    uint32_t blocks = (sizeof(struct FSAllocHeader) + header.size + device_context.sector_size - 1UL) / device_context.sector_size;
+    uint32_t start_block = alloc_addr / device_context.sector_size;
     
     for (uint32_t i = 0; i < blocks; i++) {
         fs_bitmap_clear(start_block + i);
@@ -129,17 +131,17 @@ uint32_t fs_find_next(uint32_t prev_addr) {
     struct FSAllocHeader header;
     
     if (prev_addr == FS_NULL) {
-        start_block = fs_reserved_blocks;
+        start_block = device_context.reserved_blocks;
     } else {
         uint32_t h_addr = prev_addr - sizeof(struct FSAllocHeader);
         fs_mem_read(h_addr, &header, sizeof(struct FSAllocHeader));
-        uint32_t used = (header.size + sizeof(struct FSAllocHeader) + fs_sector_size - 1UL) / fs_sector_size;
-        start_block = (h_addr / fs_sector_size) + used;
+        uint32_t used = (header.size + sizeof(struct FSAllocHeader) + device_context.sector_size - 1UL) / device_context.sector_size;
+        start_block = (h_addr / device_context.sector_size) + used;
     }
     
-    for (uint32_t i = start_block; i < fs_block_count; i++) {
+    for (uint32_t i = start_block; i < device_context.block_count; i++) {
         if (fs_bitmap_get(i)) {
-            uint32_t addr = i * fs_sector_size;
+            uint32_t addr = i * device_context.sector_size;
             fs_mem_read(addr, &header, sizeof(struct FSAllocHeader));
             if (header.size != 0) return addr + sizeof(struct FSAllocHeader);
         }
@@ -156,7 +158,7 @@ void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t secto
         .name = "storage"
     };
     
-    fs_device_address = device_address;
+    device_context.device_address = device_address;
     uint32_t b_size = ((capacity / sector_size) + 7) / 8;
     uint32_t meta_size = sizeof(devH) + sizeof(partH) + b_size;
     uint32_t res_blocks = (meta_size + sector_size - 1) / sector_size;

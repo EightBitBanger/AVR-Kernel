@@ -3,4 +3,6 @@
 
 #define FS_NAME_LENGTH_MAX          16
 
+#define BITMAP_FRAME_SIZE   32
+
 #endif

@@ -48,7 +48,6 @@ void run_allocator_stress_test(void);
 void thread_dwm_main(void) {
     while (1) {
         dwm_update();
-        kernel_event_update();
         
         thread_yield();
     }
@@ -57,11 +56,51 @@ void thread_dwm_main(void) {
 void dummy_runner(void) {
     while(1){
         
-        
         //thread_yield();
         thread_sleep(100);
     }
 }
+
+void thread_mem_test_a(void) {
+    while(1) {
+        void* blocka = malloc(1024);
+        void* blockb = malloc(768);
+        void* blockc = malloc(1024);
+        void* blockd = malloc(800);
+        free(blocka);
+        free(blockb);
+        free(blockc);
+        free(blockd);
+        thread_yield();
+    }
+}
+
+void thread_mem_test_b(void) {
+    while(1) {
+        void* blocka = malloc(25);
+        void* blockb = malloc(25);
+        void* blockc = malloc(25);
+        free(blocka);
+        free(blockb);
+        free(blockc);
+        
+        thread_sleep(200);
+    }
+}
+
+void thread_mem_test_c(void) {
+    while(1) {
+        void* blocka = malloc(5);
+        void* blockb = malloc(100);
+        void* blockc = malloc(40);
+        free(blocka);
+        free(blockb);
+        free(blockc);
+        
+        thread_sleep(100);
+    }
+}
+
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
@@ -281,16 +320,25 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // TODO key combination binding
     
+    
+    
     //detach();
     
-    for (unsigned int i=0; i < 24; i++) 
+    /*
+    for (unsigned int i=0; i < 1024; i++) 
         thread_create(dummy_runner, PRIORITY_IDLE);
     
+    for (unsigned int i=0; i < 3; i++) {
+        thread_create(thread_mem_test_a, PRIORITY_HIGH);
+        thread_create(thread_mem_test_b, PRIORITY_HIGH);
+        thread_create(thread_mem_test_c, PRIORITY_HIGH);
+    }
+    */
     thread_create(thread_dwm_main, PRIORITY_NORMAL);
     
     // Kernel main thread
     while(1) {
-        
+        kernel_event_update();
         
         thread_yield();
     }

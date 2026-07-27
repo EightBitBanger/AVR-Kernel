@@ -2,8 +2,9 @@
 #include <kernel/arch/x86/drivers/display/draw.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <kernel/util/string.h>
 #include <emmintrin.h>
+#include <kernel/util/string.h>
+#include <kernel/util/math.h>
 
 #define DRAW_CLIP_INSIDE  0
 #define DRAW_CLIP_LEFT    1
@@ -534,6 +535,173 @@ void draw_sprite_blend(const uint32_t* sprite_data, int sprite_w, int sprite_h, 
             if (color == colorkey) continue;
             
             dest_row[i] = blend_pixels(color, dest_row[i]);
+        }
+    }
+}
+
+
+// Darkens a 32-bit ARGB color to create a 3D shadow effect
+static inline uint32_t darken_color(uint32_t color) {
+    uint32_t a = color & 0xFF000000;
+    uint32_t r = ((color >> 16) & 0xFF) - (((color >> 16) & 0xFF) >> 2); 
+    uint32_t g = ((color >> 8)  & 0xFF) - (((color >> 8)  & 0xFF) >> 2);
+    uint32_t b = (color         & 0xFF) - ((color         & 0xFF) >> 2);
+    return a | (r << 16) | (g << 8) | b;
+}
+
+void draw_pie_chart_isometric(int center_x, int center_y, int radius, int depth, const uint32_t* slices, const uint32_t* colors, size_t count) {
+    if (!slices || !colors || count == 0 || radius <= 0 || !frame_buffer) return;
+    
+    int xc = center_x + display_base_x;
+    int yc = center_y + display_base_y;
+    
+    // The Y radius is squished by half to create the 3D tilt
+    int rx = radius;
+    int ry = radius / 2; 
+    
+    // Bounding box includes the depth for the 3D cylinder skirt
+    int x_start = (xc - rx < clipping_plain.min_x) ? clipping_plain.min_x : (xc - rx);
+    int x_end   = (xc + rx >= clipping_plain.max_x) ? clipping_plain.max_x : (xc + rx + 1);
+    int y_start = (yc - ry < clipping_plain.min_y) ? clipping_plain.min_y : (yc - ry);
+    int y_end   = (yc + ry + depth >= clipping_plain.max_y) ? clipping_plain.max_y : (yc + ry + depth + 1);
+    
+    if (x_start >= x_end || y_start >= y_end) return;
+    
+    // Sum all slices
+    uint32_t total_value = 0;
+    for (size_t i = 0; i < count; i++) {
+        total_value += slices[i];
+    }
+    if (total_value == 0) return;
+    
+    // Precompute angle thresholds [0, 65536] safely within 32 bits
+    uint32_t angle_thresholds[count];
+    uint32_t current_sum = 0;
+    for (size_t i = 0; i < count; i++) {
+        current_sum += slices[i];
+        
+        uint32_t num = current_sum;
+        uint32_t den = total_value;
+        // Shift down to prevent overflow during (num << 16)
+        while (den > 65535) { num >>= 1; den >>= 1; }
+        if (den == 0) den = 1;
+        
+        angle_thresholds[i] = (num << 16) / den;
+    }
+    
+    int r_squared = rx * rx;
+    
+    // Render loop
+    for (int py = y_start; py < y_end; py++) {
+        uint32_t* row = &frame_buffer[py * buffer_stride];
+        
+        for (int px = x_start; px < x_end; px++) {
+            int dx = px - xc;
+            int hit_z = -1;
+            int active_dy = 0;
+            
+            // Check if pixel belongs to the TOP face (z = 0)
+            int dy_top = py - yc;
+            if ((dx * dx + 4 * dy_top * dy_top) < r_squared) {
+                hit_z = 0;
+                active_dy = dy_top;
+            } 
+            // If not on top, check if it belongs to the 3D sides (z = 1 to depth)
+            else if (py > yc) {
+                for (int z = 1; z <= depth; z++) {
+                    int dy_z = py - (yc + z);
+                    if ((dx * dx + 4 * dy_z * dy_z) < r_squared) {
+                        hit_z = z;
+                        active_dy = dy_z;
+                        break;
+                    }
+                }
+            }
+            
+            if (hit_z != -1) {
+                uint32_t angle = iatan2(dx, -(active_dy * 2));
+                
+                uint32_t color = colors[count - 1];
+                for (size_t i = 0; i < count; i++) {
+                    if (angle <= angle_thresholds[i]) {
+                        color = colors[i];
+                        break;
+                    }
+                }
+                
+                if (hit_z > 0) {
+                    color = darken_color(color);
+                }
+                
+                row[px] = color;
+            }
+        }
+    }
+}
+
+
+void draw_pie_chart(int center_x, int center_y, int radius, const uint32_t* slices, const uint32_t* colors, size_t count) {
+    if (!slices || !colors || count == 0 || radius <= 0 || !frame_buffer) {
+        return;
+    }
+    
+    int xc = center_x + display_base_x;
+    int yc = center_y + display_base_y;
+    
+    int x_start = (xc - radius < clipping_plain.min_x) ? clipping_plain.min_x : (xc - radius);
+    int x_end   = (xc + radius >= clipping_plain.max_x) ? clipping_plain.max_x : (xc + radius + 1);
+    int y_start = (yc - radius < clipping_plain.min_y) ? clipping_plain.min_y : (yc - radius);
+    int y_end   = (yc + radius >= clipping_plain.max_y) ? clipping_plain.max_y : (yc + radius + 1);
+    
+    if (x_start >= x_end || y_start >= y_end) return;
+    
+    uint32_t total_value = 0;
+    for (size_t i = 0; i < count; i++) {
+        total_value += slices[i];
+    }
+    if (total_value == 0) return;
+    
+    uint32_t angle_thresholds[count];
+    uint32_t current_sum = 0;
+    
+    for (size_t i = 0; i < count; i++) {
+        current_sum += slices[i];
+        
+        uint32_t num = current_sum;
+        uint32_t den = total_value;
+        
+        while (den > 65535) {
+            num >>= 1;
+            den >>= 1;
+        }
+        if (den == 0) den = 1;
+        
+        angle_thresholds[i] = (num << 16) / den;
+    }
+    int r_squared = radius * radius;
+    
+    for (int py = y_start; py < y_end; py++) {
+        int dy = py - yc;
+        int dy2 = dy * dy;
+        uint32_t* row = &frame_buffer[py * buffer_stride];
+        
+        for (int px = x_start; px < x_end; px++) {
+            int dx = px - xc;
+            int dist_squared = dx * dx + dy2;
+            
+            if (dist_squared < r_squared) {
+                uint32_t angle = iatan2(dx, -dy);
+                
+                uint32_t color = colors[count - 1];
+                for (size_t i = 0; i < count; i++) {
+                    if (angle <= angle_thresholds[i]) {
+                        color = colors[i];
+                        break;
+                    }
+                }
+                
+                row[px] = color;
+            }
         }
     }
 }

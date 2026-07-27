@@ -5,7 +5,6 @@
 
 static bool fs_file_alloc_header_read(uint32_t payload_address, struct FSAllocHeader* header) {
     uint32_t allocation_address;
-    
     if (payload_address == FS_NULL)
         return false;
     
@@ -22,7 +21,6 @@ static bool fs_file_alloc_header_read(uint32_t payload_address, struct FSAllocHe
     return true;
 }
 
-// Helper to determine max references for a directory header based on its allocation size
 static uint32_t fs_directory_header_max_refs(uint32_t directory_address) {
     struct FSAllocHeader alloc_header;
     if (!fs_file_alloc_header_read(directory_address, &alloc_header))
@@ -76,7 +74,6 @@ void fs_directory_extent_write(uint32_t extent_address, const struct FSDirectory
     fs_mem_write(extent_address, extent, sizeof(struct FSDirectoryExtent));
 }
 
-// Pass the initial capacity you want when allocating an extent
 uint32_t fs_directory_extent_create(uint32_t prev_address, uint32_t initial_capacity) {
     struct FSDirectoryExtent extent;
     uint32_t                 extent_address;
@@ -127,7 +124,6 @@ void fs_directory_extent_unlink_and_free(uint32_t directory_address, uint32_t ex
     fs_free(extent_address);
 }
 
-// Pass the initial capacity you want when creating a directory
 uint32_t fs_directory_create(const char* name, uint8_t permissions, uint32_t parent_directory) {
     uint32_t initial_capacity = 24;
     uint32_t address = fs_alloc(sizeof(struct FSDirectoryHeader) + (initial_capacity * sizeof(uint32_t)));
@@ -237,7 +233,6 @@ uint8_t fs_directory_add_reference(uint32_t directory_address, uint32_t referenc
         extent_address = extent.extent.next;
     }
     
-    // Fallback constants used here purely to size new blocks if an old one filled up
     if (directory.extent.next == FS_NULL) {
         new_extent_address = fs_directory_extent_create(directory_address, 12); 
         if (new_extent_address == FS_NULL)
