@@ -19,7 +19,8 @@ int call_routine_rm(int arg_count, char** args) {
         return 2;
     
     struct FSPartitionBlock partition;
-    if (fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA) == FS_NULL) 
+    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
+    if (device_context.is_open == false) 
         return 3;
     
     uint32_t address = fs_directory_find(fs_current.mount_directory, args[0]);

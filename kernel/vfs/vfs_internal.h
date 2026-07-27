@@ -18,6 +18,8 @@ extern File next_unique_id;
 
 uint32_t resolve_path_to_address(const char* path);
 uint32_t resolve_parent_path_to_address(const char* path);
+uint32_t resolve_path_to_mount_point(const char* path);
+
 bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint32_t* out_fs_node, bool* out_in_fs);
 
 OpenFileDescriptor* vfs_file_find_open(File id);

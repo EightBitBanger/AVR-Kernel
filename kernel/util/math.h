@@ -11,6 +11,7 @@ int min(int a, int b);
 int clamp(int value, int min_val, int max_val);
 unsigned int isqrt(unsigned int num);
 long long ipow(long long base, int exp);
+uint32_t iatan2(int32_t y, int32_t x);
 
 // Floating point
 

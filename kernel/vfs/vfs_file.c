@@ -19,7 +19,6 @@ File vfs_open(const char* path, uint16_t flags) {
     uint32_t current_fs_node = 0;
     bool in_file_system = false;
     
-    // Use our new parsing auxiliary function
     if (!vfs_parse_path(path, flags, &current_knode, &current_fs_node, &in_file_system)) {
         return VFS_INVALID_FILE;
     }

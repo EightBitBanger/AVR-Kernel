@@ -7,7 +7,7 @@ void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length
 
 void console_process_command(char* keyboard_str);
 
-void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint8_t depth);
+void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint16_t depth);
 
 void console_prompt_print(void);
 void console_prompt_set_string(const char* prompt);

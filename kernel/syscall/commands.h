@@ -3,6 +3,8 @@
 
 #include <kernel/syscall/commands/list.h>
 #include <kernel/syscall/commands/chdir.h>
+#include <kernel/syscall/commands/clear.h>
+#include <kernel/syscall/commands/execute.h>
 
 #include <kernel/syscall/commands/mkfile.h>
 #include <kernel/syscall/commands/mkdir.h>

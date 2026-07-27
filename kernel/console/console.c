@@ -84,7 +84,7 @@ uint32_t console_get_mounted_directory(void) {
     return 0;
 }
 
-void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint8_t depth) {
+void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint16_t depth) {
     uint32_t knode_stack[16];
     uint32_t fs_stack[16];
     uint8_t knode_count = 0, fs_count = 0;
@@ -192,62 +192,73 @@ void console_process_command(char* keyboard_str) {
         if (strcmp(command, name) != 0) 
             continue;
         
-        function(arg_count-1, &args[1]);
+        function(arg_count - 1, &args[1]);
         return;
     }
     
+    // Construct absolute path
+    char file_path[64];
+    memset(file_path, '\0', sizeof(file_path));
+    
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
+    
+    console_get_path(file_path, sizeof(file_path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    
+    size_t len = strlen(file_path);
+    if (len > 0 && file_path[len - 1] != '/' && len < sizeof(file_path) - 1) {
+        strncat(file_path, "/", sizeof(file_path) - strlen(file_path) - 1);
+    }
+    strncat(file_path, command, sizeof(file_path) - strlen(file_path) - 1);
+    
+    args[0] = file_path;
+    
     if (syscall(SYSCALL_EXECUTE, args) != 0) {
+        // Restore the original name
+        args[0] = command;
         
-        // Executable not found, check each path directory
-        
-        struct WorkingDirectory fs_current;
+        // Executable not found in working dir, check each PATH entry
         struct LocalPaths fs_paths;
-        kernel_get_working_directory(&fs_current);
         kernel_get_local_paths(&fs_paths);
-        
-        char old_path[PATH_LENGTH_MAX];
-        console_get_path(old_path, PATH_LENGTH_MAX, fs_current.current_directory, fs_current.mount_directory, 16);
         
         char path[PATH_LENGTH_MAX];
         strcpy(path, fs_paths.path);
         
         int result = 1;
         
-        cstr_tok_t tok;
-        cstr_tok_init(&tok, path, ";");
+        cstr_tok_t path_tok;
+        cstr_tok_init(&path_tok, path, ";");
         
-        char* fs_path = cstr_tok_next(&tok);
+        char* fs_path = cstr_tok_next(&path_tok);
         while (fs_path != NULL && result != 0) {
-            
-            print(path);
-            print("\n");
-            
-            //char path_local[64];
-            
-            /*
+            char path_local[PATH_LENGTH_MAX];
             memset(path_local, '\0', sizeof(path_local));
             
             strncpy(path_local, fs_path, sizeof(path_local) - 1);
-            strncat(path_local, "/", sizeof(path_local) - strlen(path_local) - 1);
+            
+            // Append slash only if the directory string doesn't end with one
+            size_t len = strlen(path_local);
+            if (len > 0 && path_local[len - 1] != '/' && len < sizeof(path_local) - 1) {
+                strncat(path_local, "/", sizeof(path_local) - strlen(path_local) - 1);
+            }
+            
             strncat(path_local, args[0], sizeof(path_local) - strlen(path_local) - 1);
             
-            // 4. Temporarily swap the command name with the full path in your arguments array
-            // This ensures any extra arguments (args[1], args[2], etc.) are passed to the program!
+            // Swap command name with full path for execution
             char* original_command = args[0];
             args[0] = path_local;
             
             result = syscall(SYSCALL_EXECUTE, args);
             
-            // Restore the original command name just in case this path failed 
-            // and the loop needs to check the next directory
+            // Restore original command name if path execution failed
             args[0] = original_command;
             
-            fs_path = cstr_tok_next(&tok);
-            */
+            fs_path = cstr_tok_next(&path_tok);
         }
         
-        if (result != 0) 
+        if (result != 0) {
             print(msg_bad_command);
+        }
     }
     
     print("\n");

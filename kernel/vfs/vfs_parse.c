@@ -53,14 +53,19 @@ uint32_t resolve_path_to_address(const char* path) {
             // Check if this new knode is actually a mount point into a file system
             uint8_t flags = kmalloc_get_flags(current_knode);
             if (flags & KMALLOC_FLAG_MOUNT) {
-                // Fetch the device address attached to the mount point (reference index 0)
                 uint32_t device_address = knode_get_reference(current_knode, 0);
-                if (device_address != KMALLOC_NULL && device_address != 0) {
-                    struct FSPartitionBlock partition;
-                    if (fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA) == 0) {
-                        // Switch over to File System mode starting at the partition's root
-                        current_fs_node = partition.root_directory;
-                        in_file_system = true;
+                struct FSDeviceContext* device_context = (struct FSDeviceContext*)knode_get_reference(current_knode, 1);
+                
+                if ((uint32_t)device_context != KMALLOC_NULL) {
+                    if (device_address != KMALLOC_NULL && device_address != 0) {
+                        struct FSPartitionBlock partition;
+                        fs_device_get_partition(device_context, &partition);
+                        
+                        if (device_context->is_open == true) {
+                            // Switch over to File System mode starting at the partition's root
+                            current_fs_node = partition.root_directory;
+                            in_file_system = true;
+                        }
                     }
                 }
             }
@@ -72,7 +77,9 @@ uint32_t resolve_path_to_address(const char* path) {
                 // If we attempt to go above the FS root, we fall back to the base knode
                 struct FSPartitionBlock partition;
                 uint32_t device_address = knode_get_reference(current_knode, 0);
-                fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
+                struct FSDeviceContext* device_context = (struct FSDeviceContext*)knode_get_reference(current_knode, 1);
+                
+                fs_device_get_partition(device_context, &partition);
                 
                 if (current_fs_node == partition.root_directory) {
                     in_file_system = false;
@@ -111,6 +118,53 @@ uint32_t resolve_path_to_address(const char* path) {
     
     // Return the correct address context based on where traversal ended
     return in_file_system ? current_fs_node : current_knode;
+}
+
+uint32_t resolve_path_to_mount_point(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return 0xFFFFFFFF;
+    
+    uint32_t current_knode = knode_get_root();
+    
+    // Check if the root directory itself is a mount point
+    if (kmalloc_get_flags(current_knode) & KMALLOC_FLAG_MOUNT) {
+        return current_knode;
+    }
+    
+    char path_scratch[256];
+    strncpy(path_scratch, path, sizeof(path_scratch) - 1);
+    path_scratch[sizeof(path_scratch) - 1] = '\0';
+    
+    cstr_tok_t tok;
+    cstr_tok_init(&tok, path_scratch, "/");
+    
+    char* token = cstr_tok_next(&tok);
+    while (token != NULL) {
+        if (strcmp(token, ".") == 0) {
+            token = cstr_tok_next(&tok);
+            continue;
+        }
+        
+        if (strcmp(token, "..") == 0) {
+            current_knode = knode_get_parent(current_knode);
+        } else {
+            uint32_t next_node = knode_find_by_name(current_knode, token);
+            if (next_node == 0xFFFFFFFF || next_node == 0) {
+                return 0xFFFFFFFF; // Path component not found
+            }
+            current_knode = next_node;
+        }
+        
+        // Stop immediately if we hit a mounted knode
+        uint8_t flags = kmalloc_get_flags(current_knode);
+        if (flags & KMALLOC_FLAG_MOUNT) {
+            return current_knode;
+        }
+        
+        token = cstr_tok_next(&tok);
+    }
+    
+    return current_knode;
 }
 
 uint32_t resolve_parent_path_to_address(const char* path) {
@@ -185,9 +239,12 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
             uint8_t k_flags = kmalloc_get_flags(current_knode);
             if (k_flags & KMALLOC_FLAG_MOUNT) {
                 uint32_t device_address = knode_get_reference(current_knode, 0);
+                struct FSDeviceContext* device_context = (struct FSDeviceContext*)knode_get_reference(current_knode, 1);
+                
                 if (device_address != KNODE_NULL && device_address != 0) {
                     struct FSPartitionBlock partition;
-                    if (fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA) == 0) {
+                    fs_device_get_partition(device_context, &partition);
+                    if (device_context->is_open == true) {
                         current_fs_node = partition.root_directory;
                         in_file_system = true;
                     }
@@ -196,9 +253,11 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
         } else {
             if (strcmp(token, "..") == 0) {
                 uint32_t parent = fs_directory_get_parent(current_fs_node);
-                struct FSPartitionBlock partition;
                 uint32_t device_address = knode_get_reference(current_knode, 0);
-                fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
+                struct FSDeviceContext* device_context = (struct FSDeviceContext*)knode_get_reference(current_knode, 1);
+                
+                struct FSPartitionBlock partition;
+                fs_device_get_partition(device_context, &partition);
                 
                 if (current_fs_node == partition.root_directory) {
                     in_file_system = false;

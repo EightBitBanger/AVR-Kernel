@@ -391,7 +391,8 @@ uint32_t knode_find_by_name(uint32_t directory_address, const char* name) {
 }
 
 bool knode_check_is_valid(uint32_t address) {
-    if (!knode_is_valid_address(address)) 
+    if (knode_is_valid_address(address) == 0) 
         return false;
+    return true;
 }
 

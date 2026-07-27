@@ -6,8 +6,22 @@
 #include <kernel/scheduler/scheduler.h>
 
 int call_routine_execute(int arg_count, char** args) {
+    if (!vfs_exists(args[0])) {
+        return -1;
+    }
     
-    return execute_program(args[0], args, arg_count);
+    print( args[0] );
+    print(" [");
+    
+    for (unsigned int i=1; i < arg_count; i++) {
+        
+        print( args[i] );
+        print(", ");
+    }
+    
+    print("]\n");
+    
+    return 0;
 }
 
 #endif

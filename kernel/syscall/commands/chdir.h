@@ -7,6 +7,7 @@
 
 #include <kernel/kernel.h>
 #include <kernel/fs/fs.h>
+#include <kernel/console/console_const.h>
 
 int call_routine_chdir(int arg_count, char** args) {
     if (arg_count < 1 || args[0] == NULL || args[0][0] == '\0') 
@@ -14,6 +15,15 @@ int call_routine_chdir(int arg_count, char** args) {
     
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
+    
+    // If the command is strictly "cd .", retrieve and print the current path
+    if (strcmp(args[0], ".") == 0) {
+        char path_buf[256];
+        console_get_path(path_buf, sizeof(path_buf) - 2, fs_current.current_directory, fs_current.mount_directory, 256);
+        print(path_buf);
+        print("\n");
+        return 0;
+    }
     
     int is_absolute = (args[0][0] == '/');
     if (is_absolute) {
@@ -33,7 +43,16 @@ int call_routine_chdir(int arg_count, char** args) {
     char* dirname = cstr_tok_next(&tok);
     
     while (dirname != NULL) {
+        
+        //
+        // Mounted Directory Resolution
+        
         if (fs_current.mount_device != KMALLOC_NULL) {
+            if (strcmp(dirname, ".") == 0) {
+                dirname = cstr_tok_next(&tok);
+                continue;
+            }
+            
             if (strcmp(dirname, "..") == 0) {
                 if (fs_current.mount_directory == fs_current.mount_root) {
                     fs_current.mount_directory = FS_NULL;
@@ -50,10 +69,20 @@ int call_routine_chdir(int arg_count, char** args) {
             }
             
             uint32_t reference = fs_directory_find(fs_current.mount_directory, dirname);
-            if (reference == FS_NULL) 
-                break;
+            if (reference == FS_NULL) {
+                print(msg_dir_invalid);
+                return -1;
+            }
             
             fs_current.mount_directory = reference;
+            dirname = cstr_tok_next(&tok);
+            continue;
+        }
+        
+        //
+        // Virtual File System (KNode) Resolution
+        
+        if (strcmp(dirname, ".") == 0) {
             dirname = cstr_tok_next(&tok);
             continue;
         }
@@ -65,8 +94,10 @@ int call_routine_chdir(int arg_count, char** args) {
             target_directory = knode_find_by_name(fs_current.current_directory, dirname);
         }
         
-        if (target_directory == KMALLOC_NULL) 
-            break;
+        if (target_directory == KMALLOC_NULL) {
+            print(msg_dir_invalid);
+            return -1;
+        }
         
         uint8_t flags = kmalloc_get_flags(target_directory);
         
@@ -85,8 +116,10 @@ int call_routine_chdir(int arg_count, char** args) {
             continue;
         }
         
-        if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) 
-            break;
+        if ((flags & KMALLOC_FLAG_DIRECTORY) == 0) {
+            print(msg_dir_invalid);
+            return -1;
+        }
         
         fs_current.current_directory = target_directory;
         dirname = cstr_tok_next(&tok);
@@ -94,8 +127,8 @@ int call_routine_chdir(int arg_count, char** args) {
     
     kernel_set_working_directory(&fs_current);
     
-    char path_buf[128]; 
-    console_get_path(path_buf, sizeof(path_buf) - 2, fs_current.current_directory, fs_current.mount_directory, 2);
+    char path_buf[256]; 
+    console_get_path(path_buf, sizeof(path_buf) - 2, fs_current.current_directory, fs_current.mount_directory, 256);
     
     size_t len = strlen(path_buf);
     path_buf[len] = '>';

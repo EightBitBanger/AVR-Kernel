@@ -60,6 +60,44 @@ long long ipow(long long base, int exp) {
     return res;
 }
 
+uint32_t iatan2(int32_t y, int32_t x) {
+    if (x == 0 && y == 0) return 0;
+    
+    int32_t abs_y = y < 0 ? -y : y;
+    int32_t abs_x = x < 0 ? -x : x;
+    
+    int32_t min_val = (abs_x < abs_y) ? abs_x : abs_y;
+    int32_t max_val = (abs_x > abs_y) ? abs_x : abs_y;
+    
+    // Fixed-point division scaled to 12-bit fraction [0, 4096]
+    int32_t ratio = (min_val << 12) / max_val;
+    
+    // Polynomial integer approximation for atan(r) where r is in [0, 1]
+    int32_t base = (8192 * ratio) >> 12;
+    int32_t correction = (((ratio * (4096 - ratio)) >> 12) * 2928) >> 12;
+    uint32_t angle = base + correction;
+    
+    // Octant swapping if slope > 1
+    if (abs_y > abs_x) {
+        angle = 16384 - angle;
+    }
+    
+    // Map quadrant to full circle [0, 65535]
+    if (x < 0) {
+        if (y < 0) {
+            angle = 32768 + angle; // Quadrant 3
+        } else {
+            angle = 32768 - angle; // Quadrant 2
+        }
+    } else {
+        if (y < 0) {
+            angle = 65536 - angle; // Quadrant 4
+        }
+    }
+    
+    return angle & 0xFFFF;
+}
+
 // Floating point (x87 Inline Assembly)
 
 
