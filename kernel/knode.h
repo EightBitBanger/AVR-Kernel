@@ -1,6 +1,15 @@
 #ifndef _KNODE_DIRECTORY_H_
 #define _KNODE_DIRECTORY_H_
 
+#ifdef KERNEL_PLATFORM_AVR
+  #include <kernel/arch/avr/io.h>
+  #include <kernel/arch/avr/heap.h>
+#endif
+
+#ifdef KERNEL_PLATFORM_X86
+  #include <kernel/arch/x86/heap.h>
+#endif
+
 #define KNODE_NAME_LENGTH_MAX       16
 #define KNODE_NULL                  KMALLOC_NULL
 
