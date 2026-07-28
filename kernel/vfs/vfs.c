@@ -19,23 +19,20 @@ File next_unique_id = 1;
 bool vfs_is_directory(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) {
         return false;
     }
     
-    // Check if it's a raw virtual memory node (Knode space)
     if (kmalloc_is_valid(address)) {
         uint8_t k_flags = kmalloc_get_flags(address);
-        // It IS a directory if either the directory flag OR mount flag is set
         if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) {
             return true;
         }
     }
     
-    // Check if it's an underlying physical file system node
-    if (fs_check_directory_valid(address)) {
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) {
         return true;
     }
     
@@ -45,11 +42,9 @@ bool vfs_is_directory(const char* path) {
 bool vfs_directory_check(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) 
         return false;
-    
     if (kmalloc_is_valid(address)) {
         uint8_t k_flags = kmalloc_get_flags(address);
         if (k_flags & KMALLOC_FLAG_DIRECTORY) {
@@ -57,7 +52,8 @@ bool vfs_directory_check(const char* path) {
         }
     }
     
-    if (fs_check_directory_valid(address)) {
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) {
         return true;
     }
     
@@ -67,11 +63,9 @@ bool vfs_directory_check(const char* path) {
 bool vfs_directory_check_mounted(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) 
         return false;
-    
     if (kmalloc_is_valid(address)) {
         uint8_t k_flags = kmalloc_get_flags(address);
         if (k_flags & KMALLOC_FLAG_MOUNT) {
@@ -79,8 +73,9 @@ bool vfs_directory_check_mounted(const char* path) {
         }
     }
     
-    if (fs_check_directory_valid(address)) {
-        uint32_t parent = fs_directory_get_parent(address);
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) {
+        uint32_t parent = fs_directory_get_parent(ctx, address);
         if (parent == address || parent == FS_NULL) { 
             return true;
         }
@@ -91,14 +86,13 @@ bool vfs_directory_check_mounted(const char* path) {
 
 uint32_t vfs_directory_get_item_count(const char* path) {
     if (path == NULL || path[0] == '\0') 
-        return false;
-    
+        return 0;
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) 
-        return false;
-    
-    if (fs_check_directory_valid(address)) {
-        return fs_directory_get_reference_count(address);
+        return 0;
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) {
+        return fs_directory_get_reference_count(ctx, address);
     } else {
         return knode_get_reference_count(address);
     }
@@ -108,15 +102,13 @@ uint32_t vfs_directory_get_item_count(const char* path) {
 bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == KNODE_NULL || address == FS_NULL) 
         return false;
-    
-    if (fs_check_directory_valid(address)) {
-        uint32_t item_address = fs_directory_get_reference(address, index);
-        
-        fs_file_get_name(item_address, name_out);
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) {
+        uint32_t item_address = fs_directory_get_reference(ctx, address, index);
+        fs_file_get_name(ctx, item_address, name_out);
         return true;
     } else {
         uint32_t item_address = knode_get_reference(address, index);

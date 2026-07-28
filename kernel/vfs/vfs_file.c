@@ -14,18 +14,17 @@
 File vfs_open(const char* path, uint16_t flags) {
     if (path == NULL || path[0] == '\0') 
         return VFS_INVALID_FILE;
-    
     uint32_t current_knode = 0;
     uint32_t current_fs_node = 0;
     bool in_file_system = false;
-    
-    if (!vfs_parse_path(path, flags, &current_knode, &current_fs_node, &in_file_system)) {
+    struct FSDeviceContext* ctx = NULL;
+
+    if (!vfs_parse_path(path, flags, &current_knode, &current_fs_node, &in_file_system, &ctx)) {
         return VFS_INVALID_FILE;
     }
     
-    // Directory check
     if (in_file_system) {
-        if (!fs_file_check(current_fs_node)) {
+        if (!fs_file_check(ctx, current_fs_node)) {
             return VFS_INVALID_FILE;
         }
     } else {
@@ -35,33 +34,29 @@ File vfs_open(const char* path, uint16_t flags) {
         }
     }
     
-    // Allocate our unique File Descriptor structure
     OpenFileDescriptor* desc = (OpenFileDescriptor*)malloc(sizeof(OpenFileDescriptor));
     if (!desc) 
         return VFS_INVALID_FILE;
-    
-    // Fill details based on where path resolution ended
+
     desc->id = next_unique_id++;
     desc->in_file_system = in_file_system;
     desc->address = in_file_system ? current_fs_node : current_knode;
     desc->offset = 0;
     desc->flags = flags;
-    
-    // If it's a file system node, bind and open the concrete backend handler
+    desc->ctx = ctx;
+
     if (desc->in_file_system) {
         uint8_t perm = 0;
-        fs_file_get_permissions(desc->address, &perm);
+        fs_file_get_permissions(desc->ctx, desc->address, &perm);
         
         uint8_t target_mode = 0;
         if ((flags & VFS_OPEN_READ) && (perm & FS_PERMISSION_READ))    target_mode |= FS_FILE_MODE_READ;
         if ((flags & VFS_OPEN_WRITE) && (perm & FS_PERMISSION_WRITE))  target_mode |= FS_FILE_MODE_WRITE;
-        
-        // Fallback baseline mode if zero options specified
         if (target_mode == 0) {
             target_mode = FS_FILE_MODE_READ;
         }
         
-        if (!fs_file_open(&desc->handle, desc->address, target_mode)) {
+        if (!fs_file_open(&desc->handle, desc->ctx, desc->address, target_mode)) {
             free(desc);
             return VFS_INVALID_FILE;
         }
@@ -81,7 +76,6 @@ File vfs_open(const char* path, uint16_t flags) {
 void vfs_close(File file) {
     OpenFileDescriptor* desc = vfs_file_find_open(file);
     if (!desc) return;
-    
     if (desc->in_file_system) {
         fs_file_close(&desc->handle);
     }
@@ -93,14 +87,11 @@ void vfs_close(File file) {
 int32_t vfs_read(File file, void* buffer, uint32_t size) {
     OpenFileDescriptor* desc = vfs_file_find_open(file);
     if (!desc) return -1;
-    
     if (desc->in_file_system) {
         uint8_t parent_perm = 0;
-        fs_file_get_permissions(desc->address, &parent_perm);
-        
+        fs_file_get_permissions(desc->ctx, desc->address, &parent_perm);
         if (!(parent_perm & FS_PERMISSION_READ)) 
             return -1;
-        
         return fs_file_read(&desc->handle, buffer, size);
     } else {
         uint8_t parent_perm = 0;
@@ -108,10 +99,8 @@ int32_t vfs_read(File file, void* buffer, uint32_t size) {
         
         if (!(parent_perm & KMALLOC_PERMISSION_READ)) 
             return -1;
-            
-        // Bounds check for memory-backed nodes if necessary
         uint32_t node_size = kmalloc_get_size(desc->address);
-        if (desc->offset >= node_size) return 0; // EOF
+        if (desc->offset >= node_size) return 0;
         if (desc->offset + size > node_size) {
             size = node_size - desc->offset;
         }
@@ -128,11 +117,9 @@ int32_t vfs_write(File file, const void* buffer, uint32_t size) {
     
     if (desc->in_file_system) {
         uint8_t parent_perm = 0;
-        fs_file_get_permissions(desc->address, &parent_perm);
-        
+        fs_file_get_permissions(desc->ctx, desc->address, &parent_perm);
         if (!(parent_perm & FS_PERMISSION_WRITE)) 
             return -1;
-        
         return fs_file_write(&desc->handle, buffer, size);
     } else {
         uint8_t parent_perm = 0;
@@ -140,9 +127,8 @@ int32_t vfs_write(File file, const void* buffer, uint32_t size) {
         
         if (!(parent_perm & KMALLOC_PERMISSION_WRITE)) 
             return -1;
-        
         uint32_t node_size = kmalloc_get_size(desc->address);
-        if (desc->offset >= node_size) return -1; // Out of fixed space
+        if (desc->offset >= node_size) return -1;
         if (desc->offset + size > node_size) {
             size = node_size - desc->offset;
         }
@@ -175,24 +161,25 @@ uint32_t vfs_tell(File file) {
 bool vfs_exists(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) 
         return false;
-    if (!fs_file_check(address)) 
-        if (!fs_check_directory_valid(address)) 
-            return false;
-    return true;
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx) {
+        if (!fs_file_check(ctx, address)) 
+            if (!fs_check_directory_valid(ctx, address)) 
+                return false;
+        return true;
+    }
+    return kmalloc_is_valid(address);
 }
 
 bool vfs_mkdir(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     char parent_path[256];
     char target_name[16];
     
-    // Find the last occurrence of '/' to isolate the directory name
     const char* last_slash = strrchr(path, '/');
     if (last_slash == NULL) return false;
     
@@ -209,34 +196,29 @@ bool vfs_mkdir(const char* path) {
     }
     target_name[sizeof(target_name) - 1] = '\0';
     
-    // Resolve parent directory address and check if it exists
     uint32_t parent = resolve_path_to_address(parent_path);
     if (parent == 0xFFFFFFFF || parent == 0) {
-        return false; // Leading path does not exist
+        return false;
     }
     
-    // Check file system directory
-    if (fs_check_directory_valid(parent)) {
+    struct FSDeviceContext* ctx = vfs_device_get_context(parent_path);
+    if (ctx && fs_check_directory_valid(ctx, parent)) {
         uint8_t parent_perm = 0;
-        fs_file_get_permissions(parent,  &parent_perm);
+        fs_file_get_permissions(ctx, parent, &parent_perm);
         
         if (!(parent_perm & FS_PERMISSION_READ) || 
             !(parent_perm & FS_PERMISSION_WRITE)) 
             return false;
-        
-        fs_directory_create(target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, parent);
+        fs_directory_create(ctx, target_name, FS_PERMISSION_READ | FS_PERMISSION_WRITE, parent);
         return true;
     } 
-    
-    // Knode directory
     else if (knode_check_is_valid(parent)) {
         uint8_t parent_perm = 0;
-        knode_get_permissions(parent,  &parent_perm);
+        knode_get_permissions(parent, &parent_perm);
         
         if (!(parent_perm & KMALLOC_PERMISSION_READ) || 
             !(parent_perm & KMALLOC_PERMISSION_WRITE)) 
             return false;
-        
         create_knode(target_name, parent);
         return true;
     }
@@ -246,30 +228,28 @@ bool vfs_mkdir(const char* path) {
 bool vfs_remove(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
-    
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) 
         return false;
-    
     uint32_t parent = resolve_parent_path_to_address(path);
     if (parent == 0xFFFFFFFF || parent == 0) 
         return false;
     
-    if (fs_check_directory_valid(parent)) {
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, parent)) {
         uint8_t item_perm = 0;
         uint8_t parent_perm = 0;
-        fs_file_get_permissions(address, &item_perm);
-        fs_file_get_permissions(parent,  &parent_perm);
+        fs_file_get_permissions(ctx, address, &item_perm);
+        fs_file_get_permissions(ctx, parent, &parent_perm);
         
         if (!(item_perm & FS_PERMISSION_WRITE) || 
             !(parent_perm & FS_PERMISSION_READ) || 
             !(parent_perm & FS_PERMISSION_WRITE)) 
             return false;
+        fs_directory_remove_reference(ctx, parent, address);
         
-        fs_directory_remove_reference(parent, address);
-        
-        if (!fs_file_delete(address)) {
-            if (fs_directory_delete(address)) 
+        if (!fs_file_delete(ctx, address)) {
+            if (fs_directory_delete(ctx, address)) 
                 return true;
         } else {
             return true;
@@ -279,13 +259,12 @@ bool vfs_remove(const char* path) {
         uint8_t item_perm = 0;
         uint8_t parent_perm = 0;
         knode_get_permissions(address, &item_perm);
-        knode_get_permissions(parent,  &parent_perm);
+        knode_get_permissions(parent, &parent_perm);
         
         if (!(item_perm & KMALLOC_PERMISSION_WRITE) || 
             !(parent_perm & KMALLOC_PERMISSION_READ) || 
             !(parent_perm & KMALLOC_PERMISSION_WRITE)) 
             return false;
-        
         if (destroy_knode(address, parent)) 
             return true;
     }
@@ -296,29 +275,23 @@ bool vfs_remove(const char* path) {
 bool vfs_rename(const char* path, const char* name) {
     if (path == NULL || name == NULL) 
         return false;
-    
-    if (path[0] == '\0' || name[0] == '\0' || 
-        path[0] == ' ' || name[0] == ' ') 
+    if (path[0] == '\0' || name[0] == '\0' || path[0] == ' ' || name[0] == ' ') 
         return false;
-    
-    // Resolve the target file/directory's current internal address
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) 
-        return false; // Target item does not exist
+        return false;
     
-    // Resolve the parent directory's address to determine the context
     uint32_t parent_address = resolve_parent_path_to_address(path);
     if (parent_address == 0xFFFFFFFF || parent_address == 0) {
-        return false; // Unable to locate parent directory context
-    }
-    // Check if the name is taken
-    if (fs_directory_find(parent_address, name) != FS_NULL) {
         return false;
     }
     
-    // Perform the rename operation based on the architecture layer
-    if (fs_check_directory_valid(parent_address)) {
-        fs_file_set_name(address, name);
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, parent_address)) {
+        if (fs_directory_find(ctx, parent_address, name) != FS_NULL) {
+            return false;
+        }
+        fs_file_set_name(ctx, address, name);
         return true;
     } else {
         knode_set_name(address, name);
@@ -329,55 +302,48 @@ bool vfs_rename(const char* path, const char* name) {
 bool vfs_truncate(const char* path, uint32_t new_size) {
     if (path == NULL) 
         return false;
-    
     if (path[0] == '\0' || path[0] == ' ') 
         return false;
-    
-    // Resolve the target file/directory's current internal address
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) 
         return false;
     
-    fs_file_resize(address, new_size);
-    return true;
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx) {
+        fs_file_resize(ctx, address, new_size);
+        return true;
+    }
+    return false;
 }
 
 bool vfs_stat(const char* path, FSFileStats* stats) {
     if (path == NULL || path[0] == '\0' || stats == NULL) 
         return false;
-    
-    // Resolve the path to its target address
     uint32_t address = resolve_path_to_address(path);
     if (address == 0xFFFFFFFF || address == 0) 
         return false;
-    
     memset(stats, 0, sizeof(FSFileStats));
     
-    if (fs_file_check(address) || fs_check_directory_valid(address)) {
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && (fs_file_check(ctx, address) || fs_check_directory_valid(ctx, address))) {
         uint8_t fs_perm = 0;
-        fs_file_get_permissions(address, &fs_perm);
+        fs_file_get_permissions(ctx, address, &fs_perm);
         
         stats->permissions = 0;
         if (fs_perm & FS_PERMISSION_READ)  stats->permissions |= VFS_PERMISSION_READ;
         if (fs_perm & FS_PERMISSION_WRITE) stats->permissions |= VFS_PERMISSION_WRITE;
+        stats->size = fs_file_get_size(ctx, address);
         
-        // Fetch size
-        stats->size = fs_file_get_size(address);
-        
-        fs_file_get_certificate(address, &stats->certificate);
-        stats->certificate = 0;
+        fs_file_get_certificate(ctx, address, &stats->certificate);
         return true;
     } 
     else if (knode_check_is_valid(address)) {
         uint8_t k_perm = kmalloc_get_permissions(address);
-        
         stats->permissions = 0;
         if (k_perm & KMALLOC_PERMISSION_READ)  stats->permissions |= VFS_PERMISSION_READ;
         if (k_perm & KMALLOC_PERMISSION_WRITE) stats->permissions |= VFS_PERMISSION_WRITE;
-        
         stats->size = kmalloc_get_size(address);
         stats->certificate = 0;
-        
         return true;
     }
     
@@ -386,12 +352,10 @@ bool vfs_stat(const char* path, FSFileStats* stats) {
 
 uint32_t vfs_get_size(File file) {
     OpenFileDescriptor* desc = vfs_file_find_open(file);
-    if (!desc) return false;
-    // Check currently in a mounted file system
+    if (!desc) return 0;
     if (desc->in_file_system) {
-        return fs_file_get_size(desc->address);
+        return fs_file_get_size(desc->ctx, desc->address);
     } else {
         return kmalloc_get_size(desc->address);
     }
-    
 }

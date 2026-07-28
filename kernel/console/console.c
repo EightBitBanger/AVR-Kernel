@@ -31,7 +31,6 @@ uint8_t prompt_length_max;
 void console_init(char* kb_string, char* kb_prompt, uint8_t kb_string_max_length, uint8_t kb_prompt_max_length) {
     keyboard_length_max = kb_string_max_length;
     prompt_length_max = kb_prompt_max_length;
-    
     keyboard_string = kb_string;
     prompt_string = kb_prompt;
     
@@ -76,21 +75,18 @@ uint32_t console_get_directory(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.current_directory;
-    return 0;
 }
 
 uint32_t console_get_mounted_device(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.mount_device;
-    return 0;
 }
 
 uint32_t console_get_mounted_directory(void) {
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     return fs_current.mount_directory;
-    return 0;
 }
 
 void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint16_t depth) {
@@ -116,12 +112,20 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
+    struct FSPartitionBlock partition;
+    struct FSDeviceContext ctx;
+    bool fs_valid = false;
+
     if (fs_current.mount_device != FS_NULL && fs_addr != FS_NULL) {
-        while (fs_addr != FS_NULL && fs_count < 16) {
-            fs_stack[fs_count++] = fs_addr;
-            uint32_t parent = fs_directory_get_parent(fs_addr);
-            if (parent == fs_addr) break;
-            fs_addr = parent;
+        ctx = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
+        if (ctx.is_open) {
+            fs_valid = true;
+            while (fs_addr != FS_NULL && fs_count < 16) {
+                fs_stack[fs_count++] = fs_addr;
+                uint32_t parent = fs_directory_get_parent(&ctx, fs_addr);
+                if (parent == fs_addr) break;
+                fs_addr = parent;
+            }
         }
     }
     
@@ -130,13 +134,11 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
     int elements_to_skip = (total_elements > depth) ? (total_elements - depth) : 0;
     
     path[offset++] = '/';
-    
     for (int i = knode_count - 1; i >= 0; i--) {
         struct KernelDirectory obj;
         kmem_read(&obj, knode_stack[i], sizeof(obj));
         
         if (obj.name[0] == '/' && obj.name[1] == '\0') continue;
-        
         if (skipped < elements_to_skip) {
             skipped++;
             continue;
@@ -144,25 +146,25 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
         
         if (offset > 1 && offset < (path_length - 1)) 
             path[offset++] = '/';
-        
         for (int j = 0; obj.name[j] && offset < (path_length - 1); j++) 
             path[offset++] = obj.name[j];
     }
     
-    for (int i = fs_count - 2; i >= 0; i--) {
-        if (skipped < elements_to_skip) {
-            skipped++;
-            continue;
+    if (fs_valid) {
+        for (int i = fs_count - 2; i >= 0; i--) {
+            if (skipped < elements_to_skip) {
+                skipped++;
+                continue;
+            }
+            
+            struct FSFileHeader header;
+            fs_mem_read(&ctx, fs_stack[i], &header, sizeof(header));
+            
+            if (offset > 1 && offset < (path_length - 1)) 
+                path[offset++] = '/';
+            for (int j = 0; header.block.name[j] && offset < (path_length - 1); j++) 
+                path[offset++] = header.block.name[j];
         }
-        
-        struct FSFileHeader header;
-        fs_mem_read(fs_stack[i], &header, sizeof(header));
-        
-        if (offset > 1 && offset < (path_length - 1)) 
-            path[offset++] = '/';
-        
-        for (int j = 0; header.block.name[j] && offset < (path_length - 1); j++) 
-            path[offset++] = header.block.name[j];
     }
     
     if (offset >= path_length) offset = path_length - 1;
@@ -175,7 +177,6 @@ void console_process_command(char* keyboard_str) {
     char* command;
     
     parse_trim_leading_spaces(keyboard_str);
-    
     if (keyboard_str[0] == ' ' || keyboard_str[0] == '\0') 
         return;
     
@@ -189,6 +190,7 @@ void console_process_command(char* keyboard_str) {
     }
     
     command = args[0];
+    
     // Check internal commands
     for (uint32_t i = 0; i < syscall_get_count(); i++) {
         CommandFunction function = syscall_get_function(i);
@@ -197,10 +199,8 @@ void console_process_command(char* keyboard_str) {
         
         if (!(flags & KSCF_COMMAND)) 
             continue;
-        
         if (strcmp(command, name) != 0) 
             continue;
-        
         function(arg_count - 1, &args[1]);
         return;
     }
@@ -221,11 +221,9 @@ void console_process_command(char* keyboard_str) {
     strncat(file_path, command, sizeof(file_path) - strlen(file_path) - 1);
     
     args[0] = file_path;
-    
     if (syscall(SYSCALL_EXECUTE, args) != 0) {
         // Restore the original name
         args[0] = command;
-        
         // Executable not found in working dir, check each PATH entry
         struct LocalPaths fs_paths;
         kernel_get_local_paths(&fs_paths);
@@ -252,7 +250,6 @@ void console_process_command(char* keyboard_str) {
             }
             
             strncat(path_local, args[0], sizeof(path_local) - strlen(path_local) - 1);
-            
             // Swap command name with full path for execution
             char* original_command = args[0];
             args[0] = path_local;
@@ -261,7 +258,6 @@ void console_process_command(char* keyboard_str) {
             
             // Restore original command name if path execution failed
             args[0] = original_command;
-            
             fs_path = cstr_tok_next(&path_tok);
         }
         
@@ -276,7 +272,6 @@ void console_process_command(char* keyboard_str) {
 void console_print_reference_entry(uint32_t address) {
     if (address == KMALLOC_NULL) 
         return;
-    
     uint8_t flags = kmalloc_get_flags(address);
     uint8_t perms = kmalloc_get_permissions(address);
     
@@ -292,14 +287,11 @@ void console_print_reference_entry(uint32_t address) {
     
     print(permissions);
     print(kdir.name);
-    
     if (flags & KMALLOC_FLAG_DIRECTORY) {
         size_t attr_len = strlen(permissions);
         size_t name_len = strlen(kdir.name);
-        
         for (size_t i = 0; i < (display_get_columns() - (attr_len + name_len) - attr_len - 1) / 2; i++) 
             print(" ");
-        
         print(msg_dir_sym);
     }
     print("\n");
@@ -308,20 +300,23 @@ void console_print_reference_entry(uint32_t address) {
 void console_print_fs_entry(uint32_t directory_address) {
     if (directory_address == FS_NULL) 
         return;
-    
+        
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
+    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
     
-    for (uint32_t reference_index=0;;reference_index++) {
-        uint32_t reference = fs_directory_get_reference(fs_current.mount_directory, reference_index);
+    if (!device_context.is_open)
+        return;
+
+    for (uint32_t reference_index = 0;; reference_index++) {
+        uint32_t reference = fs_directory_get_reference(&device_context, directory_address, reference_index);
         if (reference == FS_NULL) 
             break;
         
         struct FSFileHeader header;
-        fs_mem_read(reference, &header, sizeof(struct FSFileHeader));
+        fs_mem_read(&device_context, reference, &header, sizeof(struct FSFileHeader));
         
         char permissions[5] = "    \0";
         if (header.block.permissions & FS_PERMISSION_EXECUTE) permissions[0] = 'x';
@@ -336,10 +331,9 @@ void console_print_fs_entry(uint32_t directory_address) {
         if (header.block.attributes & FS_ATTRIBUTE_DIRECTORY) {
             for (size_t i = 0; i < (display_get_columns() - (attr_len + name_len) - attr_len - 1) / 2; i++) 
                 print(" ");
-            
             print(msg_dir_sym);
         } else {
-            uint32_t file_size = fs_file_get_size(reference);
+            uint32_t file_size = fs_file_get_size(&device_context, reference);
             uint8_t size_len = 4;
             if (file_size > 9) size_len = 5;
             if (file_size > 99) size_len = 6;
@@ -347,7 +341,6 @@ void console_print_fs_entry(uint32_t directory_address) {
             
             for (size_t i = 0; i < (display_get_columns() - (size_len + name_len) - 1) / 2; i++) 
                 print(" ");
-            
             print_int(file_size);
         }
         print("\n");
