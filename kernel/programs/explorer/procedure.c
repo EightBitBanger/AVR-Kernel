@@ -5,78 +5,65 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/events.h>
 #include <kernel/util/string.h>
+#include <kernel/memory/malloc.h>
+#include <kernel/vfs/vfs.h>
 
 #include <kernel/programs/explorer/internal.h>
 
-#include <kernel/memory/malloc.h>
-#include <kernel/knode.h>
-
 static struct ExplorerWindowState* get_window_state(WindowHandle handle);
 
-// Helper function to handle the actual VFS transaction and UI state updating
 static void finalize_rename(WindowHandle handle, struct ExplorerWindowState* state) {
-    if (state->edit_handle == 0 || state->context_item_index == -1) {
+    if (state->edit_handle == 0 || state->context_item_index == -1) 
         return;
-    }
     
     char new_name[128];
     memset(new_name, '\0', sizeof(new_name));
     
-    // Extract string out of your updated text box component
     dwm_window_edit_get_text(handle, state->edit_handle, new_name, 127);
     
     struct Item* target_item = &state->items[state->context_item_index];
     
-    // Prevent empty inputs or unnecessary VFS tasks if the string hasn't changed
     if (strlen(new_name) > 0 && strcmp(target_item->name, new_name) != 0) {
-        
         vfs_rename(target_item->path, new_name);
     }
     
-    if (state->fs_current != 0) {
-        populate_state_from_file_system(state, state->knode_current, state->fs_current);
-    } else {
-        populate_state_from_knode(state, state->knode_current);
-    }
+    populate_state_from_vfs(state, state->full_path);
     
-    // Collapse and reset entry session states safely
     dwm_window_edit_visible(handle, state->edit_handle, false);
     state->context_item_index = -1; 
 }
 
-// Generates a unique folder or file path within the current directory context, handling index collisions gracefully
 void generate_unique_name(struct ExplorerWindowState* state, char* out_path, const char* default_name) {
     memset(out_path, '\0', 128);
     
-    // Copy the base path
     strncpy(out_path, state->full_path, 127);
     size_t base_len = strnlen(out_path, 127);
     
-    size_t def_len = strnlen(default_name, 32);
-    
-    // Try the base name first (e.g. "/new_folder" or "/new_file")
-    if (base_len + def_len < 127) {
-        strncpy(&out_path[base_len], default_name, def_len);
+    if (base_len > 0 && out_path[base_len - 1] != '/') {
+        out_path[base_len++] = '/';
+        out_path[base_len] = '\0';
     }
     
-    // If it already exists, loop and append " (X)"
+    const char* clean_def = (default_name[0] == '/') ? default_name + 1 : default_name;
+    size_t def_len = strnlen(clean_def, 32);
+    
+    if (base_len + def_len < 127) {
+        strncpy(&out_path[base_len], clean_def, def_len);
+    }
+    
     if (vfs_exists(out_path)) {
         int counter = 1;
-        
         while (1) {
-            // Reset the buffer back to the base path
             memset(&out_path[base_len], '\0', 128 - base_len);
             size_t current_len = base_len;
             
-            // Append base default name up to the starting paren
-            strncpy(&out_path[current_len], default_name, def_len);
+            strncpy(&out_path[current_len], clean_def, def_len);
             current_len += def_len;
             
             const char* p1 = " (";
             strncpy(&out_path[current_len], p1, 2);
             current_len += 2;
             
-            // Convert counter to string directly into the path buffer
             char num_buf[16];
             memset(num_buf, '\0', 16);
             itos(counter, num_buf);
@@ -85,18 +72,14 @@ void generate_unique_name(struct ExplorerWindowState* state, char* out_path, con
             strncpy(&out_path[current_len], num_buf, num_len);
             current_len += num_len;
             
-            // Append closing paren
             strncpy(&out_path[current_len], ")", 1);
             current_len += 1;
             
-            // Unique path found! Break free.
             if (!vfs_exists(out_path)) {
                 break;
             }
             
             counter++;
-            
-            // Safety guard to prevent infinite looping or buffer overruns
             if (current_len >= 120) break;
         }
     }
@@ -106,7 +89,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
     uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
     uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
     
-    // Handle clicking away from rename field
+    // Handle clicking away from rename input field
     if (state->edit_handle != 0 && state->context_item_index != -1) {
         uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
         if (max_cols == 0) max_cols = 1;
@@ -117,23 +100,19 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         uint16_t item_x = NAV_X + (col * ITEM_WIDTH);
         uint16_t item_y = NAV_Y + (row * ITEM_HEIGHT);
         
-        // Check if click is outside the bounding box of the active renaming item grid cell
         if (click_x < item_x || click_x >= (item_x + ITEM_WIDTH) ||
             click_y < item_y || click_y >= (item_y + ITEM_HEIGHT)) {
             
-            // Commit string modifications and invoke reloads
             finalize_rename(handle, state);
             dwm_window_send_event(handle, DWM_EVENT_REDRAW);
             
-            // If right-clicked somewhere else, let it proceed to make a new menu. 
-            // If it's a left click, eat the input here so it doesn't instantly click something else.
             if (!(lparam & DWM_STATE_MOUSE_BTN_RIGHT)) {
                 return; 
             }
         }
     }
     
-    // Back button hit detection
+    // Back Button Hit Test
     if (ui_button_back != NULL) {
         uint16_t btn_x1 = BACK_BTN_SPRITE_X;
         uint16_t btn_y1 = BACK_BTN_SPRITE_Y;
@@ -141,39 +120,32 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         uint16_t btn_y2 = btn_y1 + ui_button_back->height;
         
         if (click_x >= btn_x1 && click_x < btn_x2 && click_y >= btn_y1 && click_y < btn_y2) {
-            if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) return; // Ignore right click on back button
+            if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) return;
             
-            // Inside a mounted filesystem
-            if (state->fs_current != 0) {
-                uint32_t device_mount_address = knode_get_reference(state->knode_current, 0);
-                struct FSPartitionBlock partition;
-                fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
+            if (strcmp(state->full_path, "/") != 0) {
+                char parent_path[MAX_PATH_LEN];
+                strncpy(parent_path, state->full_path, MAX_PATH_LEN - 1);
+                parent_path[MAX_PATH_LEN - 1] = '\0';
                 
-                if (state->fs_current == partition.root_directory) {
-                    uint32_t parent_dir = knode_get_parent(state->knode_current);
-                    populate_state_from_knode(state, parent_dir);
-                } else {
-                    uint32_t parent_fs_dir = fs_directory_get_parent(state->fs_current);
-                    if (parent_fs_dir != FS_NULL && parent_fs_dir != 0) {
-                        populate_state_from_file_system(state, state->knode_current, parent_fs_dir);
+                char* last_slash = strrchr(parent_path, '/');
+                if (last_slash != NULL) {
+                    if (last_slash == parent_path) {
+                        parent_path[1] = '\0'; // Root "/"
                     } else {
-                        populate_state_from_file_system(state, state->knode_current, partition.root_directory);
+                        *last_slash = '\0';
                     }
+                } else {
+                    strncpy(parent_path, "/", MAX_PATH_LEN - 1);
                 }
-            } else {
-                // Kernel memory directory node structure (ram disk)
-                uint32_t parent_dir = knode_get_parent(state->knode_current);
-                if (parent_dir != KNODE_NULL && parent_dir != 0 && state->knode_current != knode_get_root()) {
-                    populate_state_from_knode(state, parent_dir);
-                }
+                
+                populate_state_from_vfs(state, parent_path);
+                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
             }
-            
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
             return;
         }
     }
     
-    // Grid item collision loop (Handles both Double-Click selection and Right-Click item menus)
+    // Grid Items Hit Detection
     uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
     if (max_cols == 0) max_cols = 1;
     
@@ -191,37 +163,21 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
             
             item_hit = true;
             
-            // Context menu for an item
             if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
                 state->context_item_index = (int32_t)i;
                 
                 const char* item_menu_options[] = { "Open", "Copy", "Rename", "Delete", "Properties" };
                 dwm_summon_context_menu(handle, click_x, click_y, item_menu_options, 5);
-                context_directive = 1;
+                state->context_directive = 1;
                 return;
             }
             
-            // Double click selection on an item
             if (lparam & DWM_STATE_MOUSE_DOUBLE_CLK) {
-                // Check if a file system is NOT currently in scope
-                if (state->fs_current == 0) {
-                    if (state->items[i].icon_index == ICON_FOLDER) {
-                        populate_state_from_knode(state, state->items[i].knode);
-                    } else if (state->items[i].icon_index == ICON_STORAGE) {
-                        uint32_t device_mount_address = knode_get_reference(state->items[i].knode, 0);
-                        struct FSPartitionBlock partition;
-                        fs_device_open(device_mount_address, &partition, FS_DEVICE_TYPE_ATA);
-                        
-                        populate_state_from_file_system(state, state->items[i].knode, partition.root_directory);
-                    } else { // Should be a file, open with notepad editor for now...
-                        
-                        kernel_event_send(KEVENT_EXECUTE, "notepad", state->full_path);
-                    }
-                } else if (state->items[i].icon_index == ICON_FOLDER) {
-                    populate_state_from_file_system(state, state->knode_current, state->items[i].fs_dir);
-                } else { // Should be a file, open with notepad editor for now...
-                    
-                    kernel_event_send(KEVENT_EXECUTE, "notepad", state->items[i].path);
+                struct Item* item = &state->items[i];
+                if (vfs_is_directory(item->path)) {
+                    populate_state_from_vfs(state, item->path);
+                } else {
+                    kernel_event_send(KEVENT_EXECUTE, "notepad", item->path);
                 }
                 
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
@@ -230,12 +186,11 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
         }
     }
     
-    // If it was a right click, but the loop above did not hit any files/folders
     if (!item_hit && (lparam & DWM_STATE_MOUSE_BTN_RIGHT)) {
         const char* window_menu_options[] = { "Refresh", "New Folder", "New File", "Paste", "Properties" };
         state->context_item_index = -1;
         dwm_summon_context_menu(handle, click_x, click_y, window_menu_options, 5);
-        context_directive = 0;
+        state->context_directive = 0;
         return;
     }
 }
@@ -304,12 +259,6 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         uint16_t string_width = length * ITEM_FONT_CHAR_WIDTH;
         int16_t text_start_x = sp_x + ((ITEM_WIDTH - string_width) / 2);
         dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_HEIGHT_OFF, state->items[i].name, item_text);
-        
-#ifdef _DEBUG_DRAW_ENABLE_
-        uint16_t tile_start_x = NAV_X + (col * ITEM_WIDTH);
-        uint16_t tile_start_y = NAV_Y + (row * ITEM_HEIGHT);
-        dwm_draw_rect(tile_start_x, tile_start_y, ITEM_WIDTH, ITEM_HEIGHT, 0xFF808080);
-#endif
     }
 }
 
@@ -335,14 +284,12 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         if (state->edit_handle != 0) {
             char ch[] = {wparam & 0xFF, '\0'};
             
-            // Handle Return / Enter Key
             if (ch[0] == 0x02) {
                 finalize_rename(handle, state);
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
             }
             
-            // Recompute the cell's base item_x so we know our centering origin
             uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
             if (max_cols == 0) max_cols = 1;
             uint16_t col = state->context_item_index % max_cols;
@@ -350,7 +297,6 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
             uint16_t item_x = NAV_X + (col * ITEM_WIDTH);
             uint16_t item_y = NAV_Y + (row * ITEM_HEIGHT) + 1;
             
-            // Handle Backspace
             if (ch[0] == 0x01) {
                 dwm_window_edit_backspace(handle, state->edit_handle);
                 
@@ -369,7 +315,6 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                 break;
             }
             
-            // Handle Character Insertion
             dwm_window_edit_insert(handle, state->edit_handle, ch);
             
             size_t current_len = dwm_window_edit_get_len(handle, state->edit_handle);
@@ -405,51 +350,36 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
         return;
         
     case DWM_EVENT_REFRESH:
-        if (state->fs_current != 0) {
-            populate_state_from_file_system(state, state->knode_current, state->fs_current);
-        } else {
-            populate_state_from_knode(state, state->knode_current);
-        }
-        
+        populate_state_from_vfs(state, state->full_path);
         dwm_window_send_event(handle, DWM_EVENT_REDRAW);
         break;
         
     case DWM_EVENT_CONTEXT_MENU:
-        switch (context_directive) {
-        case 0:  // Open hit
+        switch (state->context_directive) {
+        case 0:  // Window context menu
             switch (wparam) {
             case 0:
-                dwm_summon_message_box("menu click", "refresh");
+                populate_state_from_vfs(state, state->full_path);
+                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
                 
             case 1: { // New Folder
                 char new_folder_path[128];
-                generate_unique_name(state, new_folder_path, "/new_folder");
+                generate_unique_name(state, new_folder_path, "new_folder");
                 vfs_mkdir(new_folder_path);
-                
-                if (state->fs_current != 0) {
-                    populate_state_from_file_system(state, state->knode_current, state->fs_current);
-                } else {
-                    populate_state_from_knode(state, state->knode_current);
-                }
-                
+                populate_state_from_vfs(state, state->full_path);
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
             }
                 
             case 2: { // New File
                 char new_file_path[128];
-                generate_unique_name(state, new_file_path, "/new_file");
+                generate_unique_name(state, new_file_path, "new_file");
                 
                 File file = vfs_open(new_file_path, VFS_OPEN_CREATE);
                 vfs_close(file);
                 
-                if (state->fs_current != 0) {
-                    populate_state_from_file_system(state, state->knode_current, state->fs_current);
-                } else {
-                    populate_state_from_knode(state, state->knode_current);
-                }
-                
+                populate_state_from_vfs(state, state->full_path);
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
             }
@@ -464,20 +394,27 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
             }
             break;
             
-        case 1:  // Item hit
+        case 1:  // Item context menu
             switch (wparam) {
-            case 0:
-                dwm_summon_message_box("menu click", "open");
+            case 0: { // Open
+                struct Item* clicked_item = &state->items[state->context_item_index];
+                if (vfs_is_directory(clicked_item->path)) {
+                    populate_state_from_vfs(state, clicked_item->path);
+                    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+                } else {
+                    kernel_event_send(KEVENT_EXECUTE, "notepad", clicked_item->path);
+                }
                 state->context_item_index = -1;
                 break;
+            }
             case 1:
                 dwm_summon_message_box("menu click", "copy");
                 state->context_item_index = -1;
                 break;
-            case 2: // Rename file/folder
+            case 2: // Rename
                 if (state->edit_handle != 0 && state->context_item_index != -1) {
                     uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
-                    if (max_cols == 1) max_cols = 1;
+                    if (max_cols == 0) max_cols = 1;
                     struct Item* clicked_item = &state->items[state->context_item_index];
     
                     uint16_t col = state->context_item_index % max_cols;
@@ -502,30 +439,24 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                     dwm_window_edit_visible(handle, state->edit_handle, true);
                     
                     clicked_item->name[0] = '\0';
-                    
                     dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 }
                 break;
-            case 3: {
+            case 3: { // Delete
                 struct Item* clicked_item = &state->items[state->context_item_index];
-                
                 dwm_summon_dialog_delete("Deletion request", clicked_item->path, handle, 1);
-                
                 state->context_item_index = -1;
                 break;
-                }
-            case 4: {
+            }
+            case 4: { // Properties
                 struct Item* clicked_item = &state->items[state->context_item_index];
-                
                 dwm_summon_properties("Properties", clicked_item->name, clicked_item->path, clicked_item->icon_index);
-                
                 state->context_item_index = -1;
                 break;
-                }
+            }
             }
             break;
         }
-        
         return;
     }
 }

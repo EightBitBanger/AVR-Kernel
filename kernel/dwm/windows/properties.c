@@ -323,23 +323,23 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                     uint32_t total = stoi(total_str);
                     
                     // Prevent division by zero if total space is reported as 0
-                    if (total > 0) {
-                        // Calculate used percentage (0 to 100)
-                        uint32_t used_percent = (used * 100) / total;
-                        
-                        // Ensure it doesn't accidentally exceed 100 due to rounding or weird data
-                        if (used_percent > 100) {
-                            used_percent = 100;
-                        }
-                        
-                        uint32_t free_percent = 100 - used_percent;
-                        
-                        // Draw usage pie dynamically
-                        uint32_t values[] = { used_percent, free_percent };
-                        uint32_t colors[] = { 0xFFF700F7, 0xFF0000F6 }; // Used color, Free color
-                        
-                        draw_pie_chart_isometric(150, 250, 45, 10, values, colors, sizeof(values) / sizeof(uint32_t));
+                    if (total == 0) 
+                        total = 1;
+                    // Calculate used percentage (0 to 100)
+                    uint32_t used_percent = (used * 100) / total;
+                    
+                    // Ensure it doesn't accidentally exceed 100 due to rounding or weird data
+                    if (used_percent > 100) {
+                        used_percent = 100;
                     }
+                    
+                    uint32_t free_percent = 100 - used_percent;
+                    
+                    // Draw usage pie dynamically
+                    uint32_t values[] = { used_percent, free_percent };
+                    uint32_t colors[] = { 0xFFF700F7, 0xFF0000F6 }; // Used color, Free color
+                    
+                    draw_pie_chart_isometric(150, 250, 45, 10, values, colors, sizeof(values) / sizeof(uint32_t));
                 } else { 
                     char* size_str = (char*)dwm_window_resource_get_by_name(handle, "size");
                     dwm_draw_text(15, 150, "Size", color_text_primary);

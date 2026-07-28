@@ -99,19 +99,16 @@ void kernel_event_update(void) {
         }
         
         // Refresh the desktop window manager
-        /*
         if (event->flags & KEVENT_DWM_REFRESH) {
             event->flags &= ~KEVENT_DWM_REFRESH;
             
-            dwm_event_send(DWM_EVENT_REFRESH);
-            dwm_post_message();
+            dwm_post_message(dwm_window_get_focus(), DWM_EVENT_REFRESH, 0, 0);
             
             // Sweep up this old event
             event->flags |= KEVENT_DEAD;
             
             break; // Stop processing further events
         }
-        */
         
         // Unknown event
         event->flags |= KEVENT_DEAD;
