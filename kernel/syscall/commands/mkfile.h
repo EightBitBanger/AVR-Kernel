@@ -6,40 +6,29 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_mk(int arg_count, char** args) {
-    
-    // TODO convert to VFS functions
-    
     if (arg_count == 0) 
         return 1;
     
-    /*
-    for (unsigned int i=0; i < arg_count; i++) {
-        print(args[i]);
-        print("\n");
-    }
-    return 0;
-    */
+    char path[256];
+    memset(path, '\0', sizeof(path));
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
     
-    if (fs_current.mount_device == FS_NULL) 
-        return 2;
+    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    strncat(path, "/", 256);
+    strncat(path, args[0], 256);
     
-    struct FSPartitionBlock partition;
-    
-    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
-    if (device_context.is_open == false) 
-        return 3;
-    
-    uint32_t file_size = 0;
-    if (arg_count == 2) file_size = stoi(args[1]);
-    
-    uint32_t file_address = fs_file_create(args[0], FS_PERMISSION_READ | FS_PERMISSION_WRITE, file_size, fs_current.mount_directory);
-    if (file_address == FS_NULL) 
+    File file = vfs_open(path, VFS_OPEN_CREATE | VFS_OPEN_WRITE);
+    if (file == VFS_INVALID_FILE) 
         return 4;
     
-    fs_bitmap_flush();
+    if (arg_count >= 2) {
+        uint32_t file_size = stoi(args[1]);
+        vfs_truncate(args[0], file_size);
+    }
+    
+    vfs_close(file);
     return 0;
 }
 

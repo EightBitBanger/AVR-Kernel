@@ -6,38 +6,36 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_type(int arg_count, char** args) {
-    
-    // TODO convert to VFS functions
-    
     if (arg_count == 0) 
         return 1;
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
+    char path[256];
+    memset(path, '\0', sizeof(path));
     
-    if (fs_current.mount_directory == FS_NULL) 
-        return 1;
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
     
-    uint32_t address = fs_directory_find(fs_current.mount_directory, args[0]);
-    if (address == FS_NULL) 
+    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    strncat(path, "/", 256);
+    strncat(path, args[0], 256);
+    
+    File file = vfs_open(path, VFS_OPEN_READ);
+    if (file == VFS_INVALID_FILE) 
         return 2;
     
-    FileHandle file;
-    if (fs_file_open(&file, address, FS_FILE_MODE_READ) == true) {
-        uint32_t file_size = fs_file_get_size(address);
+    uint32_t file_size = vfs_get_size(file);
+    for (uint32_t i = 0; i < file_size; i++) {
+        char ch[2] = {0, '\0'};
+        if (vfs_read(file, &ch[0], 1) <= 0) 
+            break;
         
-        for (uint32_t i=0; i < file_size; i++) {
-            char ch[2] = {0, '\0'};
-            fs_file_read(&file, &ch[0], 1);
-            
-            if (ch[0] == '\0') 
-                break;
-            
-            print(ch);
-        }
+        if (ch[0] == '\0') 
+            break;
         
-        fs_file_close(&file);
+        print(ch);
     }
+    
+    vfs_close(file);
     return 0;
 }
 

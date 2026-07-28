@@ -6,30 +6,15 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_rename(int arg_count, char** args) {
-    
-    // TODO convert to VFS functions
-    
     if (arg_count < 2) 
         return 1;
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
-    
-    if (fs_current.mount_device == FS_NULL) 
-        return 2;
-    
-    struct FSPartitionBlock partition;
-    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
-    if (device_context.is_open == false) 
-        return 3;
-    
-    uint32_t target_address = fs_directory_find(fs_current.mount_directory, args[0]);
-    if (target_address == FS_NULL) 
+    if (!vfs_exists(args[0])) 
         return 4;
     
-    fs_file_set_name(target_address, args[1]);
+    if (!vfs_rename(args[0], args[1])) 
+        return 2;
     
-    fs_bitmap_flush();
     return 0;
 }
 

@@ -10,7 +10,6 @@
 #include <kernel/console/console_const.h>
 
 int call_routine_chdir(int arg_count, char** args) {
-    /*
     if (arg_count < 1 || args[0] == NULL || args[0][0] == '\0') 
         return -1; // No path provided
     
@@ -136,7 +135,6 @@ int call_routine_chdir(int arg_count, char** args) {
     path_buf[len + 1] = '\0';
     
     console_prompt_set_string(path_buf);
-    */
     return 0;
 }
 

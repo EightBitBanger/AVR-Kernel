@@ -300,7 +300,7 @@ uint32_t knode_get_reference(uint32_t directory_address, uint32_t index) {
     index -= directory.size;
     uint32_t current_extent_address = directory.next;
     
-    while (current_extent_address != 0) {
+    while (current_extent_address != 0 && current_extent_address != KMALLOC_NULL) {
         struct KernelDirectoryExtent extent;
         kmem_read(&extent, current_extent_address, sizeof(struct KernelDirectoryExtent));
         

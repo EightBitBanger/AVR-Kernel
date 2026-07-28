@@ -6,6 +6,8 @@
 
 // Strings
 
+int snprintf(char *str, size_t size, const char *format, ...);
+
 size_t strlen(const char* str);
 size_t strnlen(const char *str, size_t maxlen);
 

@@ -29,4 +29,8 @@ double log(double x);
 double exp(double x);
 double pow(double base, double exponent);
 
+uint64_t __umoddi3(uint64_t num, uint64_t den);
+uint64_t __udivdi3(uint64_t num, uint64_t den);
+uint64_t __udivmoddi4(uint64_t num, uint64_t den, uint64_t *rem);
+
 #endif

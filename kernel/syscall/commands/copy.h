@@ -9,69 +9,76 @@ int call_routine_copy(int arg_count, char** args) {
     if (arg_count < 2) 
         return 1;
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
+    char path[256];
+    memset(path, '\0', sizeof(path));
     
-    if (fs_current.mount_directory == FS_NULL) 
-        return 2;
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
     
-    uint32_t source_address = fs_directory_find(fs_current.mount_directory, args[0]);
-    uint32_t destination_address = fs_directory_find(fs_current.mount_directory, args[1]);
-    if (source_address == FS_NULL) 
+    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    strncat(path, "/", 256);
+    strncat(path, args[0], 256);
+    
+    if (!vfs_exists(path)) 
         return 3; // Source does not exist
     
-    if (fs_check_directory_valid(source_address)) 
+    if (vfs_is_directory(path)) 
         return 4; // Source is a directory
     
-    uint32_t source_size = fs_file_get_size(source_address);
+    char dest_path[256];
+    strncpy(dest_path, args[1], sizeof(dest_path) - 1);
+    dest_path[sizeof(dest_path) - 1] = '\0';
     
-    // Copy to a directory
-    if (destination_address != FS_NULL) {
-        if (fs_check_directory_valid(destination_address)) {
-            uint32_t check_address = fs_directory_find(destination_address, args[0]);
-            if (check_address != FS_NULL) 
-                return 6; // File exists in destination directory
+    if (vfs_exists(args[1])) {
+        if (vfs_is_directory(args[1])) {
+            const char* filename = strrchr(path, '/');
+            if (filename == NULL) {
+                filename = path;
+            } else {
+                filename++; // Skip '/'
+            }
             
-            // Create file in destination directory
+            size_t dest_len = strlen(dest_path);
+            if (dest_len > 0 && dest_path[dest_len - 1] != '/') {
+                strcat(dest_path, "/");
+            }
+            strcat(dest_path, filename);
             
-            destination_address = fs_file_create(args[0], FS_PERMISSION_READ | FS_PERMISSION_WRITE, source_size, destination_address);
-            
+            if (vfs_exists(dest_path)) {
+                return 6; // File already exists in destination directory
+            }
         } else {
-            return 5; // File already exists
+            return 5; // Destination file already exists
         }
-    } else {
-        destination_address = fs_file_create(args[1], FS_PERMISSION_READ | FS_PERMISSION_WRITE, source_size, fs_current.mount_directory);
     }
     
-    if (destination_address == FS_NULL) 
+    File src_file = vfs_open(path, VFS_OPEN_READ);
+    if (src_file == VFS_INVALID_FILE) 
         return 3;
     
-    // Copy to the new file
-    uint8_t perm;
-    fs_file_get_permissions(source_address, &perm);
-    fs_file_set_permissions(destination_address, perm);
-    
-    FileHandle source;
-    FileHandle destination;
-    
-    if (fs_file_open(&source, source_address, FS_FILE_MODE_READ) == true && 
-        fs_file_open(&destination, destination_address, FS_FILE_MODE_WRITE) == true) {
-        
-        for (uint32_t i=0; i < source_size; i++) {
-            uint8_t byte;
-            
-            fs_file_read(&source, &byte, 1);
-            fs_file_write(&destination, &byte, 1);
-        }
-    } else {
-        fs_bitmap_flush();
-        return 4;
+    File dst_file = vfs_open(dest_path, VFS_OPEN_CREATE | VFS_OPEN_WRITE);
+    if (dst_file == VFS_INVALID_FILE) {
+        vfs_close(src_file);
+        return 3;
     }
     
-    if (source.is_open) fs_file_close(&source);
-    if (destination.is_open) fs_file_close(&destination);
+    uint32_t source_size = vfs_get_size(src_file);
+    for (uint32_t i = 0; i < source_size; i++) {
+        uint8_t byte;
+        if (vfs_read(src_file, &byte, 1) <= 0) 
+            break;
+        vfs_write(dst_file, &byte, 1);
+    }
     
-    fs_bitmap_flush();
+    vfs_close(src_file);
+    vfs_close(dst_file);
+    
+    // Preserve source permissions onto destination file
+    uint8_t perm;
+    if (vfs_get_permissions(path, &perm)) {
+        vfs_set_permissions(dest_path, perm);
+    }
+    
     return 0;
 }
 

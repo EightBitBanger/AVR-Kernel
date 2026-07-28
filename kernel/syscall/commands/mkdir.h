@@ -9,22 +9,19 @@ int call_routine_mkdir(int arg_count, char** args) {
     if (arg_count == 0) 
         return 1;
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
+    char path[256];
+    memset(path, '\0', sizeof(path));
     
-    if (fs_current.mount_device == FS_NULL) 
-        return 2;
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
     
-    struct FSPartitionBlock partition;
-    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
-    if (device_context.is_open == false) 
-        return 3;
+    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    strncat(path, "/", 256);
+    strncat(path, args[0], 256);
     
-    uint32_t directory_address = fs_directory_create(args[0], FS_PERMISSION_READ | FS_PERMISSION_WRITE, fs_current.mount_directory);
-    if (directory_address == FS_NULL) 
+    if (!vfs_mkdir(path)) 
         return 4;
     
-    fs_bitmap_flush();
     return 0;
 }
 

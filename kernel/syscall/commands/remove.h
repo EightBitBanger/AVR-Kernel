@@ -6,39 +6,24 @@
 #include <kernel/fs/fs.h>
 
 int call_routine_rm(int arg_count, char** args) {
-    
-    // TODO convert to VFS functions
-    
     if (arg_count == 0) 
         return 1;
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
+    char path[256];
+    memset(path, '\0', sizeof(path));
     
-    if (fs_current.mount_device == FS_NULL) 
-        return 2;
+    struct WorkingDirectory workingDirectory;
+    kernel_get_working_directory(&workingDirectory);
     
-    struct FSPartitionBlock partition;
-    struct FSDeviceContext device_context = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
-    if (device_context.is_open == false) 
-        return 3;
+    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
+    strncat(path, "/", 256);
+    strncat(path, args[0], 256);
     
-    uint32_t address = fs_directory_find(fs_current.mount_directory, args[0]);
-    if (address == FS_NULL) 
+    if (!vfs_exists(path)) 
         return 4;
     
-    uint8_t attributes;
-    fs_file_get_attributes(address, &attributes);
-    
-    if (attributes & FS_ATTRIBUTE_DIRECTORY) {
-        uint32_t reference_count = fs_directory_get_reference_count(address);
-        if (reference_count != 0) 
-            return 5;
-    }
-    
-    fs_directory_remove_reference(fs_current.mount_directory, address);
-    fs_free(address);
-    fs_bitmap_flush();
+    if (!vfs_remove(path)) 
+        return 5;
     
     return 0;
 }

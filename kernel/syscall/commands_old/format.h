@@ -21,7 +21,6 @@ static const char* msg_quick_progress    = "50%";
 static const char* msg_final_progress    = "100%\n\n";
 
 int call_routine_format(int arg_count, char** args) {
-    /*
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
@@ -168,7 +167,6 @@ int call_routine_format(int arg_count, char** args) {
     
     display_cursor_set_position(0);
     print(msg_final_progress);
-    */
     return 0;
 }
 
