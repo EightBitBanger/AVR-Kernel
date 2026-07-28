@@ -21,6 +21,9 @@ struct FSDeviceContext {
     
     uint32_t frame_offset;
     uint8_t  frame_bitmap[BITMAP_FRAME_SIZE];
+    
+    uint32_t sector_frame;
+    bool sector_dirty;
 };
 
 struct __attribute__((packed)) FSDeviceHeader {

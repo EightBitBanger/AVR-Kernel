@@ -8,36 +8,34 @@ typedef struct {
     uint32_t position;
     uint8_t  mode;
     uint8_t  is_open;
+    struct FSDeviceContext* ctx;
 } FileHandle;
 
-bool fs_file_check(uint32_t address);
+bool fs_file_check(struct FSDeviceContext* ctx, uint32_t address);
+uint32_t fs_file_create(struct FSDeviceContext* ctx, const char* name, uint8_t permissions, uint32_t size, uint32_t parent_directory);
+bool fs_file_delete(struct FSDeviceContext* ctx, uint32_t address);
 
-uint32_t fs_file_create(const char* name, uint8_t permissions, uint32_t size, uint32_t parent_directory);
-bool fs_file_delete(uint32_t address);
+bool fs_file_resize(struct FSDeviceContext* ctx, uint32_t address, uint32_t new_size);
+uint32_t fs_file_get_size(struct FSDeviceContext* ctx, uint32_t address);
+bool fs_file_get_name(struct FSDeviceContext* ctx, uint32_t address, char* filename);
+bool fs_file_set_name(struct FSDeviceContext* ctx, uint32_t address, const char* filename);
 
-bool fs_file_resize(uint32_t address, uint32_t new_size);
+bool fs_file_get_permissions(struct FSDeviceContext* ctx, uint32_t address, uint8_t* permissions);
+bool fs_file_set_permissions(struct FSDeviceContext* ctx, uint32_t address, uint8_t permissions);
 
-uint32_t fs_file_get_size(uint32_t address);
-bool fs_file_get_name(uint32_t address, char* filename);
-bool fs_file_set_name(uint32_t address, const char* filename);
+bool fs_file_get_attributes(struct FSDeviceContext* ctx, uint32_t address, uint8_t* attributes);
+bool fs_file_set_attributes(struct FSDeviceContext* ctx, uint32_t address, uint8_t attributes);
 
-bool fs_file_get_permissions(uint32_t address, uint8_t* permissions);
-bool fs_file_set_permissions(uint32_t address, uint8_t permissions);
-
-bool fs_file_get_attributes(uint32_t address, uint8_t* attributes);
-bool fs_file_set_attributes(uint32_t address, uint8_t attributes);
-
-bool fs_file_open(FileHandle* file, uint32_t address, uint8_t mode);
+bool fs_file_open(FileHandle* file, struct FSDeviceContext* ctx, uint32_t address, uint8_t mode);
 void fs_file_close(FileHandle* file);
 
 uint32_t fs_file_read(FileHandle* file, void* destination, uint32_t size);
 uint32_t fs_file_write(FileHandle* file, const void* source, uint32_t size);
 
-bool fs_file_get_certificate(uint32_t address, uint32_t* cert);
-bool fs_file_set_certificate(uint32_t address, uint32_t cert);
-
-bool fs_file_get_security_flag(uint32_t address, uint8_t* cert);
-bool fs_file_set_security_flag(uint32_t address, uint32_t security);
+bool fs_file_get_certificate(struct FSDeviceContext* ctx, uint32_t address, uint32_t* cert);
+bool fs_file_set_certificate(struct FSDeviceContext* ctx, uint32_t address, uint32_t cert);
+bool fs_file_get_security_flag(struct FSDeviceContext* ctx, uint32_t address, uint8_t* cert);
+bool fs_file_set_security_flag(struct FSDeviceContext* ctx, uint32_t address, uint32_t security);
 
 uint32_t fs_file_seek(FileHandle* file, uint32_t position);
 uint32_t fs_file_tell(const FileHandle* file);

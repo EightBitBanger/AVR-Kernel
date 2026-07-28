@@ -2,12 +2,13 @@
 #define BASE_BITMAP_H
 
 #include <kernel/fs/config.h>
+#include <kernel/fs/basefs/structs.h>
 
-bool fs_bitmap_get(uint32_t index);
-void fs_bitmap_set(uint32_t index);
-void fs_bitmap_clear(uint32_t index);
+bool fs_bitmap_get(struct FSDeviceContext* ctx, uint32_t index);
+void fs_bitmap_set(struct FSDeviceContext* ctx, uint32_t index);
+void fs_bitmap_clear(struct FSDeviceContext* ctx, uint32_t index);
 
-void fs_bitmap_sync(uint32_t bit_index);
-void fs_bitmap_flush(void);
+void fs_bitmap_sync(struct FSDeviceContext* ctx, uint32_t bit_index);
+void fs_bitmap_flush(struct FSDeviceContext* ctx);
 
 #endif

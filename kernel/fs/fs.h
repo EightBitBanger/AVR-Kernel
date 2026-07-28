@@ -20,35 +20,21 @@
 #define FS_INVALID_FRAME        0xFFFFFFFFUL
 
 void fs_init(void);
-
-// Initiate the device to a given size
 void fs_device_format(uint32_t device_address, uint32_t capacity_max, uint32_t sector_size, uint16_t device_type);
 void fs_device_format_low(uint32_t device_address, uint32_t capacity);
 
-// Open a device for IO operations
 struct FSDeviceContext fs_device_open(uint32_t device_address, struct FSPartitionBlock* partition, uint16_t device_type);
-
-// Get the number of used bytes on this device
 uint32_t fs_get_used_bytes(struct FSDeviceContext* device_context);
-
-// Get the device partition block
 uint8_t fs_device_get_partition(struct FSDeviceContext* device_context, struct FSPartitionBlock* part);
 
-// Find raw allocations
-uint32_t fs_find_next(uint32_t previous_address);
-
-// Bitmap allocation tracking
-void fs_bitmap_flush(void);
+uint32_t fs_find_next(struct FSDeviceContext* device_context, uint32_t previous_address);
+void fs_bitmap_flush(struct FSDeviceContext* ctx);
 uint32_t fs_bitmap_get_size(void);
 
-// Low level allocation
-uint32_t fs_alloc(uint32_t size);
-void fs_free(uint32_t address);
+uint32_t fs_alloc(struct FSDeviceContext* device_context, uint32_t size);
+void fs_free(struct FSDeviceContext* device_context, uint32_t address);
+bool fs_check_directory_valid(struct FSDeviceContext* ctx, uint32_t address);
 
-// Check if the directory is valid
-bool fs_check_directory_valid(uint32_t address);
-
-// Flush the cache back to disk
-void fs_cache_sync(void);
+void fs_cache_sync(struct FSDeviceContext* ctx);
 
 #endif

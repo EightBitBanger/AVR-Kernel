@@ -261,7 +261,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         }
     }
     
-    
     //
     // Load the registry
     
@@ -305,7 +304,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         
     }
     
-    
     //
     // TODOs
     
@@ -320,7 +318,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // TODO key combination binding
     
-    
+    // TODO Temporary scratch buffer (clipboard)
     
     //detach();
     

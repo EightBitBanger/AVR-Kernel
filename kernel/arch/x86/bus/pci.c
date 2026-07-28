@@ -376,7 +376,7 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                                     }
                                 }
                             }
-                            /*
+                            
                             if (active_port != NULL) {
                                 char device_name[] = "ahci ";
                                 device_name[4] = '0' + storage_device_index++;
@@ -386,11 +386,6 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                                 
                                 // Read LBA sector 0
                                 if (ahci_read_sectors(active_port, 0, 1, (uint8_t*)block_device)) {
-                                    uint32_t mount_ptr = create_knode(device_name, mnt_directory);
-                                    kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
-                                    
-                                    //struct FSPartitionBlock part;
-                                    //struct FSDeviceContext context = fs_device_open(block_device, &part, FS_DEVICE_TYPE_ATA);
                                     
                                     uint32_t mount_ptr = create_knode(device_name, mnt_directory);
                                     kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
@@ -400,6 +395,7 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                                     
                                     uint32_t device_context = (uint32_t)malloc(sizeof(struct FSDeviceContext));
                                     memcpy((void*)device_context, &context, sizeof(struct FSDeviceContext));
+                                    
                                     
                                     knode_add_reference(mount_ptr, block_device);
                                     knode_add_reference(mount_ptr, device_context);
@@ -415,8 +411,6 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                                 }
                                 
                             }
-                            */
-                            
                             
                         }
                     }
