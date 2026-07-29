@@ -22,7 +22,7 @@ int call_routine_copy(int arg_count, char** args) {
     if (!vfs_exists(path)) 
         return 3; // Source does not exist
     
-    if (vfs_is_directory(path)) 
+    if (vfs_directory_check(path)) 
         return 4; // Source is a directory
     
     char dest_path[256];
@@ -30,7 +30,7 @@ int call_routine_copy(int arg_count, char** args) {
     dest_path[sizeof(dest_path) - 1] = '\0';
     
     if (vfs_exists(args[1])) {
-        if (vfs_is_directory(args[1])) {
+        if (vfs_directory_check(args[1])) {
             const char* filename = strrchr(path, '/');
             if (filename == NULL) {
                 filename = path;

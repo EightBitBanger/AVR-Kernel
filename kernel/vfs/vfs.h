@@ -53,7 +53,7 @@ bool vfs_stat(const char* path, FSFileStats* stats);
 
 bool vfs_set_permissions(const char* path, uint8_t perm);
 bool vfs_get_permissions(const char* path, uint8_t* perm);
-bool vfs_is_directory(const char* path);
+bool vfs_directory_check(const char* path);
 bool vfs_directory_check_mounted(const char* path);
 
 // Cryptography

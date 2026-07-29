@@ -19,27 +19,30 @@ File next_unique_id = 1;
 bool vfs_is_directory(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
+    
+    if (vfs_directory_check_mounted(path)) 
+        return true;
+    
     uint32_t address = resolve_path_to_address(path);
-    if (address == KNODE_NULL || address == FS_NULL) {
+    if (address == KNODE_NULL || address == FS_NULL) 
         return false;
-    }
     
     if (kmalloc_is_valid(address)) {
         uint8_t k_flags = kmalloc_get_flags(address);
-        if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) {
+        if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) 
             return true;
-        }
     }
     
     struct FSDeviceContext* ctx = vfs_device_get_context(path);
-    if (ctx && fs_check_directory_valid(ctx, address)) {
+    if (ctx && fs_check_directory_valid(ctx, address)) 
         return true;
-    }
     
     return false;
 }
 
 bool vfs_directory_check(const char* path) {
+    return vfs_is_directory(path);
+    
     if (path == NULL || path[0] == '\0') 
         return false;
     uint32_t address = resolve_path_to_address(path);

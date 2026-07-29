@@ -398,6 +398,46 @@ uint32_t stou(const char* str) {
     return result;
 }
 
+void itos_commas(uint32_t val, char* dest) {
+    char raw[32];
+    itos(val, raw);
+    
+    int len = (int)strlen(raw);
+    if (len == 0) {
+        dest[0] = '\0';
+        return;
+    }
+    
+    int comma_count = (len - 1) / 3;
+    int new_len = len + comma_count;
+    
+    dest[new_len] = '\0';
+    
+    int src_i = len - 1;
+    int dest_i = new_len - 1;
+    int digit_count = 0;
+    
+    while (src_i >= 0) {
+        if (digit_count > 0 && digit_count % 3 == 0) {
+            dest[dest_i--] = ',';
+        }
+        dest[dest_i--] = raw[src_i--];
+        digit_count++;
+    }
+}
+
+uint32_t stoi_commas(const char* str) {
+    if (!str) return 0;
+    uint32_t val = 0;
+    while (*str) {
+        if (*str >= '0' && *str <= '9') {
+            val = val * 10 + (*str - '0');
+        }
+        str++;
+    }
+    return val;
+}
+
 void u8tox(uint8_t value, char* dest) {
     char buffer[3]; // 2 digits max for uint8_t + null terminator
     int32_t i = 0;

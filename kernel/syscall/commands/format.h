@@ -2,6 +2,9 @@
 #define SYSCALL_FORMAT_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
+#include <kernel/knode.h>
 #include <kernel/console/display.h>
 #include <kernel/fs/fs.h>
 
@@ -21,20 +24,44 @@ static const char* msg_quick_progress    = "50%";
 static const char* msg_final_progress    = "100%\n\n";
 
 int call_routine_format(int arg_count, char** args) {
-    /*
     struct WorkingDirectory fs_current;
     kernel_get_working_directory(&fs_current);
     
     uint32_t total_capacity = 0;
-    uint32_t sector_size    = 32UL;
+    uint32_t sector_size    = 512UL; // Default to standard 512-byte sector size
     uint32_t device_address = fs_current.mount_device;
-    uint8_t quick_format = 0;
+    uint8_t quick_format    = 0;
+    uint16_t device_type    = FS_DEVICE_TYPE_ATA;
     
-    if (device_address == FS_NULL) {
+    if (device_address == FS_NULL || device_address == 0) {
         print(msg_unmounted);
         return 1;
     }
     
+    // Retrieve active mount context pointer to detect device type (AHCI vs ATA)
+    struct FSDeviceContext* active_ctx = (struct FSDeviceContext*)knode_get_reference(fs_current.current_directory, 1);
+    if (active_ctx != NULL && active_ctx->device_type != 0) {
+        device_type = active_ctx->device_type;
+    }
+    
+    // Probe existing device partition block using the detected device context type
+    struct FSPartitionBlock existing_part;
+    struct FSDeviceContext temp_ctx;
+    memset(&temp_ctx, 0, sizeof(struct FSDeviceContext));
+    temp_ctx.device_address = device_address;
+    temp_ctx.device_type    = device_type;
+    temp_ctx.sector_frame   = FS_INVALID_FRAME;
+    temp_ctx.frame_offset   = FS_INVALID_FRAME;
+    
+    if (fs_device_get_partition(&temp_ctx, &existing_part) == 0) {
+        if (existing_part.total_size > 0) {
+            total_capacity = existing_part.total_size;
+        }
+        if (existing_part.sector_size > 0) {
+            sector_size = existing_part.sector_size;
+        }
+    }
+
     for (int i = 0; i < arg_count; i++) {
         char* argument = args[i];
         
@@ -50,7 +77,6 @@ int call_routine_format(int arg_count, char** args) {
         
         // Quick format request (e.g., "-q")
         if (flag_type == 'q') {
-            // Ensure there are no trailing characters after '-q'
             if (argument[2] != '\0') {
                 print(msg_unknown_arg);
                 print(argument);
@@ -61,7 +87,6 @@ int call_routine_format(int arg_count, char** args) {
         }
         // Handle flags that require numeric values (-k, -M, -s)
         else if (flag_type == 'k' || flag_type == 'M' || flag_type == 's') {
-            // Ensure there is actually a value string following the flag character
             if (argument[2] == '\0') {
                 print(msg_missing_val);
                 print(argument);
@@ -69,7 +94,6 @@ int call_routine_format(int arg_count, char** args) {
                 return 2;
             }
 
-            // Inlined parse_int logic
             uint32_t value = 0;
             const char* str = &argument[2];
             const char* startptr = str;
@@ -104,7 +128,6 @@ int call_routine_format(int arg_count, char** args) {
                 return 2;
             }
         }
-        // If it didn't match any valid flag type
         else {
             print(msg_unknown_arg);
             print(argument);
@@ -125,6 +148,14 @@ int call_routine_format(int arg_count, char** args) {
     print_int(sector_size);
     print(msg_sector_size);
     
+    // Create base context required for raw sector reads/writes
+    struct FSDeviceContext ctx;
+    memset(&ctx, 0, sizeof(struct FSDeviceContext));
+    ctx.device_address = device_address;
+    ctx.device_type    = device_type;
+    ctx.sector_frame   = FS_INVALID_FRAME;
+    ctx.frame_offset   = FS_INVALID_FRAME;
+    
     if (!quick_format) {
         print(msg_init_progress);
         
@@ -143,32 +174,39 @@ int call_routine_format(int arg_count, char** args) {
                     print(msg_percent);
                 }
             }
-            fs_writeb(address_range, 0x00);
+            fs_writeb(&ctx, address_range, 0x00);
         }
+        fs_cache_sync(&ctx);
     } else {
         print(msg_quick_progress);
     }
     
-    fs_device_format(device_address, total_capacity, sector_size, FS_DEVICE_TYPE_ATA);
+    // Format device low-level headers & bitmap structures using the active controller type
+    fs_device_format(device_address, total_capacity, sector_size, device_type);
     
+    // Open formatted filesystem context
     struct FSPartitionBlock partition;
-    fs_device_open(device_address, &partition, FS_DEVICE_TYPE_ATA);
+    ctx = fs_device_open(device_address, &partition, device_type);
     
-    uint32_t root_directory = fs_directory_create("root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
+    // Create root directory with context reference
+    uint32_t root_directory = fs_directory_create(&ctx, "root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
     
     partition.root_directory = root_directory;
     
-    fs_mem_write(sizeof(struct FSDeviceHeader), &partition, sizeof(struct FSPartitionBlock));
+    // Commit updated partition header to storage
+    fs_mem_write(&ctx, sizeof(struct FSDeviceHeader), &partition, sizeof(struct FSPartitionBlock));
     
-    fs_cache_sync();
-    fs_bitmap_flush();
+    // Synchronize filesystem cache and bitmap
+    fs_cache_sync(&ctx);
+    fs_bitmap_flush(&ctx);
+    
+    // Update active working directory
     fs_current.mount_root = root_directory;
-    
     kernel_set_working_directory(&fs_current);
     
     display_cursor_set_position(0);
     print(msg_final_progress);
-    */
+    
     return 0;
 }
 

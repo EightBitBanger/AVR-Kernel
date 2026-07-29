@@ -43,6 +43,8 @@ void itos(int32_t value, char* dest);
 void utos(uint32_t value, char* dest);
 int32_t stoi(const char* str);
 uint32_t stou(const char* str);
+void itos_commas(uint32_t val, char* dest);
+uint32_t stoi_commas(const char* str);
 
 // Hex
 

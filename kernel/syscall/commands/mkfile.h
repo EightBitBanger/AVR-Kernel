@@ -25,7 +25,7 @@ int call_routine_mk(int arg_count, char** args) {
     
     if (arg_count >= 2) {
         uint32_t file_size = stoi(args[1]);
-        vfs_truncate(args[0], file_size);
+        vfs_truncate(path, file_size); // Fixed: using full path
     }
     
     vfs_close(file);
