@@ -307,7 +307,6 @@ static size_t registry_calculate_key_size_recursive(struct RegistryKey* key) {
     
     size_t total_size = 0;
     
-    // Fixed metadata size for the key itself
     total_size += REGISTRY_MAX_NAME_LEN;            // key->name
     total_size += sizeof(key->permissions);         // key->permissions
     total_size += sizeof(uint32_t);                 // val_count indicator

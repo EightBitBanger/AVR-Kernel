@@ -18,7 +18,15 @@ static void action_desktop_paste(struct WindowContext* ctx)       { dwm_summon_m
 static void action_desktop_properties(struct WindowContext* ctx)  { dwm_summon_message_box("Message", "properties"); }
 
 // Icon Actions
-static void action_icon_open(struct WindowContext* ctx)  { dwm_summon_message_box("icon hit", "open"); }
+static void action_icon_open(struct WindowContext* ctx)  {
+    if (context.focused_icon != NULL) {
+        if (vfs_directory_check(context.focused_icon->path)) {
+            kernel_event_send(KEVENT_EXECUTE, "explorer", context.focused_icon->path);
+        } else {
+            kernel_event_send(KEVENT_EXECUTE, "notepad", context.focused_icon->path);
+        }
+    }
+}
 static void action_icon_copy(struct WindowContext* ctx)  { dwm_summon_message_box("icon hit", "copy"); }
 static void action_icon_delete(struct WindowContext* ctx){ dwm_destroy_icon(context.focused_icon); }
 static void action_icon_properties(struct WindowContext* ctx) {

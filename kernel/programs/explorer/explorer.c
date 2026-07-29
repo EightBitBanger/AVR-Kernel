@@ -50,7 +50,7 @@ void explorer_main(const char* arguments) {
     }
     
     // Ensure the target path exists and is a directory
-    if (!vfs_exists(initial_path) || !vfs_is_directory(initial_path)) {
+    if (!vfs_exists(initial_path) || !vfs_directory_check(initial_path)) {
         strncpy(initial_path, "/", MAX_PATH_LEN - 1);
     }
     
@@ -244,7 +244,7 @@ void populate_state_from_vfs(struct ExplorerWindowState* state, const char* targ
 
         if (vfs_directory_check_mounted(item->path)) {
             item->icon_index = ICON_STORAGE;
-        } else if (vfs_is_directory(item->path)) {
+        } else if (vfs_directory_check(item->path)) {
             item->icon_index = ICON_FOLDER;
         } else {
             item->icon_index = ICON_FILE;

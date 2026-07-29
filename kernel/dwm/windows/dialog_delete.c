@@ -41,7 +41,7 @@ WindowHandle dwm_summon_dialog_delete(const char* title, const char* file_path, 
     strncpy(target_path, file_path, path_length);
     target_path[path_length] = '\0';
     
-    if (vfs_is_directory(file_path)) {
+    if (vfs_directory_check(file_path)) {
         if (vfs_directory_check_mounted(file_path)) {
             strncpy(target_type, "Storage", DWM_MAX_PATH_LEN);
         } else {

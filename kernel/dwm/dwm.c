@@ -26,9 +26,7 @@ struct DWMCascade      cascade;
 void dwm_initiate(void) {
     
     // Theme
-    
     theme.bg_color          = 0xFF0E0E1A;
-    
     theme.w_border          = 0xFF2A2A2A;
     theme.w_background      = 0xFF6F6F6F;
     theme.w_title_text      = 0xFFEFEFEF;
@@ -38,7 +36,6 @@ void dwm_initiate(void) {
     
     theme.w_inactive_low    = 0xFF505050;
     theme.w_inactive_high   = 0xFF101010;
-    
     theme.ctx_bg            = 0x8F222222;
     theme.ctx_border        = 0x8F444444;
     theme.ctx_separator     = 0x8F111111;
@@ -52,17 +49,21 @@ void dwm_initiate(void) {
     workspace.window_head = NULL;
     workspace.window_tail = NULL;
     
+    // Calculate display center first so context and mouse drivers can sync to it
+    Point display_center;
+    display_center.x = display_get_width() / 2;
+    display_center.y = display_get_height() / 2;
+    
     // Context
     context.event_window = NULL;
     context.focused_icon = NULL;
     context.last_focused_icon = NULL;
     
     context.last_icon_click_time = 0;
-    
     memset(&context.window_context, 0x00, sizeof(struct WindowContext));
     context.window_context.cursor_width = 0;
     context.window_context.cursor_height  = 0;
-    context.window_context.mouse = mouse_get_position();
+    context.window_context.mouse = display_center;
     context.window_context.dirty_count = 0;
     
     // Taskbar
@@ -76,11 +77,9 @@ void dwm_initiate(void) {
     taskbar.window = dwm_create_window(wclass_taskbar, DWM_WSTYLE_TOPMOST | DWM_WSTYLE_NOBORDERS | DWM_WSTYLE_NOCLOSEBOX, callback_taskbar_handler);
     
     // Drag and drop
-    
     dragdrop.dragged_window = NULL;
     dragdrop.drag_offset_x = 0;
     dragdrop.drag_offset_y = 0;
-    
     dragdrop.dragged_icon = NULL;
     dragdrop.icon_drag_offset_x = 0;
     dragdrop.icon_drag_offset_y = 0;
@@ -90,17 +89,14 @@ void dwm_initiate(void) {
     dragdrop.resize_offset_y = 0;
     
     // Input
-    
     input.last_key_pressed = 0;
     
-    input.mouse_last.x = 0;
-    input.mouse_last.y = 0;
-    
+    mouse_set_position(display_center.x, display_center.y);
+    input.mouse_last = display_center;
     input.last_left_button_pressed = false;
     input.last_right_button_pressed = false;
     
     // Context menu
-    
     ctxmenu.menu_count = 0;
     ctxmenu.menu_directive = 0;
     ctxmenu.handle = NULL;
@@ -114,17 +110,6 @@ void dwm_initiate(void) {
     cascade.y = cascade.w * cascade_mul;
     cascade.max = 400;
     
-    // Display
-    
-    Point display_center;
-    display_center.x = display_get_width() / 2;
-    display_center.y = display_get_height() / 2;
-    
-    // Mouse
-    
-    mouse_set_position(display_center.x, display_center.y);
-    input.mouse_last = (Point){display_get_width(), display_get_height()};
-    
     // Load resources
     
     // Icons
@@ -133,10 +118,8 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("icon_document",    &rc_icon_document);
     dwm_resource_sprite_load("icon_system",      &rc_icon_system);
     dwm_resource_sprite_load("icon_storage",     &rc_icon_storage);
-    
     // Images
     dwm_resource_sprite_load("image_error",      &rc_image_error);
-    
     // UI
     dwm_resource_sprite_load("ui_close",         &rc_button_close);
     dwm_resource_sprite_load("ui_close_red",     &rc_button_close_red);
@@ -149,12 +132,10 @@ void dwm_initiate(void) {
     // Setup global default theme for the root menu container slot
     for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
         ctxmenu.menus[i].visible = false;
-        
         ctxmenu.menus[i].x = 0;
         ctxmenu.menus[i].y = 0;
         ctxmenu.menus[i].w = 0;
         ctxmenu.menus[i].h = 0;
-        
         ctxmenu.menus[i].color_bg         = theme.ctx_bg;
         ctxmenu.menus[i].color_border     = theme.ctx_border;
         ctxmenu.menus[i].color_separator  = theme.ctx_separator;
@@ -171,7 +152,7 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("cur_angle",   &rc_cursor_angle);
     
     // Default mouse cursor
-    struct Image* def_cursor = dwm_resource_find("cur_pointer"); 
+    struct Image* def_cursor = dwm_resource_find("cur_pointer");
     if (def_cursor) {
         dwm_set_cursor(def_cursor->data, def_cursor->width, def_cursor->height);
     }
@@ -377,11 +358,10 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         return NULL;
     
     memset(window_object, 0x00, sizeof(struct WindowObject));
-    
     uint32_t frame_buffer_sz = w_class.width * w_class.height * sizeof(uint32_t);
     
     if (w_style & DWM_WSTYLE_CHILD) {
-        window_object->frame_buffer = NULL; 
+        window_object->frame_buffer = NULL;
     } else {
         window_object->frame_buffer = (uint32_t*)malloc(frame_buffer_sz);
         if (window_object->frame_buffer == NULL) {
@@ -393,7 +373,6 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     uint32_t candidate_id = workspace.next_window_id++;
     if (candidate_id == 0) candidate_id = workspace.next_window_id++;
-    
     bool id_check = true;
     while (id_check) {
         id_check = false;
@@ -447,13 +426,12 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     int border_offset = 0;
     
     window_object->surface_w = window_object->w;
-    window_object->surface_h = dragdrop.dragged_window->h - dragdrop.dragged_window->titlebar_height;
-    window_object->buffer_w  = w_class.width; 
+    window_object->surface_h = window_object->h - window_object->titlebar_height;
+    window_object->buffer_w  = w_class.width;
     window_object->buffer_h  = w_class.height - window_object->titlebar_height - border_offset;
     
     window_object->surface_x = window_object->x;
     window_object->surface_y = window_object->y + window_object->titlebar_height + 1;
-    
     window_object->buffer_w = w_class.width;
     window_object->buffer_h = w_class.height;
     
@@ -464,24 +442,20 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->border_color         = theme.w_border;
     window_object->background_color     = theme.w_background;
     window_object->title_text_color     = theme.w_title_text;
-    
     window_object->title_color_low      = theme.w_title_low;
     window_object->title_color_high     = theme.w_title_high;
     
     window_object->inactive_color_low   = theme.w_inactive_low;
     window_object->inactive_color_high  = theme.w_inactive_high;
     
-    
-    window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH;
+    window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE;
     
     window_object->event_callback = proc;
     
     if (workspace.window_tail != NULL) {
         struct WindowObject* old_active = (struct WindowObject*)workspace.window_tail->data;
-        
         // Force the old window to redraw its borders/titlebar in an inactive state
         old_active->flags |= DWM_WFLAG_REDECORATE;
-        
         int old_abs_x, old_abs_y;
         dwm_get_absolute_position(old_active, &old_abs_x, &old_abs_y);
         dwm_invalidate_region(old_abs_x - old_active->border_width, 
@@ -491,21 +465,19 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     }
     
     if (!list_append(&workspace.window_head, &workspace.window_tail, window_object)) {
-        free(window_object->frame_buffer); // Clean up buffer on failure
+        free(window_object->frame_buffer);
         free(window_object);
         return 0;
     }
     
     int redraw_x, redraw_y;
     dwm_get_absolute_position(window_object, &redraw_x, &redraw_y);
-    
     dwm_draw_redraw(redraw_x - window_object->border_width, 
                     redraw_y - window_object->border_width, 
                     window_object->w + (window_object->border_width * 2), 
                     window_object->h + (window_object->border_width * 2));
     
     // Window styling
-    
     if (!(w_style & DWM_WSTYLE_NOCLOSEBOX)) {
         struct Image* button_close = dwm_resource_find("ui_close_red");
         struct Image* button_minimize  = dwm_resource_find("ui_minimize");
@@ -522,9 +494,11 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         uint16_t resize_h = 12;
         int16_t resize_x = window_object->w - resize_w;
         int16_t resize_y = window_object->h - resize_h;
-        
         window_add_button(window_object, resize_x, resize_y, resize_w, resize_h, DWM_EVENT_RESIZE, NULL);
     }
+    
+    // Dispatch initial redraw message so event callback draws window contents immediately
+    dwm_post_message(window_object->id, DWM_EVENT_REDRAW, 0, 0);
     
     return window_object;
 }

@@ -174,7 +174,7 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
             
             if (lparam & DWM_STATE_MOUSE_DOUBLE_CLK) {
                 struct Item* item = &state->items[i];
-                if (vfs_is_directory(item->path)) {
+                if (vfs_directory_check(item->path)) {
                     populate_state_from_vfs(state, item->path);
                 } else {
                     kernel_event_send(KEVENT_EXECUTE, "notepad", item->path);
@@ -398,7 +398,7 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
             switch (wparam) {
             case 0: { // Open
                 struct Item* clicked_item = &state->items[state->context_item_index];
-                if (vfs_is_directory(clicked_item->path)) {
+                if (vfs_directory_check(clicked_item->path)) {
                     populate_state_from_vfs(state, clicked_item->path);
                     dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 } else {

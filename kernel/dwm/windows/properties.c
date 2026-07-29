@@ -80,123 +80,138 @@ WindowHandle dwm_summon_properties(const char* title, const char* name, const ch
     
     // Instance metadata TAG
     char* instance = (char*)malloc(16);
-    dwm_window_resource_add(msg_handle->id, "instance", instance);
-    instance[0] = 0;
+    if (instance != NULL) {
+        memset(instance, 0, 16);
+        dwm_window_resource_add(msg_handle->id, "instance", instance);
+    }
     
     // General - file metadata
     {
-    size_t path_length = strnlen(file_path, DWM_MAX_PATH_LEN);
-    size_t name_length = strnlen(name, DWM_MAX_PATH_LEN);
-    
-    char* target_path = (char*)malloc(DWM_MAX_PATH_LEN);
-    char* target_name = (char*)malloc(DWM_MAX_PATH_LEN);
-    char* target_type = (char*)malloc(DWM_MAX_PATH_LEN);
-    char* target_size = (char*)malloc(DWM_MAX_PATH_LEN);
-    
-    uint16_t size = 0;
-    
-    File file = vfs_open(file_path, VFS_OPEN_READ);
-    if (file != 0) {
-        size = vfs_get_size(file);
+        size_t path_length = strnlen(file_path, DWM_MAX_PATH_LEN);
+        size_t name_length = strnlen(name, DWM_MAX_PATH_LEN);
         
-        vfs_close(file);
-    }
-    
-    uint16_t type_index = 0;
-    if (vfs_is_directory(file_path)) {
-        if (vfs_directory_check_mounted(file_path)) {
-            type_index = 1;
-            strncpy(target_type, "Storage", DWM_MAX_PATH_LEN);
+        char* target_path = (char*)malloc(DWM_MAX_PATH_LEN);
+        char* target_name = (char*)malloc(DWM_MAX_PATH_LEN);
+        char* target_type = (char*)malloc(DWM_MAX_PATH_LEN);
+        char* target_size = (char*)malloc(DWM_MAX_PATH_LEN);
+        
+        // Zero out allocated memory to prevent garbage strings
+        memset(target_path, 0, DWM_MAX_PATH_LEN);
+        memset(target_name, 0, DWM_MAX_PATH_LEN);
+        memset(target_type, 0, DWM_MAX_PATH_LEN);
+        memset(target_size, 0, DWM_MAX_PATH_LEN);
+        
+        uint32_t size = 0;
+        
+        File file = vfs_open(file_path, VFS_OPEN_READ);
+        if (file != 0) {
+            size = vfs_get_size(file);
+            vfs_close(file);
+        }
+        
+        uint16_t type_index = 0;
+        if (vfs_directory_check(file_path)) {
+            if (vfs_directory_check_mounted(file_path)) {
+                type_index = 1;
+                strncpy(target_type, "Storage", DWM_MAX_PATH_LEN - 1);
+            } else {
+                type_index = 2;
+                strncpy(target_type, "Folder", DWM_MAX_PATH_LEN - 1);
+            }
         } else {
-            type_index = 2;
-            strncpy(target_type, "Folder", DWM_MAX_PATH_LEN);
+            switch (icon_index) {
+                case 1: 
+                    type_index = 3; 
+                    strncpy(target_type, "File", DWM_MAX_PATH_LEN - 1); 
+                    break;
+                case 2: 
+                    type_index = 4; 
+                    strncpy(target_type, "Document", DWM_MAX_PATH_LEN - 1); 
+                    break;
+                case 3: 
+                    type_index = 5; 
+                    strncpy(target_type, "System", DWM_MAX_PATH_LEN - 1); 
+                    break;
+                default: 
+                    type_index = 3; 
+                    strncpy(target_type, "File", DWM_MAX_PATH_LEN - 1); 
+                    break;
+            }
         }
-    } else {
-        switch (icon_index) {
-        case 1: type_index = 3; strncpy(target_type, "File", DWM_MAX_PATH_LEN); break;
-        case 2: type_index = 4; strncpy(target_type, "Document", DWM_MAX_PATH_LEN); break;
-        case 3: type_index = 5; strncpy(target_type, "System", DWM_MAX_PATH_LEN); break;
-        }
-    }
-    
-    switch (type_index) {
         
-    default: // General file types
-        itos(size, target_size);
-        size_t length = strnlen(target_size, DWM_MAX_PATH_LEN);
-        const char* bytes_str = " (bytes)";
-        strncpy(&target_size[length], bytes_str, strnlen(bytes_str, DWM_MAX_PATH_LEN)+1);
+        switch (type_index) {
+            default: // General file types
+                itos_commas(size, target_size);
+                size_t length = strnlen(target_size, DWM_MAX_PATH_LEN);
+                const char* bytes_str = " (bytes)";
+                strncpy(&target_size[length], bytes_str, DWM_MAX_PATH_LEN - length - 1);
+                
+                strncpy(target_path, file_path, path_length);
+                target_path[path_length] = '\0';
+                break;
+                
+            case 1: { // Storage
+                char* target_used = (char*)malloc(DWM_MAX_PATH_LEN);
+                char* target_free = (char*)malloc(DWM_MAX_PATH_LEN);
+                char* target_total = (char*)malloc(DWM_MAX_PATH_LEN);
+                
+                memset(target_used, 0, DWM_MAX_PATH_LEN);
+                memset(target_free, 0, DWM_MAX_PATH_LEN);
+                memset(target_total, 0, DWM_MAX_PATH_LEN);
+                
+                uint32_t used = vfs_device_get_used(file_path);
+                uint32_t total = vfs_device_get_capacity(file_path);
+                uint32_t free = total - used;
+                
+                itos_commas(used, target_used);
+                itos_commas(free, target_free);
+                itos_commas(total, target_total);
+                
+                dwm_window_resource_add(msg_handle->id, "used", target_used);
+                dwm_window_resource_add(msg_handle->id, "free", target_free);
+                dwm_window_resource_add(msg_handle->id, "total", target_total);
+                break;
+            }
+            case 2: { // Folder
+                size_t item_count = vfs_directory_get_item_count(file_path);
+                itos_commas((uint32_t)item_count, target_size);
+                break;
+            }
+        }
+        
+        // File name
+        strncpy(target_name, name, name_length);
+        target_name[name_length] = '\0';
         
         strncpy(target_path, file_path, path_length);
         target_path[path_length] = '\0';
         
-        break;
-        
-    case 1:{ // Storage
-        char* target_used = (char*)malloc(DWM_MAX_PATH_LEN);
-        char* target_free = (char*)malloc(DWM_MAX_PATH_LEN);
-        char* target_total = (char*)malloc(DWM_MAX_PATH_LEN);
-        
-        uint32_t used = vfs_device_get_used(file_path);
-        uint32_t total = vfs_device_get_capacity(file_path);
-        uint32_t free = total - used;
-        
-        itos(used, target_used);
-        itos(free, target_free);
-        itos(total, target_total);
-        target_used[ strnlen(target_used, DWM_MAX_PATH_LEN) ] = '\0';
-        target_free[ strnlen(target_free, DWM_MAX_PATH_LEN) ] = '\0';
-        target_total[ strnlen(target_total, DWM_MAX_PATH_LEN) ] = '\0';
-        
-        dwm_window_resource_add(msg_handle->id, "used", target_used);
-        dwm_window_resource_add(msg_handle->id, "free", target_free);
-        dwm_window_resource_add(msg_handle->id, "total", target_total);
-        break;
-    }
-    case 2:{ // Folder
-        
-        size_t item_count = vfs_directory_get_item_count(file_path);
-        
-        itos(item_count, target_size);
-        size_t size_length = strnlen(target_size, DWM_MAX_PATH_LEN);
-        
-        break;
-    }
-    }
-    
-    // File name
-    strncpy(target_name, name, name_length);
-    target_name[name_length] = '\0';
-    
-    strncpy(target_path, file_path, path_length);
-    target_path[path_length] = '\0';
-    
-    dwm_window_resource_add(msg_handle->id, "path", target_path);
-    dwm_window_resource_add(msg_handle->id, "name", target_name);
-    dwm_window_resource_add(msg_handle->id, "type", target_type);
-    dwm_window_resource_add(msg_handle->id, "size", target_size);
+        dwm_window_resource_add(msg_handle->id, "path", target_path);
+        dwm_window_resource_add(msg_handle->id, "name", target_name);
+        dwm_window_resource_add(msg_handle->id, "type", target_type);
+        dwm_window_resource_add(msg_handle->id, "size", target_size);
     }
     
     // Attributes
     {
-    char* target_attrib = (char*)malloc(16);
-    memset(target_attrib, ' ', 16);
-    
-    uint8_t permissions;
-    vfs_get_permissions(file_path, &permissions);
-    
-    if (permissions & VFS_PERMISSION_EXECUTE) target_attrib[0] = 'x';
-    if (permissions & VFS_PERMISSION_READ)    target_attrib[1] = 'r';
-    if (permissions & VFS_PERMISSION_WRITE)   target_attrib[2] = 'w';
-    
-    dwm_window_resource_add(msg_handle->id, "perms", target_attrib);
-    
+        char* target_attrib = (char*)malloc(16);
+        if (target_attrib != NULL) {
+            memset(target_attrib, ' ', 16);
+            
+            uint8_t permissions = 0;
+            vfs_get_permissions(file_path, &permissions);
+            
+            if (permissions & VFS_PERMISSION_EXECUTE) target_attrib[0] = 'x';
+            if (permissions & VFS_PERMISSION_READ)    target_attrib[1] = 'r';
+            if (permissions & VFS_PERMISSION_WRITE)   target_attrib[2] = 'w';
+            
+            dwm_window_resource_add(msg_handle->id, "perms", target_attrib);
+        }
     }
     
     dwm_set_focus(msg_handle);
     return msg_handle->id;
 }
-
 
 void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     struct WindowObject* window = dwm_get_window_by_id(handle);
@@ -318,9 +333,9 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                     if (free_str != NULL) dwm_draw_text(90, 165, free_str, color_text_value);
                     if (total_str != NULL) dwm_draw_text(90, 180, total_str, color_text_value);
                     
-                    // Draw usage pie
-                    uint32_t used  = stoi(used_str);
-                    uint32_t total = stoi(total_str);
+                    // Draw usage pie (using stoi_commas to parse past comma formatting)
+                    uint32_t used  = stoi_commas(used_str);
+                    uint32_t total = stoi_commas(total_str);
                     
                     // Prevent division by zero if total space is reported as 0
                     if (total == 0) 

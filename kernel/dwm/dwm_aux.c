@@ -56,15 +56,22 @@ void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h) {
         context.window_context.dirty_count++;
     } else {
         
-        int min_x = context.window_context.dirty_regions[0].x;
-        int min_y = context.window_context.dirty_regions[0].y;
-        int max_x = min_x + context.window_context.dirty_regions[0].w;
-        int max_y = min_y + context.window_context.dirty_regions[0].h;
+        int min_x = x;
+        int min_y = y;
+        int max_x = x + w;
+        int max_y = y + h;
         
-        if (x < min_x) min_x = x;
-        if (y < min_y) min_y = y;
-        if (x + w > max_x) max_x = x + w;
-        if (y + h > max_y) max_y = y + h;
+        for (int i = 0; i < context.window_context.dirty_count; i++) {
+            int rx1 = context.window_context.dirty_regions[i].x;
+            int ry1 = context.window_context.dirty_regions[i].y;
+            int rx2 = rx1 + context.window_context.dirty_regions[i].w;
+            int ry2 = ry1 + context.window_context.dirty_regions[i].h;
+            
+            if (rx1 < min_x) min_x = rx1;
+            if (ry1 < min_y) min_y = ry1;
+            if (rx2 > max_x) max_x = rx2;
+            if (ry2 > max_y) max_y = ry2;
+        }
         
         context.window_context.dirty_regions[0].x = min_x;
         context.window_context.dirty_regions[0].y = min_y;

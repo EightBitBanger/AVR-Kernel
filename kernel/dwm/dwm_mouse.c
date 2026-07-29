@@ -136,9 +136,10 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
     return true;
 }
 
+#include <kernel/vfs/vfs.h>
+
 void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, bool is_new_right_click) {
     struct IconObject* clicked_icon = NULL;
-    
     // Get the clicked icon
     
     for (struct list_node* node = workspace.icon_head; node != NULL; node = node->next) {
@@ -157,21 +158,26 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
     
     if (clicked_icon != NULL) {
         context.focused_icon = clicked_icon;
-        
         if (is_new_left_click) {
             uint32_t current_time = timer_get_ms();
-            
             // Calculate spatial distance between clicks
             int dx = ctx->mouse.x - dragdrop.drag_start_x;
             int dy = ctx->mouse.y - dragdrop.drag_start_y;
-            bool is_close_enough = (dx * dx + dy * dy) <= 25; // Within 5 pixels
+            bool is_close_enough = (dx * dx + dy * dy) <= 25;
+            // Within 5 pixels
             
             if (clicked_icon == context.last_focused_icon && 
                 is_close_enough && 
                 (current_time - context.last_icon_click_time) <= ICON_DOUBLE_CLICK_THRESHOLD_MS) {
                 
-                // Register double click!
-                kernel_event_send(KEVENT_EXECUTE, "explorer", context.focused_icon->path);
+                // Register double click
+                if (vfs_directory_check(context.focused_icon->path)) {
+                    kernel_event_send(KEVENT_EXECUTE, "explorer", context.focused_icon->path);
+                } else {
+                    kernel_event_send(KEVENT_EXECUTE, "notepad", context.focused_icon->path);
+                }
+
+                // Reset dwm state
                 context.focused_icon = NULL;
                 context.last_focused_icon = NULL;
                 context.last_icon_click_time = 0;
@@ -184,7 +190,6 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
                 dragdrop.is_dragging = false;
                 dragdrop.icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
                 dragdrop.icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
-                
                 context.last_focused_icon = clicked_icon;
                 context.last_icon_click_time = current_time;
             }
@@ -202,7 +207,6 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
             // Desktop right click context menu
             
             dwm_desktop_right_click(ctx);
-            
         }
     }
 }
