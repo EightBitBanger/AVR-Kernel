@@ -35,19 +35,39 @@ struct FSDeviceContext fs_device_open(uint32_t device_address, struct FSPartitio
 }
 
 uint32_t fs_get_used_bytes(struct FSDeviceContext* device_context) {
-    if (!device_context) return 0;
-    uint32_t used_bytes = 0;
-    used_bytes += device_context->reserved_blocks * device_context->sector_size;
+    if (!device_context || device_context->pool_size == 0) return 0; 
     
-    uint32_t current_alloc = fs_find_next(device_context, FS_NULL);
+    uint32_t used_bytes = 0;
+    uint32_t reserved_bytes = device_context->reserved_blocks * device_context->sector_size;
+    
+    // Guard against corrupted reserved block counts
+    if (reserved_bytes > device_context->pool_size) {
+        return device_context->pool_size;
+    }
+    used_bytes += reserved_bytes;
+    
+    uint32_t current_alloc = fs_find_next(device_context, FS_NULL); 
     while (current_alloc != FS_NULL) {
-        uint32_t header_addr = current_alloc - sizeof(struct FSAllocHeader);
+        uint32_t header_addr = current_alloc - sizeof(struct FSAllocHeader); 
         struct FSAllocHeader header;
-        fs_mem_read(device_context, header_addr, &header, sizeof(struct FSAllocHeader));
+        fs_mem_read(device_context, header_addr, &header, sizeof(struct FSAllocHeader)); 
         
-        uint32_t blocks_used = (sizeof(struct FSAllocHeader) + header.size + device_context->sector_size - 1UL) / device_context->sector_size;
-        used_bytes += blocks_used * device_context->sector_size;
-        current_alloc = fs_find_next(device_context, current_alloc);
+        // Sanity check to prevent corrupted headers from overflowing calculation
+        if (header.size == 0 || header.size > device_context->pool_size) {
+            break;
+        }
+        
+        uint32_t blocks_used = (sizeof(struct FSAllocHeader) + header.size + device_context->sector_size - 1UL) / device_context->sector_size; 
+        uint32_t block_bytes = blocks_used * device_context->sector_size;
+        
+        // Prevent overflow beyond total pool size
+        if (used_bytes + block_bytes > device_context->pool_size) {
+            used_bytes = device_context->pool_size;
+            break;
+        }
+        
+        used_bytes += block_bytes; 
+        current_alloc = fs_find_next(device_context, current_alloc); 
     }
     
     return used_bytes;

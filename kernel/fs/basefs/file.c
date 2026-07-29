@@ -361,15 +361,20 @@ bool fs_file_resize(struct FSDeviceContext* ctx, uint32_t address, uint32_t new_
         chain_is_empty = false;
     }
     
-    uint32_t default_extent_payload_limit = 512;
+    uint32_t default_extent_payload_limit = 4096; 
     while (growth_needed > 0) {
         uint32_t chunk_allocation = growth_needed;
         if (chunk_allocation > default_extent_payload_limit) {
             chunk_allocation = default_extent_payload_limit;
         }
         
+        uint32_t overhead = sizeof(struct FSAllocHeader) + sizeof(struct FSFileExtent); // 16 bytes
+        if (chunk_allocation >= overhead && (chunk_allocation % ctx->sector_size == 0)) {
+            chunk_allocation -= overhead;
+        }
+        
         uint32_t new_ext_addr = fs_alloc(ctx, sizeof(struct FSFileExtent) + chunk_allocation);
-        if (new_ext_addr == FS_NULL) return false; 
+        if (new_ext_addr == FS_NULL) return false;
         
         struct FSFileExtent new_ext;
         memset(&new_ext, 0x00, sizeof(struct FSFileExtent));

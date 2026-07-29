@@ -126,139 +126,130 @@ static int ahci_find_free_cmd_slot(struct AHCI_Port_Registers* port) {
 }
 
 bool ahci_read_sectors(struct AHCI_Port_Registers* port, uint64_t start_lba, uint32_t count, uint8_t* virtual_buffer) {
-    int slot = ahci_find_free_cmd_slot(port);
-    if (slot == -1) return false;
+    int slot = ahci_find_free_cmd_slot(port); 
+    if (slot == -1) return false; 
     
     // Clear pending interrupt status indicators before issuing new transactions
-    port->interrupt_status = 0xFFFFFFFF;
+    port->interrupt_status = 0xFFFFFFFF; 
     
-    uint32_t cmd_list_phys = port->command_list_base;
-    struct AHCI_Command_Header* cmd_header = (struct AHCI_Command_Header*)vmm_get_virt_addr(cmd_list_phys);
-    cmd_header += slot;
+    struct AHCI_Command_Header* cmd_header = ((struct AHCI_Command_Header*)global_cmd_list_vaddr) + slot;
     
     // Zero header out to avoid dirty bitfields
-    memset((void*)cmd_header, 0, sizeof(struct AHCI_Command_Header));
-    cmd_header->fis_length = 5;
-    cmd_header->write = 0;
-    cmd_header->prdt_length = 1;
-    cmd_header->command_table_base_addr = global_cmd_table_phys; // Assign table physical base
+    memset((void*)cmd_header, 0, sizeof(struct AHCI_Command_Header)); 
+    cmd_header->fis_length = 5; 
+    cmd_header->write = 0; 
+    cmd_header->prdt_length = 1; 
+    cmd_header->command_table_base_addr = global_cmd_table_phys; // Assign table physical base 
     
-    uint32_t cmd_table_phys = cmd_header->command_table_base_addr;
-    struct AHCI_Command_Table* cmd_table = (struct AHCI_Command_Table*)vmm_get_virt_addr(cmd_table_phys);
-    memset((void*)cmd_table, 0, 4096);
+    struct AHCI_Command_Table* cmd_table = (struct AHCI_Command_Table*)global_cmd_table_vaddr;
+    memset((void*)cmd_table, 0, 4096); 
     
-    uint32_t buffer_phys = vmm_get_phys_addr(virtual_buffer);
-    cmd_table->prdt_entries[0].data_base_addr = buffer_phys;
-    cmd_table->prdt_entries[0].byte_count = (count * 512) - 1;
-    cmd_table->prdt_entries[0].interrupt = 1;
+    uint32_t buffer_phys = vmm_get_phys_addr(virtual_buffer); 
+    cmd_table->prdt_entries[0].data_base_addr = buffer_phys; 
+    cmd_table->prdt_entries[0].byte_count = (count * 512) - 1; 
+    cmd_table->prdt_entries[0].interrupt = 1; 
     
-    uint8_t* fis = cmd_table->command_fis;
-    fis[0] = 0x27;      
-    fis[1] = 0x80;      
-    fis[2] = ATA_CMD_READ_DMA_EX;
+    // Frame information structure
+    uint8_t* fis = cmd_table->command_fis; 
+    fis[0] = 0x27;     
+    fis[1] = 0x80;     
+    fis[2] = ATA_CMD_READ_DMA_EX; 
+    fis[4] = (uint8_t)(start_lba & 0xFF); 
+    fis[5] = (uint8_t)((start_lba >> 8) & 0xFF); 
+    fis[6] = (uint8_t)((start_lba >> 16) & 0xFF); 
+    fis[7] = 0x40;     
     
-    fis[4] = (uint8_t)(start_lba & 0xFF);
-    fis[5] = (uint8_t)((start_lba >> 8) & 0xFF);
-    fis[6] = (uint8_t)((start_lba >> 16) & 0xFF);
-    fis[7] = 0x40;      
+    fis[8] = (uint8_t)((start_lba >> 24) & 0xFF); 
+    fis[9] = (uint8_t)((start_lba >> 32) & 0xFF); 
+    fis[10] = (uint8_t)((start_lba >> 40) & 0xFF); 
     
-    fis[8] = (uint8_t)((start_lba >> 24) & 0xFF);
-    fis[9] = (uint8_t)((start_lba >> 32) & 0xFF);
-    fis[10] = (uint8_t)((start_lba >> 40) & 0xFF);
+    fis[12] = (uint8_t)(count & 0xFF); 
+    fis[13] = (uint8_t)((count >> 8) & 0xFF); 
     
-    fis[12] = (uint8_t)(count & 0xFF);
-    fis[13] = (uint8_t)((count >> 8) & 0xFF);
+    // Fire off command execution
+    port->command_issue = (1 << slot); 
     
-    // Fire command execution
-    port->command_issue = (1 << slot);
-    
-    uint32_t timeout = 5000000;
-    while (timeout > 0) {
-        if (!(port->command_issue & (1 << slot))) {
-            break;
+    uint32_t timeout = 5000000; 
+    while (timeout > 0) { 
+        if (!(port->command_issue & (1 << slot))) { 
+            break; 
         }
         
-        if (port->task_file_data & 0x01) {
-            print("AHCI Error: Task file error status detected.\n");
-            return false;
+        if (port->task_file_data & 0x01) { 
+            print("AHCI Error: Task file error status detected.\n"); 
+            return false; 
         }
         
-        timeout--;
+        timeout--; 
     }
     
-    if (timeout == 0) {
-        print("AHCI Error: Read operation timed out.\n");
-        return false;
+    if (timeout == 0) { 
+        print("AHCI Error: Read operation timed out.\n"); 
+        return false; 
     }
     
-    return (port->sata_error == 0);
+    return (port->sata_error == 0); 
 }
 
 bool ahci_write_sectors(struct AHCI_Port_Registers* port, uint64_t start_lba, uint32_t count, const uint8_t* virtual_buffer) {
-    int slot = ahci_find_free_cmd_slot(port);
-    if (slot == -1) return false;
+    int slot = ahci_find_free_cmd_slot(port); 
+    if (slot == -1) return false; 
     
     // Clear pending interrupt status indicators
-    port->interrupt_status = 0xFFFFFFFF;
+    port->interrupt_status = 0xFFFFFFFF; 
     
-    // Dynamically calculate command header from physical base
-    uint32_t cmd_list_phys = port->command_list_base;
-    struct AHCI_Command_Header* cmd_header = (struct AHCI_Command_Header*)vmm_get_virt_addr(cmd_list_phys);
-    cmd_header += slot;
+    struct AHCI_Command_Header* cmd_header = ((struct AHCI_Command_Header*)global_cmd_list_vaddr) + slot;
     
     // Zero header out to avoid dirty bitfields
-    memset((void*)cmd_header, 0, sizeof(struct AHCI_Command_Header));
+    memset((void*)cmd_header, 0, sizeof(struct AHCI_Command_Header)); 
+    cmd_header->fis_length = 5; 
+    cmd_header->write = 1;     
+    cmd_header->prdt_length = 1; 
+    cmd_header->command_table_base_addr = global_cmd_table_phys; 
     
-    cmd_header->fis_length = 5;
-    cmd_header->write = 1;      
-    cmd_header->prdt_length = 1;
-    cmd_header->command_table_base_addr = global_cmd_table_phys;
+    struct AHCI_Command_Table* cmd_table = (struct AHCI_Command_Table*)global_cmd_table_vaddr;
+    memset((void*)cmd_table, 0, 4096); 
     
-    uint32_t cmd_table_phys = cmd_header->command_table_base_addr;
-    struct AHCI_Command_Table* cmd_table = (struct AHCI_Command_Table*)vmm_get_virt_addr(cmd_table_phys);
-    memset((void*)cmd_table, 0, 4096);
+    uint32_t buffer_phys = vmm_get_phys_addr((void*)virtual_buffer); 
+    cmd_table->prdt_entries[0].data_base_addr = buffer_phys; 
+    cmd_table->prdt_entries[0].byte_count = (count * 512) - 1; 
+    cmd_table->prdt_entries[0].interrupt = 1; 
     
-    uint32_t buffer_phys = vmm_get_phys_addr((void*)virtual_buffer);
-    cmd_table->prdt_entries[0].data_base_addr = buffer_phys;
-    cmd_table->prdt_entries[0].byte_count = (count * 512) - 1;
-    cmd_table->prdt_entries[0].interrupt = 1;
-    
-    uint8_t* fis = cmd_table->command_fis;
-    fis[0] = 0x27;      // Register FIS - Host to Device
-    fis[1] = 0x80;      // Command bit
+    uint8_t* fis = cmd_table->command_fis; 
+    fis[0] = 0x27; 
+    fis[1] = 0x80; 
     fis[2] = ATA_CMD_WRITE_DMA_EX; 
     
-    fis[4] = (uint8_t)(start_lba & 0xFF);
-    fis[5] = (uint8_t)((start_lba >> 8) & 0xFF);
-    fis[6] = (uint8_t)((start_lba >> 16) & 0xFF);
-    fis[7] = 0x40;      // LBA Mode
+    fis[4] = (uint8_t)(start_lba & 0xFF); 
+    fis[5] = (uint8_t)((start_lba >> 8) & 0xFF); 
+    fis[6] = (uint8_t)((start_lba >> 16) & 0xFF); 
+    fis[7] = 0x40; 
     
-    fis[8] = (uint8_t)((start_lba >> 24) & 0xFF);
-    fis[9] = (uint8_t)((start_lba >> 32) & 0xFF);
-    fis[10] = (uint8_t)((start_lba >> 40) & 0xFF);
+    fis[8] = (uint8_t)((start_lba >> 24) & 0xFF); 
+    fis[9] = (uint8_t)((start_lba >> 32) & 0xFF); 
+    fis[10] = (uint8_t)((start_lba >> 40) & 0xFF); 
     
-    fis[12] = (uint8_t)(count & 0xFF);
-    fis[13] = (uint8_t)((count >> 8) & 0xFF);
+    fis[12] = (uint8_t)(count & 0xFF); 
+    fis[13] = (uint8_t)((count >> 8) & 0xFF); 
     
     // Issue command
-    port->command_issue = (1 << slot);
-    
-    uint32_t timeout = 5000000;
-    while (timeout > 0) {
-        if (!(port->command_issue & (1 << slot))) {
-            break;
+    port->command_issue = (1 << slot); 
+    uint32_t timeout = 5000000; 
+    while (timeout > 0) { 
+        if (!(port->command_issue & (1 << slot))) { 
+            break; 
         }
-        if (port->task_file_data & 0x01) {
-            print("AHCI Error: Task file error status detected.\n");
-            return false; // Removed while(1) kernel lock
+        if (port->task_file_data & 0x01) { 
+            print("AHCI Error: Task file error status detected.\n"); 
+            return false; 
         }
-        timeout--;
+        timeout--; 
     }
     
-    if (timeout == 0) {
-        print("AHCI Error: Write operation timed out.\n");
-        return false; // Removed while(1) kernel lock
+    if (timeout == 0) { 
+        print("AHCI Error: Write operation timed out.\n"); 
+        return false; 
     }
     
-    return (port->sata_error == 0);
+    return (port->sata_error == 0); 
 }

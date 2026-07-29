@@ -39,65 +39,25 @@
 
 #define BOOT_DELAY_MS  500
 
-// Position in memory where the kernel ends
 extern char _kernel_program_end[];
 
-void run_allocator_stress_test(void);
-
-
-void thread_dwm_main(void) {
+static void thread_dwm_main(void) {
     while (1) {
         dwm_update();
-        
         thread_yield();
     }
 }
 
-void dummy_runner(void) {
+static void thread_kernel_main(void) {
+    while(1) {
+        kernel_event_update();
+        thread_yield();
+    }
+}
+
+static void dummy_runner(void) {
     while(1){
-        
-        //thread_yield();
-        thread_sleep(100);
-    }
-}
-
-void thread_mem_test_a(void) {
-    while(1) {
-        void* blocka = malloc(1024);
-        void* blockb = malloc(768);
-        void* blockc = malloc(1024);
-        void* blockd = malloc(800);
-        free(blocka);
-        free(blockb);
-        free(blockc);
-        free(blockd);
-        thread_yield();
-    }
-}
-
-void thread_mem_test_b(void) {
-    while(1) {
-        void* blocka = malloc(25);
-        void* blockb = malloc(25);
-        void* blockc = malloc(25);
-        free(blocka);
-        free(blockb);
-        free(blockc);
-        
-        thread_sleep(200);
-    }
-}
-
-void thread_mem_test_c(void) {
-    while(1) {
-        void* blocka = malloc(5);
-        void* blockb = malloc(100);
-        void* blockc = malloc(40);
-        free(blocka);
-        free(blockb);
-        free(blockc);
-        
-        thread_sleep(100);
+        thread_sleep(1000);
     }
 }
 
@@ -223,7 +183,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     uint32_t root_node = knode_get_root();
     uint32_t dev_directory = knode_find_by_name(root_node, "dev");
     uint32_t mnt_directory = knode_find_by_name(root_node, "mnt");
-    uint32_t pci_directory = create_knode("pci", dev_directory);
+    //uint32_t pci_directory = create_knode("pci", dev_directory);
     
     // Courtesy delay for boot output
     uint64_t old_ms = timer_get_ms();
@@ -232,34 +192,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Blank the screen in preparation for pure graphics mode
     draw_rect_filled(0, 0, display_get_width(), display_get_height(), 0xFF000000);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
-    
-    //
-    // Find the home directory
-    
-    const char* path_mnt = "/mnt";
-    const char* path_sys = "/sys";
-    
-    char home_path[128];
-    memset(home_path, '\0', sizeof(home_path));
-    uint32_t item_count = vfs_directory_get_item_count(path_mnt);
-    for (unsigned int i=0; i < item_count; i++) {
-        char temp_path[128];
-        strncpy(temp_path, path_mnt, 128);
-        
-        char item_name[16];
-        if (!vfs_directory_get_item(path_mnt, i, item_name)) 
-            continue;
-        
-        strncat(temp_path, "/", 128);
-        strncat(temp_path, item_name, 128);
-        
-        strncat(temp_path, path_sys, 128);
-        
-        if (vfs_directory_check(temp_path)) {
-            //print(temp_path);
-            //print("\n");
-        }
-    }
     
     //
     // Load the registry
@@ -271,14 +203,17 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     dwm_initiate();
     
+    //
+    // Load desktop icons
+    
     uint16_t sep = 90;
     uint16_t posx = 30;
     uint16_t posy = 30;
     
-    //
-    // Load desktop icons
+    const char* path_mnt = "/mnt";
+    const char* path_sys = "/sys";
     
-    // Get mounted devices
+    // Mounted device icons
     uint32_t number_of_mounts = knode_get_reference_count(mnt_directory);
     for (unsigned int i=0; i < number_of_mounts; i++) {
         uint32_t address = knode_get_reference(mnt_directory, i);
@@ -291,17 +226,55 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         strncat(path, "/", 128);
         strncat(path, name, 128);
         
-        // Find a system partition
-        char path_system[128];
-        strncpy(path_system, path, 128);
-        strncat(path_system, path_sys, 128);
+        dwm_create_mount(posx, posy, name, path);
+        posx += sep;
+    }
+    
+    // Desktop directory files
+    char home_path[128];
+    memset(home_path, '\0', sizeof(home_path));
+    uint32_t item_count = vfs_directory_get_item_count(path_mnt);
+    for (unsigned int i=0; i < item_count; i++) {
+        char temp_path[128];
+        strncpy(temp_path, path_mnt, 128);
         
-        if (vfs_directory_check(path_system)) {
+        char item_name[128];
+        if (!vfs_directory_get_item(path_mnt, i, item_name)) 
+            continue;
+        
+        strncat(temp_path, "/", 128);
+        strncat(temp_path, item_name, 128);
+        strncat(temp_path, "/usr/desktop", 128);
+        
+        if (vfs_directory_check(temp_path)) {
             
-            dwm_create_mount(posx, posy, name, path); posx += sep;
+            uint32_t desktop_item_count = vfs_directory_get_item_count(temp_path);
+            for (unsigned int d=0; d < desktop_item_count; d++) {
+                char desktop_item_path[128];
+                char desktop_item_name[128];
+                if (!vfs_directory_get_item(temp_path, d, desktop_item_name)) 
+                    continue;
+                
+                memcpy(desktop_item_path, temp_path, 128);
+                strncat(desktop_item_path, "/", 128);
+                strncat(desktop_item_path, desktop_item_name, 128);
+                
+                if (vfs_directory_check(desktop_item_path)) {
+                    // Folder
+                    dwm_create_folder(posx, posy, desktop_item_name, desktop_item_path);
+                    posx += sep;
+                    
+                } else {
+                    // File
+                    dwm_create_file(posx, posy, desktop_item_name, desktop_item_path);
+                    posx += sep;
+                    
+                    
+                }
+                
+            }
+            
         }
-        
-        
     }
     
     //
@@ -322,22 +295,12 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     //detach();
     
-    /*
-    for (unsigned int i=0; i < 1024; i++) 
-        thread_create(dummy_runner, PRIORITY_IDLE);
     
-    for (unsigned int i=0; i < 3; i++) {
-        thread_create(thread_mem_test_a, PRIORITY_HIGH);
-        thread_create(thread_mem_test_b, PRIORITY_HIGH);
-        thread_create(thread_mem_test_c, PRIORITY_HIGH);
-    }
-    */
-    thread_create(thread_dwm_main, PRIORITY_REALTIME);
+    //for (unsigned int i=0; i < 128; i++) 
+    //    thread_create(dummy_runner, PRIORITY_LOW);
     
-    // Kernel main thread
-    while(1) {
-        kernel_event_update();
-        
-        thread_yield();
-    }
+    
+    thread_create(thread_dwm_main, PRIORITY_HIGH);
+    thread_create(thread_kernel_main, PRIORITY_HIGH);
+    
 }

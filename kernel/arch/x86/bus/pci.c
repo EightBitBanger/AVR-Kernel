@@ -344,80 +344,70 @@ void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_direc
                         }
                     }
                 } 
-                
-                // AHCI (SATA) Controller
-                
-                else if (subclass == 0x06) {
+                // AHCI (SATA) Controller section inside pci_scan_bus
+                else if (subclass == 0x06) { 
                     // BAR 5 contains the physical ABAR
                     uint32_t abar_phys = pci_config_read(bus_number, dev, func, 0x24); 
-                    if (abar_phys != 0 && (abar_phys & 0x01) == 0) {
+                    if (abar_phys != 0 && (abar_phys & 0x01) == 0) { 
                         
                         // Enable PCI bus mastering (bit 2) and mmio space (bit 1)
-                        uint32_t pci_cmd = pci_config_read(bus_number, dev, func, 0x04);
+                        uint32_t pci_cmd = pci_config_read(bus_number, dev, func, 0x04); 
                         pci_cmd |= (1 << 2) | (1 << 1); 
-                        pci_config_write(bus_number, dev, func, 0x04, pci_cmd);
+                        pci_config_write(bus_number, dev, func, 0x04, pci_cmd); 
                         
-                        uint32_t phys_mmio_addr = abar_phys & 0xFFFFFFF0;
-                        uint32_t flags =  VM_PRESENT | VM_READWRITE | VM_PCD;
+                        uint32_t phys_mmio_addr = abar_phys & 0xFFFFFFF0; 
+                        uint32_t flags =  VM_PRESENT | VM_READWRITE | VM_PCD; 
                         
-                        struct AHCI_HBA_Memory_Space* ahci_base_vaddr = (struct AHCI_HBA_Memory_Space*)vmm_map_mmio_region(phys_mmio_addr, 4096, flags);
-                        
-                        if (ahci_base_vaddr != NULL) {
-                            ahci_init(ahci_base_vaddr);
+                        struct AHCI_HBA_Memory_Space* ahci_base_vaddr = (struct AHCI_HBA_Memory_Space*)vmm_map_mmio_region(phys_mmio_addr, 4096, flags); 
+                        if (ahci_base_vaddr != NULL) { 
+                            ahci_init(ahci_base_vaddr); 
                             
                             // Find which port has the drive we initialized in ahci_init
-                            
-                            struct AHCI_Port_Registers* active_port = NULL;
-                            for (int p = 0; p < 32; p++) {
-                                if (ahci_base_vaddr->ports_implemented & (1 << p)) {
-                                    if (ahci_base_vaddr->ports[p].signature == AHCI_DEV_SATA) {
-                                        active_port = &ahci_base_vaddr->ports[p];
-                                        break;
+                            struct AHCI_Port_Registers* active_port = NULL; 
+                            for (int p = 0; p < 32; p++) { 
+                                if (ahci_base_vaddr->ports_implemented & (1 << p)) { 
+                                    if (ahci_base_vaddr->ports[p].signature == AHCI_DEV_SATA) { 
+                                        active_port = &ahci_base_vaddr->ports[p]; 
+                                        break; 
                                     }
                                 }
                             }
                             
-                            if (active_port != NULL) {
+                            if (active_port != NULL) { 
                                 char device_name[] = "ahci ";
-                                device_name[4] = '0' + storage_device_index++;
+                                device_name[4] = '0' + storage_device_index;
                                 
-                                // Allocate virtual storage buffer for the mount structure
-                                uint32_t block_device = (uint32_t)malloc(512);
-                                
-                                // Read LBA sector 0
-                                if (ahci_read_sectors(active_port, 0, 1, (uint8_t*)block_device)) {
-                                    
-                                    uint32_t mount_ptr = create_knode(device_name, mnt_directory);
-                                    kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT));
-                                    
-                                    struct FSPartitionBlock part;
-                                    struct FSDeviceContext context = fs_device_open(block_device, &part, FS_DEVICE_TYPE_AHCI);
-                                    
-                                    uint32_t device_context = (uint32_t)malloc(sizeof(struct FSDeviceContext));
-                                    memcpy((void*)device_context, &context, sizeof(struct FSDeviceContext));
-                                    
-                                    
-                                    knode_add_reference(mount_ptr, block_device);
-                                    knode_add_reference(mount_ptr, device_context);
-                                    
-                                    // Increment since it successfully mounted
-                                    storage_device_index++;
-                                    
-                                    print("AHCI device mounted\n");
-                                    
-                                } else {
-                                    print("AHCI error - failed to read sector 0\n");
-                                    free((void*)block_device);
+                                uint32_t block_device = (uint32_t)vmm_alloc_pages(1);
+                                if (block_device == 0) {
+                                    print("AHCI Error: Failed to allocate page-aligned block device buffer.\n");
+                                    return;
                                 }
                                 
+                                // Read LBA sector 0
+                                if (ahci_read_sectors(active_port, 0, 1, (uint8_t*)block_device)) { 
+                                    uint32_t mount_ptr = create_knode(device_name, mnt_directory); 
+                                    kmalloc_set_flags(mount_ptr, (KMALLOC_FLAG_DIRECTORY | KMALLOC_FLAG_MOUNT)); 
+                                    
+                                    struct FSPartitionBlock part; 
+                                    struct FSDeviceContext context = fs_device_open(block_device, &part, FS_DEVICE_TYPE_AHCI); 
+                                    
+                                    uint32_t device_context = (uint32_t)malloc(sizeof(struct FSDeviceContext)); 
+                                    memcpy((void*)device_context, &context, sizeof(struct FSDeviceContext)); 
+                                    
+                                    knode_add_reference(mount_ptr, block_device); 
+                                    knode_add_reference(mount_ptr, device_context); 
+                                    
+                                    storage_device_index++; 
+                                    print("AHCI device mounted\n"); 
+                                } else {
+                                    print("AHCI error - failed to read sector 0\n"); 
+                                    vmm_free_pages((void*)block_device, 1);
+                                }
                             }
-                            
                         }
                     }
                 }
-                
             }
-            
             // Standard virtual VFS property nodes generation
             char value_buffer[16];
             uint32_t prop_dir;

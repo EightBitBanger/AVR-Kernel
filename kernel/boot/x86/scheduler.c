@@ -7,7 +7,7 @@
 #include <kernel/util/timer.h>
 
 struct ThreadInterruptFrame {
-    uint32_t gs, fs, es, ds;                               // Pushed by our ISR
+    uint32_t gs, fs, es, ds;                               // Pushed by ISR
     uint32_t edi, esi, ebp, esp_dummy, ebx, edx, ecx, eax; // Pushed by pushal
     uint32_t eip, cs, eflags;                              // Pushed by CPU on interrupt
 } __attribute__((packed));
@@ -17,18 +17,20 @@ extern uint32_t page_directory[];
 ThreadBlock* current_thread = NULL;
 ThreadBlock* thread_queue = NULL;
 
+static ThreadBlock* idle_thread = NULL;
 static ThreadBlock* thread_to_reap = NULL;
-uint16_t five_millisecond_timer = 0;
+
+static void idle_thread_entry(void) {
+    while (1) {
+        __asm__ volatile("hlt");
+    }
+}
 
 static void thread_exit(void) {
-    __asm__ volatile("cli"); // Disable interrupts while modifying scheduler state
-    
+    __asm__ volatile("cli");
     current_thread->state = THREAD_DEAD;
+    __asm__ volatile("sti");
     
-    __asm__ volatile("sti"); // Re-enable interrupts
-    
-    // Wait for the timer interrupt to schedule another thread.
-    // This loop will never be returned to once scheduled out.
     while (1) {
         __asm__ volatile("hlt");
     }
@@ -37,22 +39,18 @@ static void thread_exit(void) {
 static void unlink_thread(ThreadBlock* dead) {
     if (!thread_queue || !dead) return;
     
-    // If it's the only thread left in the queue
     if (dead->next == dead) {
         thread_queue = NULL;
         return;
     }
     
-    // Locate the previous node in the ring
     ThreadBlock* prev = dead;
     while (prev->next != dead) {
         prev = prev->next;
     }
     
-    // Bypass the dead node
     prev->next = dead->next;
     
-    // Shift list head if necessary
     if (thread_queue == dead) {
         thread_queue = dead->next;
     }
@@ -86,24 +84,54 @@ void thread_sleep(uint32_t ticks) {
     current_thread->state = THREAD_BLOCKED;
     __asm__ volatile("sti");
     
-    thread_yield(); // Give up the CPU right away
+    thread_yield();
 }
 
 void scheduler_init(void) {
+    // 1. Initialize Main Kernel Thread
     ThreadBlock* main_thread = malloc(sizeof(ThreadBlock));
     if (!main_thread) return;
     
     main_thread->esp = 0;
     main_thread->cr3 = (uint32_t)page_directory;
     main_thread->state = THREAD_RUNNING;
-    
-    // Kernel thread gets high priority
     main_thread->priority = PRIORITY_NORMAL;
     main_thread->ticks_remaining = PRIORITY_NORMAL;
     
     thread_queue = main_thread;
     thread_queue->next = main_thread;
     current_thread = main_thread;
+
+    // 2. Initialize Dedicated System Idle Thread (isolated from thread_queue)
+    idle_thread = malloc(sizeof(ThreadBlock));
+    if (!idle_thread) return;
+
+    void* stack = vmm_alloc_pages(1);
+    uint32_t stack_top = (uint32_t)stack + PAGE_SIZE;
+    
+    idle_thread->stack_base = stack;
+    
+    stack_top -= sizeof(uint32_t);
+    *(uint32_t*)stack_top = (uint32_t)thread_exit;
+    
+    stack_top -= sizeof(struct ThreadInterruptFrame);
+    struct ThreadInterruptFrame* frame = (struct ThreadInterruptFrame*)stack_top;
+    memset(frame, 0, sizeof(struct ThreadInterruptFrame));
+    
+    frame->eip = (uint32_t)idle_thread_entry;
+    frame->cs = 0x08;
+    frame->eflags = 0x202;
+    frame->ds = 0x10;
+    frame->es = 0x10;
+    frame->fs = 0x10;
+    frame->gs = 0x10;
+    
+    idle_thread->esp = stack_top;
+    idle_thread->cr3 = (uint32_t)page_directory;
+    idle_thread->state = THREAD_READY;
+    idle_thread->priority = PRIORITY_IDLE;
+    idle_thread->ticks_remaining = PRIORITY_IDLE;
+    idle_thread->next = NULL;
 }
 
 ThreadBlock* thread_create(void (*entry_point)(void), ThreadPriority priority) {
@@ -159,11 +187,9 @@ uint32_t thread_get_count(void) {
     uint32_t count = 0;
     ThreadBlock* head = thread_queue;
     
-    // Count the head node
     if (head->state != THREAD_DEAD) 
         count++;
     
-    // Advance to the second node and loop until we wrap back around to head
     ThreadBlock* current = head->next;
     while (current != head) {
         if (current->state != THREAD_DEAD) {
@@ -181,7 +207,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
     
     reap_thread();
     
-    // Wake up sleeping threads
+    // 1. Unblock sleeping threads
     ThreadBlock* temp = thread_queue;
     do {
         if (temp->state == THREAD_BLOCKED && timer_get_ms() >= temp->wake_tick) {
@@ -190,39 +216,74 @@ uint32_t thread_handler_c(uint32_t current_esp) {
         temp = temp->next;
     } while (temp != thread_queue);
     
-    // If current thread still has time slice remaining and is RUNNING, let it run
-    if (current_thread->state == THREAD_RUNNING && current_thread->ticks_remaining > 1) {
+    // Clean up dead threads and find highest priority among READY/RUNNING tasks
+    int max_priority = -1;
+    ThreadBlock* curr = thread_queue;
+    ThreadBlock* start = thread_queue;
+    
+    do {
+        if (curr->state == THREAD_DEAD) {
+            ThreadBlock* dead = curr;
+            curr = curr->next;
+            unlink_thread(dead);
+            thread_to_reap = dead;
+            if (!thread_queue) break;
+            start = thread_queue;
+        } else {
+            if (curr->state == THREAD_READY || curr->state == THREAD_RUNNING) {
+                if ((int)curr->priority > max_priority) {
+                    max_priority = (int)curr->priority;
+                }
+            }
+            curr = curr->next;
+        }
+    } while (curr != start && thread_queue != NULL);
+
+    // If no active threads are ready/running, fallback to idle_thread
+    if (max_priority == -1) {
+        if (current_thread != idle_thread && current_thread->state != THREAD_DEAD) {
+            current_thread->ticks_remaining = (uint32_t)current_thread->priority;
+            current_thread->esp = current_esp;
+            if (current_thread->state == THREAD_RUNNING) {
+                current_thread->state = THREAD_READY;
+            }
+        }
+        current_thread = idle_thread;
+        current_thread->state = THREAD_RUNNING;
+        return idle_thread->esp;
+    }
+
+    // Preemption & Time Quantum Check:
+    // Keep running current_thread ONLY if it shares the highest priority in the system and has ticks left
+    if (current_thread != idle_thread && 
+        current_thread->state == THREAD_RUNNING && 
+        (int)current_thread->priority == max_priority && 
+        current_thread->ticks_remaining > 1) {
+        
         current_thread->ticks_remaining--;
         return current_esp;
     }
-    
-    current_thread->ticks_remaining = (uint32_t)current_thread->priority;
-    
-    // Save stack pointer for living threads
-    if (current_thread->state != THREAD_DEAD) {
-        current_thread->esp = current_esp;
-        
-        // Only demote to READY if it was actively RUNNING
+
+    // Save context for thread being scheduled out
+    if (current_thread != idle_thread) {
+        current_thread->ticks_remaining = (uint32_t)current_thread->priority;
         if (current_thread->state == THREAD_RUNNING) {
             current_thread->state = THREAD_READY;
         }
-    }
-    
-    // Find the next READY/RUNNING thread
-    ThreadBlock* next_thread = current_thread->next;
-    while ((next_thread->state == THREAD_BLOCKED || next_thread->state == THREAD_DEAD) 
-        && next_thread != current_thread) {
-        
-        if (next_thread->state == THREAD_DEAD) {
-            ThreadBlock* dead = next_thread;
-            next_thread = next_thread->next;
-            unlink_thread(dead);
-            thread_to_reap = dead;
-        } else {
-            next_thread = next_thread->next;
+        if (current_thread->state != THREAD_DEAD) {
+            current_thread->esp = current_esp;
         }
     }
+
+    // Select next thread matching max_priority (Round-Robin among equal highest priority)
+    ThreadBlock* search_start = (current_thread == idle_thread) ? thread_queue : current_thread->next;
+    ThreadBlock* next_thread = search_start;
     
+    while (!((next_thread->state == THREAD_READY || next_thread->state == THREAD_RUNNING) && 
+             (int)next_thread->priority == max_priority)) {
+        next_thread = next_thread->next;
+    }
+
     current_thread = next_thread;
     current_thread->state = THREAD_RUNNING;
     
