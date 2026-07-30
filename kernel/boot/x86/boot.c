@@ -104,6 +104,9 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     // Fire up the scheduler
     scheduler_init();
     
+    // Event messaging system
+    kernel_event_init();
+    
     // Initiate display and drawing
     draw_set_info((uint32_t)mbi);
     display_init();
@@ -259,17 +262,16 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
                 strncat(desktop_item_path, "/", 128);
                 strncat(desktop_item_path, desktop_item_name, 128);
                 
+                // Folder
                 if (vfs_directory_check(desktop_item_path)) {
-                    // Folder
                     dwm_create_folder(posx, posy, desktop_item_name, desktop_item_path);
                     posx += sep;
-                    
-                } else {
-                    // File
+                } 
+                
+                // File
+                else {
                     dwm_create_file(posx, posy, desktop_item_name, desktop_item_path);
                     posx += sep;
-                    
-                    
                 }
                 
             }
@@ -303,4 +305,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     thread_create(thread_dwm_main, PRIORITY_HIGH);
     thread_create(thread_kernel_main, PRIORITY_HIGH);
     
+    while(1) {
+        thread_sleep(1000);
+    }
 }

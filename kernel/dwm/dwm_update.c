@@ -13,7 +13,7 @@ void dwm_update(void) {
         dwm_dispatch_message(&msg);
     }
     
-    // 1. Invalidate the OLD cursor position before we process any new movements
+    // Invalidate the OLD cursor position
     dwm_invalidate_region(input.mouse_last.x, input.mouse_last.y, context.window_context.cursor_width, context.window_context.cursor_height);
     
     // Process Hardware Input Queue

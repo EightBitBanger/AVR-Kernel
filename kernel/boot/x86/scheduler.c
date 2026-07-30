@@ -88,7 +88,7 @@ void thread_sleep(uint32_t ticks) {
 }
 
 void scheduler_init(void) {
-    // 1. Initialize Main Kernel Thread
+    // Initialize Main Kernel Thread
     ThreadBlock* main_thread = malloc(sizeof(ThreadBlock));
     if (!main_thread) return;
     
@@ -101,11 +101,10 @@ void scheduler_init(void) {
     thread_queue = main_thread;
     thread_queue->next = main_thread;
     current_thread = main_thread;
-
-    // 2. Initialize Dedicated System Idle Thread (isolated from thread_queue)
+    
     idle_thread = malloc(sizeof(ThreadBlock));
     if (!idle_thread) return;
-
+    
     void* stack = vmm_alloc_pages(1);
     uint32_t stack_top = (uint32_t)stack + PAGE_SIZE;
     
@@ -207,7 +206,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
     
     reap_thread();
     
-    // 1. Unblock sleeping threads
+    // Unblock sleeping threads
     ThreadBlock* temp = thread_queue;
     do {
         if (temp->state == THREAD_BLOCKED && timer_get_ms() >= temp->wake_tick) {
@@ -238,7 +237,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
             curr = curr->next;
         }
     } while (curr != start && thread_queue != NULL);
-
+    
     // If no active threads are ready/running, fallback to idle_thread
     if (max_priority == -1) {
         if (current_thread != idle_thread && current_thread->state != THREAD_DEAD) {
@@ -252,7 +251,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
         current_thread->state = THREAD_RUNNING;
         return idle_thread->esp;
     }
-
+    
     // Preemption & Time Quantum Check:
     // Keep running current_thread ONLY if it shares the highest priority in the system and has ticks left
     if (current_thread != idle_thread && 
@@ -263,7 +262,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
         current_thread->ticks_remaining--;
         return current_esp;
     }
-
+    
     // Save context for thread being scheduled out
     if (current_thread != idle_thread) {
         current_thread->ticks_remaining = (uint32_t)current_thread->priority;
@@ -274,8 +273,8 @@ uint32_t thread_handler_c(uint32_t current_esp) {
             current_thread->esp = current_esp;
         }
     }
-
-    // Select next thread matching max_priority (Round-Robin among equal highest priority)
+    
+    // Select next thread matching max_priority
     ThreadBlock* search_start = (current_thread == idle_thread) ? thread_queue : current_thread->next;
     ThreadBlock* next_thread = search_start;
     
@@ -283,7 +282,7 @@ uint32_t thread_handler_c(uint32_t current_esp) {
              (int)next_thread->priority == max_priority)) {
         next_thread = next_thread->next;
     }
-
+    
     current_thread = next_thread;
     current_thread->state = THREAD_RUNNING;
     

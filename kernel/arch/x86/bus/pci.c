@@ -149,51 +149,6 @@ uint16_t pci_get_io_bar(uint8_t bus, uint8_t dev, uint8_t func, uint8_t bar_inde
 }
 
 
-void ahci_test_write(struct AHCI_Port_Registers* active_port) {
-    if (active_port == NULL) {
-        print("AHCI Test Error: active_port is NULL\n");
-        return;
-    }
-    
-    print("--- Starting AHCI Hex Editor Verification Test ---\n");
-    
-    // 1. Allocate a 512-byte temporary block in memory
-    uint8_t* test_buffer = (uint8_t*)malloc(512);
-    if (test_buffer == NULL) {
-        print("AHCI Test Error: Failed to allocate test buffer memory.\n");
-        return;
-    }
-    
-    // 2. Clear the buffer entirely
-    memset(test_buffer, 0, 512);
-    
-    // 3. Bake a highly distinct string pattern into the buffer
-    const char* magic_string = "DEADBEEF CHICKEN NUGGET TEST PATTERN - QEMU VIRTUAL DISK WRITE OK!";
-    size_t str_len = strlen(magic_string);
-    memcpy(test_buffer, magic_string, str_len);
-    
-    // Fill the tail end of the sector with recognizable incrementing hex bytes
-    for (int i = 128; i < 512; i++) {
-        test_buffer[i] = (uint8_t)(i & 0xFF);
-    }
-    
-    print("Attempting to write test pattern to LBA Sector 1...\n");
-    
-    // 4. Issue the write transaction to LBA 1 (1 sector count)
-    // Using LBA 1 preserves Sector 0 just in case you have structural data there
-    if (ahci_write_sectors(active_port, 1, 1, test_buffer)) {
-        print("SUCCESS: Sector 1 written successfully!\n");
-        print("Action Required: Close QEMU and open your disk image in a hex editor.\n");
-        print("Look at file offset 0x200 (512 bytes in) to find your string!\n");
-    } else {
-        print("FAILURE: AHCI controller rejected or timed out on the write verification transfer.\n");
-    }
-    
-    // 5. Clean up allocated resources
-    free(test_buffer);
-    print("--------------------------------------------------\n");
-}
-
 void pci_scan_bus(uint8_t bus_number, uint32_t pci_directory, uint32_t mnt_directory) {
     struct LocalPaths fs_paths;
     kernel_get_local_paths(&fs_paths);

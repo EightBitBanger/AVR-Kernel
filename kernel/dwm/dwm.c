@@ -24,6 +24,7 @@ struct DWMImages       images;
 struct DWMCascade      cascade;
 
 void dwm_initiate(void) {
+    mutex_init(&dwm_mutex);
     
     // Theme
     theme.bg_color          = 0xFF0E0E1A;
@@ -49,7 +50,6 @@ void dwm_initiate(void) {
     workspace.window_head = NULL;
     workspace.window_tail = NULL;
     
-    // Calculate display center first so context and mouse drivers can sync to it
     Point display_center;
     display_center.x = display_get_width() / 2;
     display_center.y = display_get_height() / 2;
@@ -83,7 +83,6 @@ void dwm_initiate(void) {
     dragdrop.dragged_icon = NULL;
     dragdrop.icon_drag_offset_x = 0;
     dragdrop.icon_drag_offset_y = 0;
-    
     dragdrop.dragged_resizing = NULL;
     dragdrop.resize_offset_x = 0;
     dragdrop.resize_offset_y = 0;
@@ -103,7 +102,6 @@ void dwm_initiate(void) {
     
     // Cascade
     uint16_t cascade_mul = 3;
-    
     cascade.h = 17;
     cascade.w = 20;
     cascade.x = cascade.h * cascade_mul;
@@ -111,16 +109,12 @@ void dwm_initiate(void) {
     cascade.max = 400;
     
     // Load resources
-    
-    // Icons
     dwm_resource_sprite_load("icon_folder",      &rc_icon_folder);
     dwm_resource_sprite_load("icon_file",        &rc_icon_file);
     dwm_resource_sprite_load("icon_document",    &rc_icon_document);
     dwm_resource_sprite_load("icon_system",      &rc_icon_system);
     dwm_resource_sprite_load("icon_storage",     &rc_icon_storage);
-    // Images
     dwm_resource_sprite_load("image_error",      &rc_image_error);
-    // UI
     dwm_resource_sprite_load("ui_close",         &rc_button_close);
     dwm_resource_sprite_load("ui_close_red",     &rc_button_close_red);
     dwm_resource_sprite_load("ui_close_purple",  &rc_button_close_purple);
@@ -129,7 +123,6 @@ void dwm_initiate(void) {
     dwm_resource_sprite_load("ui_new",           &rc_button_plus);
     dwm_resource_sprite_load("ui_button",        &rc_button);
     
-    // Setup global default theme for the root menu container slot
     for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
         ctxmenu.menus[i].visible = false;
         ctxmenu.menus[i].x = 0;
@@ -146,12 +139,10 @@ void dwm_initiate(void) {
         ctxmenu.menus[i].item_count       = 0;
     }
     
-    // Mouse cursors
     dwm_resource_sprite_load("cur_edge",    &rc_cursor_edge);
     dwm_resource_sprite_load("cur_pointer", &rc_cursor_pointer);
     dwm_resource_sprite_load("cur_angle",   &rc_cursor_angle);
     
-    // Default mouse cursor
     struct Image* def_cursor = dwm_resource_find("cur_pointer");
     if (def_cursor) {
         dwm_set_cursor(def_cursor->data, def_cursor->width, def_cursor->height);
@@ -163,10 +154,10 @@ void dwm_initiate(void) {
 
 WindowHandle dwm_create_window(WindowClass wclass, uint16_t wstyle, WindowProcedure wproc) {
     struct WindowObject* window = dwm_allocate_window(wclass, wstyle, wproc);
-    return window->id;
+    return window ? window->id : 0;
 }
 
-void dwm_destroy_window(WindowHandle handle) {
+static void dwm_destroy_window_internal(WindowHandle handle) {
     if (handle == 0) return;
     
     struct WindowObject* window_handle = NULL;
@@ -177,9 +168,8 @@ void dwm_destroy_window(WindowHandle handle) {
             break;
         }
     }
-    if (window_handle == NULL) return; 
-    
-    // Free associated resources
+    if (window_handle == NULL) return;
+
     dwm_window_resource_free_all(window_handle->id);
     
     if (dragdrop.dragged_window == window_handle) dragdrop.dragged_window = NULL;
@@ -194,8 +184,6 @@ void dwm_destroy_window(WindowHandle handle) {
     int destroyed_max_y = abs_y + window_handle->h + window_handle->border_width;
     
     list_remove(&workspace.window_head, &workspace.window_tail, window_handle);
-    
-    // Unchain from parent safely if it has one
     if (window_handle->parent != NULL) {
         list_remove(&window_handle->parent->children_head, 
                     &window_handle->parent->children_tail, 
@@ -203,25 +191,20 @@ void dwm_destroy_window(WindowHandle handle) {
         window_handle->parent = NULL;
     }
     
-    // Free buttons
     while (window_handle->buttons_head != NULL) {
         struct list_node* btn_node = window_handle->buttons_head;
         struct WindowButton* btn = (struct WindowButton*)btn_node->data;
-        
         list_remove(&window_handle->buttons_head, &window_handle->buttons_tail, btn);
         free(btn);
     }
     
-    // Free editable text fields
     while (window_handle->edit_head != NULL) {
         struct list_node* edit_node = window_handle->edit_head;
         struct WindowEditField* editable = (struct WindowEditField*)edit_node->data;
-        
         list_remove(&window_handle->edit_head, &window_handle->edit_tail, editable);
         free(editable);
     }
     
-    // Kill all children
     while (window_handle->children_head != NULL) {
         struct list_node* child_node = window_handle->children_head;
         struct WindowObject* child = (struct WindowObject*)child_node->data;
@@ -229,14 +212,13 @@ void dwm_destroy_window(WindowHandle handle) {
         list_remove(&window_handle->children_head, &window_handle->children_tail, child);
         child->parent = NULL; 
         
-        dwm_destroy_window(child->id);
+        dwm_destroy_window_internal(child->id);
     }
     
     dwm_invalidate_region(destroyed_min_x, destroyed_min_y, 
                           destroyed_max_x - destroyed_min_x, 
                           destroyed_max_y - destroyed_min_y);
-    
-    // Shift focus and force repaint of newly active window
+
     if (workspace.window_tail != NULL) {
         struct WindowObject* tail_win = (struct WindowObject*)workspace.window_tail->data;
         dwm_set_focus(tail_win); 
@@ -252,8 +234,13 @@ void dwm_destroy_window(WindowHandle handle) {
     
     if (window_handle->frame_buffer != NULL) 
         free(window_handle->frame_buffer);
-    
     free(window_handle);
+}
+
+void dwm_destroy_window(WindowHandle handle) {
+    mutex_lock(&dwm_mutex);
+    dwm_destroy_window_internal(handle);
+    mutex_unlock(&dwm_mutex);
 }
 
 struct IconObject* dwm_create_icon(uint16_t x, uint16_t y, uint16_t width, uint16_t height, struct Image* sprite, uint16_t icon_index) {
@@ -371,8 +358,11 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         memset(window_object->frame_buffer, 0x11, frame_buffer_sz);
     }
     
+    mutex_lock(&dwm_mutex);
+
     uint32_t candidate_id = workspace.next_window_id++;
     if (candidate_id == 0) candidate_id = workspace.next_window_id++;
+    
     bool id_check = true;
     while (id_check) {
         id_check = false;
@@ -391,7 +381,6 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->style = w_style;
     strncpy(window_object->title, w_class.title, DWM_MAX_TITLE_LEN);
     
-    // Check if the no-borders style is applied
     if (window_object->style & DWM_WSTYLE_NOBORDERS) {
         window_object->border_width = 0;
         window_object->titlebar_height = 0;
@@ -401,13 +390,11 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     }
     
     window_object->parent = NULL;
-    
     window_object->x = w_class.x;
     window_object->y = (w_class.y < 0) ? 0 : w_class.y;
     window_object->w = w_class.width;
     window_object->h = w_class.height;
     
-    // Window cascading
     if (w_style & DWM_WSTYLE_CASCADE) {
         window_object->x = cascade.x;
         window_object->y = cascade.y;
@@ -437,25 +424,22 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     
     window_object->max_width = w_class.max_width;
     window_object->max_height = w_class.max_height;
-    
-    // Window theme
+
     window_object->border_color         = theme.w_border;
     window_object->background_color     = theme.w_background;
     window_object->title_text_color     = theme.w_title_text;
     window_object->title_color_low      = theme.w_title_low;
     window_object->title_color_high     = theme.w_title_high;
-    
     window_object->inactive_color_low   = theme.w_inactive_low;
     window_object->inactive_color_high  = theme.w_inactive_high;
     
     window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE;
-    
     window_object->event_callback = proc;
     
     if (workspace.window_tail != NULL) {
         struct WindowObject* old_active = (struct WindowObject*)workspace.window_tail->data;
-        // Force the old window to redraw its borders/titlebar in an inactive state
         old_active->flags |= DWM_WFLAG_REDECORATE;
+        
         int old_abs_x, old_abs_y;
         dwm_get_absolute_position(old_active, &old_abs_x, &old_abs_y);
         dwm_invalidate_region(old_abs_x - old_active->border_width, 
@@ -467,7 +451,8 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     if (!list_append(&workspace.window_head, &workspace.window_tail, window_object)) {
         free(window_object->frame_buffer);
         free(window_object);
-        return 0;
+        mutex_unlock(&dwm_mutex);
+        return NULL;
     }
     
     int redraw_x, redraw_y;
@@ -476,8 +461,9 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
                     redraw_y - window_object->border_width, 
                     window_object->w + (window_object->border_width * 2), 
                     window_object->h + (window_object->border_width * 2));
-    
-    // Window styling
+
+    mutex_unlock(&dwm_mutex);
+
     if (!(w_style & DWM_WSTYLE_NOCLOSEBOX)) {
         struct Image* button_close = dwm_resource_find("ui_close_red");
         struct Image* button_minimize  = dwm_resource_find("ui_minimize");
@@ -497,9 +483,7 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         window_add_button(window_object, resize_x, resize_y, resize_w, resize_h, DWM_EVENT_RESIZE, NULL);
     }
     
-    // Dispatch initial redraw message so event callback draws window contents immediately
     dwm_post_message(window_object->id, DWM_EVENT_REDRAW, 0, 0);
-    
     return window_object;
 }
 

@@ -6,7 +6,6 @@
 #include <kernel/util/timer.h>
 #include <kernel/util/string.h>
 
-
 bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2) {
     return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
 }
@@ -18,7 +17,6 @@ void get_rect_intersection(int x1, int y1, int w1, int h1,
     int iy1 = (y1 > y2) ? y1 : y2;
     int ix2 = (x1 + w1 < x2 + w2) ? x1 + w1 : x2 + w2;
     int iy2 = (y1 + h1 < y2 + h2) ? y1 + h1 : y2 + h2;
-
     if (ix1 < ix2 && iy1 < iy2) {
         *out_x = ix1;
         *out_y = iy1;
@@ -26,10 +24,9 @@ void get_rect_intersection(int x1, int y1, int w1, int h1,
         *out_h = iy2 - iy1;
     } else {
         *out_w = 0;
-        *out_h = 0; // No overlap
+        *out_h = 0;
     }
 }
-
 
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
     dwm_invalidate_region(x, y, w, h);
@@ -37,17 +34,18 @@ void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h) {
 
 void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h) {
     if (w <= 0 || h <= 0) return;
-    
+
     // Bounds clipping
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }
     
     int display_w = display_get_width();
     int display_h = display_get_height();
+
     if (x + w > display_w) w = display_w - x;
     if (y + h > display_h) h = display_h - y;
     if (w <= 0 || h <= 0) return;
-    
+
     if (context.window_context.dirty_count < MAX_DIRTY_RECTS) {
         context.window_context.dirty_regions[context.window_context.dirty_count].x = x;
         context.window_context.dirty_regions[context.window_context.dirty_count].y = y;
@@ -55,18 +53,17 @@ void dwm_invalidate_region(int16_t x, int16_t y, int16_t w, int16_t h) {
         context.window_context.dirty_regions[context.window_context.dirty_count].h = h;
         context.window_context.dirty_count++;
     } else {
-        
         int min_x = x;
         int min_y = y;
         int max_x = x + w;
         int max_y = y + h;
-        
+
         for (int i = 0; i < context.window_context.dirty_count; i++) {
             int rx1 = context.window_context.dirty_regions[i].x;
             int ry1 = context.window_context.dirty_regions[i].y;
             int rx2 = rx1 + context.window_context.dirty_regions[i].w;
             int ry2 = ry1 + context.window_context.dirty_regions[i].h;
-            
+
             if (rx1 < min_x) min_x = rx1;
             if (ry1 < min_y) min_y = ry1;
             if (rx2 > max_x) max_x = rx2;
@@ -108,10 +105,9 @@ void dwm_get_absolute_position(struct WindowObject* window, int* out_x, int* out
     
     int abs_x = window->local_x;
     int abs_y = window->local_y;
-    
     struct WindowObject* p = window->parent;
     while (p != NULL) {
-        abs_x += p->surface_x; 
+        abs_x += p->surface_x;
         abs_y += p->surface_y;
         p = p->parent;
     }

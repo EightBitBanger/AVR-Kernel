@@ -6,6 +6,7 @@
 #include <kernel/util/string.h>
 #include <kernel/util/list.h>
 
+mutex_t dwm_mutex;
 
 bool dwm_create_context_menu(int x, int y, uint32_t directive, const char* items[], int item_count) {
     if (item_count <= 0 || item_count > 16) { 
