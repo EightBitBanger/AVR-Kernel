@@ -3,27 +3,23 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <kernel/scheduler/scheduler.h>
 
-struct Mutex {
-    uint8_t lock;
-};
+typedef struct MutexWaiter {
+    ThreadBlock* thread;
+    struct MutexWaiter* next;
+} MutexWaiter;
 
-inline void mutex_initiate(struct Mutex* mux) {
-    mux->lock = 0;
-}
+typedef struct Mutex {
+    bool locked;
+    ThreadBlock* owner;         // Thread currently holding the lock
+    MutexWaiter* wait_head;     // Head of the queue waiting for lock
+    MutexWaiter* wait_tail;     // Tail of the queue waiting for lock
+} mutex_t;
 
-inline void mutex_lock(struct Mutex* mux) {
-    mux->lock = 1;
-}
-
-inline void mutex_unlock(struct Mutex* mux) {
-    mux->lock = 0;
-}
-
-inline bool mutex_is_locked(struct Mutex* mux) {
-    if (mux->lock == 0) 
-        return false;
-    return true;
-}
+void mutex_init(mutex_t* mutex);
+void mutex_lock(mutex_t* mutex);
+bool mutex_trylock(mutex_t* mutex);
+void mutex_unlock(mutex_t* mutex);
 
 #endif

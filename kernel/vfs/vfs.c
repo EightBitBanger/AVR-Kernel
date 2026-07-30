@@ -16,7 +16,7 @@ struct list_node* open_files_head = NULL;
 struct list_node* open_files_tail = NULL;
 File next_unique_id = 1;
 
-bool vfs_is_directory(const char* path) {
+bool vfs_directory_check(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
     
@@ -36,29 +36,6 @@ bool vfs_is_directory(const char* path) {
     struct FSDeviceContext* ctx = vfs_device_get_context(path);
     if (ctx && fs_check_directory_valid(ctx, address)) 
         return true;
-    
-    return false;
-}
-
-bool vfs_directory_check(const char* path) {
-    return vfs_is_directory(path);
-    
-    if (path == NULL || path[0] == '\0') 
-        return false;
-    uint32_t address = resolve_path_to_address(path);
-    if (address == KNODE_NULL || address == FS_NULL) 
-        return false;
-    if (kmalloc_is_valid(address)) {
-        uint8_t k_flags = kmalloc_get_flags(address);
-        if (k_flags & KMALLOC_FLAG_DIRECTORY) {
-            return true;
-        }
-    }
-    
-    struct FSDeviceContext* ctx = vfs_device_get_context(path);
-    if (ctx && fs_check_directory_valid(ctx, address)) {
-        return true;
-    }
     
     return false;
 }
