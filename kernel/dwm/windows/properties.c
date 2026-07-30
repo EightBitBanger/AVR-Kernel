@@ -340,8 +340,9 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                     // Prevent division by zero if total space is reported as 0
                     if (total == 0) 
                         total = 1;
-                    // Calculate used percentage (0 to 100)
-                    uint32_t used_percent = (used * 100) / total;
+                    
+                    // Calculate used percentage using 64-bit arithmetic to prevent overflow
+                    uint32_t used_percent = (uint32_t)(((uint64_t)used * 100) / total);
                     
                     // Ensure it doesn't accidentally exceed 100 due to rounding or weird data
                     if (used_percent > 100) {

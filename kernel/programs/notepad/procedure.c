@@ -115,7 +115,7 @@ static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowSta
         return; 
     }
     
-    // 1. PROCESS ARROW NAVIGATION KEYS FIRST
+    // Process arrow navigation keys first
     if (scancode == KBD_SCANCODE_LEFT || scancode == KBD_SCANCODE_RIGHT || 
         scancode == KBD_SCANCODE_UP || scancode == KBD_SCANCODE_DOWN) {
         

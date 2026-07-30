@@ -10,6 +10,8 @@
 #define KEVENT_EXECUTE         0x0002
 #define KEVENT_DWM_REFRESH     0x0004
 
+void kernel_event_init(void);
+
 bool kernel_event_send(uint8_t flags, const char* name, const char* arguments);
 bool kernel_event_remove(const char* name);
 

@@ -8,7 +8,11 @@
 #include <kernel/dwm/dwm_platform.h>
 #include <kernel/dwm/flags.h>
 
+#include <kernel/mutex.h>
+
 #define MAX_CONTEXT_MENUS 8
+
+extern mutex_t dwm_mutex;
 
 struct DWMWorkspace {
     struct list_node* window_head;
