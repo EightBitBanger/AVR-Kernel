@@ -1,3 +1,4 @@
+
 #include <kernel/dwm/windows/dialog_file.h>
 #include <kernel/dwm/dwm_core_internal.h>
 
@@ -100,12 +101,12 @@ void callback_file_dialog_handler(WindowHandle handle, wEvent event, uint32_t wp
     uint16_t btn_y    = window->h - (btn_h + 12);
     
     // Color Palette
-    uint32_t color_bg            = 0xFF08080F;
-    uint32_t color_text_primary  = 0xFFFFFFFF;
-    uint32_t color_text_value    = 0xFF3FFF3F;
-    uint32_t color_border_normal = 0xFF444466;
-    uint32_t color_fill_button   = 0xFF1C1C2A;
-    uint32_t color_divider       = 0xFF04C004;
+    uint32_t color_bg            = theme.client.background;
+    uint32_t color_text_primary  = theme.client.text;
+    uint32_t color_text_value    = theme.client.text_value;
+    uint32_t color_border_normal = theme.button.border;
+    uint32_t color_fill_button   = theme.button.fill;
+    uint32_t color_divider       = theme.client.accent;
     
     const char* action_label = (state->mode == DIALOG_FILE_MODE_SAVE) ? "Save" : "Open";
     
@@ -170,3 +171,4 @@ void callback_file_dialog_handler(WindowHandle handle, wEvent event, uint32_t wp
             break;
     }
 }
+

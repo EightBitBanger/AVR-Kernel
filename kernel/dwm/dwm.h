@@ -1,7 +1,9 @@
+
 #ifndef _WINDOW_MANAGER_H_
 #define _WINDOW_MANAGER_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <kernel/dwm/rendering/image.h>
 
@@ -23,14 +25,18 @@
 
 #include <kernel/dwm/style_flags.h>
 #include <kernel/dwm/configuration.h>
+#include <kernel/dwm/theme.h>
 
 #include <kernel/dwm/windows/properties.h>
 #include <kernel/dwm/windows/message_box.h>
 #include <kernel/dwm/windows/message_error.h>
 #include <kernel/dwm/windows/dialog_delete.h>
 #include <kernel/dwm/windows/dialog_file.h>
+#include <kernel/dwm/windows/start_menu.h>
+#include <kernel/dwm/windows/filecopy.h>
 
 #include <kernel/dwm/dwm_dispatch.h>
+#include <kernel/dwm/dwm_clipboard.h>
 
 typedef void(*WindowProcedure)(WindowHandle, wEvent, uint32_t wparam, int32_t lparam);
 
@@ -59,6 +65,21 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const 
 
 void* dwm_resource_find(const char* name);
 
+// Image resources (shared by boot.c, which saves them, and dwm_initiate,
+// which loads them)
+
+struct DWMBuiltinImage {
+    const char*          name;      // Resource name and file name
+    const struct Sprite* sprite;    // Compiled-in copy (save source / fallback)
+};
+
+extern const struct DWMBuiltinImage dwm_builtin_images[];
+extern const uint32_t dwm_builtin_image_count;
+
+// Directory the DWM images live in: "<home>/sys/images".
+// Returns false when no home device was found.
+bool dwm_get_image_directory(char* out, size_t size);
+
 // Window resource management
 
 uint8_t dwm_window_resource_add(WindowHandle handle, const char* name, void* resource);
@@ -73,7 +94,8 @@ void dwm_window_resource_free_all(WindowHandle handle);
 void dwm_draw_line(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color);
 void dwm_draw_rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color);
 void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color);
-void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high);
+void dwm_draw_rect_filled_gradient_vertical(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high);
+void dwm_draw_rect_filled_gradient_horizontal(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high);
 
 void dwm_draw_text(int16_t x, int16_t y, const char* text, uint32_t color);
 void dwm_draw_redraw(int16_t x, int16_t y, int16_t w, int16_t h);
@@ -117,7 +139,23 @@ void dwm_window_send_event(WindowHandle handle, wEvent event);
 // Get number of open windows
 uint32_t dwm_window_get_count(void);
 
+// Clipboard: see dwm_clipboard.h (included above)
+
 // Set the current key input
 void dwm_set_keyboard_char(uint16_t ch);
+
+// Offer a key to the desktop icon rename box. Returns true when a desktop
+// rename is in progress and the key was consumed; otherwise the caller
+// should deliver the key to the focused window as usual.
+bool dwm_desktop_rename_key(uint16_t key);
+
+// Desktop icon layout (<home>/usr/icons)
+
+// Move existing desktop icons to their saved positions. Call after the
+// desktop icons have been created. Returns false if there is no saved layout.
+bool dwm_desktop_layout_load(void);
+
+// Write the current position of every desktop icon to <home>/usr/icons
+bool dwm_desktop_layout_save(void);
 
 #endif

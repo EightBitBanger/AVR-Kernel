@@ -294,7 +294,12 @@ uint8_t dwm_window_set_name(WindowHandle handle, const char* name) {
 }
 
 void dwm_set_focus(struct WindowObject* target) {
-    if (target == NULL || (workspace.window_tail != NULL && workspace.window_tail->data == target)) {
+    if (target == NULL) return;
+    
+    // Any explicit window focus takes it back from the desktop
+    workspace.desktop_focused = false;
+    
+    if (workspace.window_tail != NULL && workspace.window_tail->data == target) {
         return; 
     }
     
@@ -306,6 +311,55 @@ void dwm_set_focus(struct WindowObject* target) {
     
     if (list_remove(&workspace.window_head, &workspace.window_tail, target)) {
         list_append(&workspace.window_head, &workspace.window_tail, target);
+    }
+}
+
+// Clicking empty desktop: no window is focused, the z-order is left as is
+void dwm_set_desktop_focus(void) {
+    workspace.desktop_focused = true;
+}
+
+// The window that currently has input focus, or NULL when the desktop has it
+struct WindowObject* dwm_get_focused_window(void) {
+    if (workspace.desktop_focused) return NULL;
+    if (workspace.window_tail == NULL) return NULL;
+    return (struct WindowObject*)workspace.window_tail->data;
+}
+
+// Called once per frame from dwm_update (outside the DWM mutex). Compares the
+// current focus against last frame's and posts FOCUS_LOST / FOCUS_GAINED.
+// Detecting the change here instead of inside dwm_set_focus catches every
+// path that moves focus (clicks, window creation, destruction, desktop
+// clicks) and avoids posting messages while dwm_mutex is held.
+void dwm_process_focus_change(void) {
+    struct WindowObject* focused = dwm_get_focused_window();
+    WindowHandle current = focused ? focused->id : 0;
+    
+    if (current == workspace.last_focus) return;
+    
+    WindowHandle previous = workspace.last_focus;
+    workspace.last_focus = current;
+    
+    // Repaint both titlebars so active/inactive colors follow focus
+    struct WindowObject* old_window = dwm_get_window_by_id(previous);
+    if (old_window != NULL) {
+        old_window->flags |= DWM_WFLAG_REDECORATE;
+        int ax, ay;
+        dwm_get_absolute_position(old_window, &ax, &ay);
+        dwm_invalidate_region(ax - old_window->border_width, ay - old_window->border_width,
+                              old_window->w + (old_window->border_width * 2),
+                              old_window->h + (old_window->border_width * 2));
+        dwm_post_message(previous, DWM_EVENT_FOCUS_LOST, current, 0);
+    }
+    
+    if (focused != NULL) {
+        focused->flags |= DWM_WFLAG_REDECORATE;
+        int ax, ay;
+        dwm_get_absolute_position(focused, &ax, &ay);
+        dwm_invalidate_region(ax - focused->border_width, ay - focused->border_width,
+                              focused->w + (focused->border_width * 2),
+                              focused->h + (focused->border_width * 2));
+        dwm_post_message(current, DWM_EVENT_FOCUS_GAINED, previous, 0);
     }
 }
 
@@ -401,6 +455,8 @@ void dwm_window_set_focus(WindowHandle handle) {
         window = window->parent;
     }
     
+    workspace.desktop_focused = false;
+    
     // Move the parent to the end of the top-level z-order list
     if (workspace.window_tail != NULL && (struct WindowObject*)workspace.window_tail->data != window) {
         list_remove(&workspace.window_head, &workspace.window_tail, window);
@@ -414,11 +470,8 @@ void dwm_window_set_focus(WindowHandle handle) {
 }
 
 WindowHandle dwm_window_get_focus(void) {
-    if (workspace.window_tail == NULL || workspace.window_tail->data == NULL) 
-        return 0;
-    
-    struct WindowObject* focused_window = (struct WindowObject*)workspace.window_tail->data;
-    return focused_window->id;
+    struct WindowObject* focused_window = dwm_get_focused_window();
+    return focused_window ? focused_window->id : 0;
 }
 
 void dwm_resource_sprite_load(const char* resource_name, const struct Sprite* sprite) {
@@ -488,3 +541,5 @@ uint16_t dwm_get_titlebar_height(WindowHandle handle) {
     if (window == NULL) return 0;
     return window->titlebar_height;
 }
+
+// The clipboard lives in dwm_clipboard.c

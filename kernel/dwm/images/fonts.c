@@ -1,6 +1,8 @@
 #include <kernel/dwm/images/fonts.h>
 #include <kernel/dwm/rendering/font.h>
 
+#ifdef ADD_IMAGE_LIB
+
 const struct Font rc_font_basic = {
     .width_px = 6,
     .height_px = 8,
@@ -146,3 +148,5 @@ const struct Font rc_font_basic = {
         0b00000000, 0b00010000, 0b00001000, 0b00010000, 0b00001000, 0b00000000, 
     }
 };
+
+#endif

@@ -6,7 +6,25 @@
 #include <kernel/util/timer.h>
 #include <kernel/util/string.h>
 
+// Route the current mouse snapshot to whichever interaction is active
+static void dwm_apply_mouse_state(struct WindowContext* ctx) {
+    if (dragdrop.dragged_window != NULL) {
+        dwm_update_window_dragging(ctx);
+    } else if (dragdrop.dragged_resizing != NULL) {
+        dwm_update_window_resizing(ctx);
+    } else if (dragdrop.dragged_icon != NULL) {
+        dwm_update_icon_dragging(ctx);
+    } else if (dragdrop.captured_window != 0) {
+        dwm_update_window_capture(ctx);
+    } else {
+        dwm_update_mouse(ctx);
+    }
+}
+
 void dwm_update(void) {
+    // Turn last frame's focus changes into FOCUS_LOST / FOCUS_GAINED messages
+    dwm_process_focus_change();
+    
     // Process Window Messages
     DWMMessage msg;
     while (dwm_get_message(&msg)) {
@@ -19,8 +37,31 @@ void dwm_update(void) {
     // Process Hardware Input Queue
     MouseEvent m_event;
     
+    // While a window/icon is being dragged or a window resized, every queued
+    // motion event used to move it and invalidate its old and new rects, so a
+    // frame that drained N events repainted the window ~2N times. Only the
+    // final position matters on screen, so plain motion is deferred and
+    // applied once. A button transition flushes the deferred position first,
+    // so press/release still lands exactly where it happened.
+    bool drag_pending = false;
+    
     // Drain the queue of all events that happened since the last tick
     while (mouse_dequeue_event(&m_event)) {
+        
+        bool dragging = (dragdrop.dragged_window   != NULL) ||
+                        (dragdrop.dragged_resizing != NULL) ||
+                        (dragdrop.dragged_icon     != NULL) ||
+                        (dragdrop.captured_window  != 0);
+        
+        bool buttons_changed = (m_event.left_button  != context.window_context.left_button_pressed) ||
+                               (m_event.right_button != context.window_context.right_button_pressed);
+        
+        // Apply the deferred motion at the previous position before the
+        // button change is processed
+        if (drag_pending && buttons_changed) {
+            dwm_apply_mouse_state(&context.window_context);
+            drag_pending = false;
+        }
         
         // Update context based on this specific snapshot in time
         context.window_context.mouse.x = m_event.x;
@@ -28,16 +69,17 @@ void dwm_update(void) {
         context.window_context.left_button_pressed  = m_event.left_button;
         context.window_context.right_button_pressed = m_event.right_button;
         
-        // Update UI logic for THIS specific event
-        if (dragdrop.dragged_window != NULL) {
-            dwm_update_window_dragging(&context.window_context);
-        } else if (dragdrop.dragged_resizing != NULL) {
-            dwm_update_window_resizing(&context.window_context);
-        } else if (dragdrop.dragged_icon != NULL) {
-            dwm_update_icon_dragging(&context.window_context);
-        } else {
-            dwm_update_mouse(&context.window_context); 
+        if (dragging && !buttons_changed) {
+            drag_pending = true;
+            continue;
         }
+        
+        // Update UI logic for THIS specific event
+        dwm_apply_mouse_state(&context.window_context);
+    }
+    
+    if (drag_pending) {
+        dwm_apply_mouse_state(&context.window_context);
     }
     
     // Invalidate the new cursor position
@@ -60,3 +102,4 @@ void dwm_update(void) {
     context.window_context.cursor_height  = images.current_cursor.height;
     context.window_context.dirty_count = 0;
 }
+

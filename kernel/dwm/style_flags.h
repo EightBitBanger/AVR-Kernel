@@ -9,6 +9,7 @@
 #define DWM_WSTYLE_RESIZEABLE      0x0008   // Thicker border that allows dragging to resize
 #define DWM_WSTYLE_NOCLOSEBOX      0x0010   // Removes the close button
 #define DWM_WSTYLE_CASCADE         0x0020   // Spawns window in a incrementally cascaded formation
+#define DWM_WSTYLE_NOTITLEBAR      0x0040   // Keeps the border but removes the titlebar (and its buttons)
 
 //
 // Considering for implementation

@@ -1,3 +1,4 @@
+
 #ifndef DWM_INTERNAL_CORE_CONPONENTS_H
 #define DWM_INTERNAL_CORE_CONPONENTS_H
 
@@ -26,37 +27,16 @@ struct DWMWorkspace {
     
     uint32_t next_window_id;
     uint32_t next_edit_field_id;
+    
+    // Focus tracking
+    bool desktop_focused;           // True after a click on empty desktop (no window has focus)
+    WindowHandle last_focus;        // Focus as seen on the previous frame (for focus events)
 };
 
 struct DWMTaskbar {
     WindowHandle window;
     
     uint16_t height;
-};
-
-struct DWMTheme {
-    uint32_t bg_color;
-    
-    // Window frame
-    
-    uint32_t w_border;
-    uint32_t w_background;
-    uint32_t w_title_text;
-    
-    uint32_t w_title_low;
-    uint32_t w_title_high;
-    
-    uint32_t w_inactive_low;
-    uint32_t w_inactive_high;
-    
-    // Context menu
-    
-    uint32_t ctx_bg;
-    uint32_t ctx_border;
-    uint32_t ctx_separator;
-    uint32_t ctx_highlight;
-    uint32_t ctx_text;
-    
 };
 
 struct DWMDragDrop {
@@ -76,6 +56,10 @@ struct DWMDragDrop {
     struct WindowObject* dragged_resizing;
     int resize_offset_x;
     int resize_offset_y;
+    
+    // Mouse capture (see DWM_EVENT_MOUSE_MOVE / DWM_EVENT_MOUSE_UP)
+    WindowHandle captured_window;   // 0 when nothing is captured
+    Point capture_last;             // Last position sent to the captured window
 };
 
 struct DWMContext {
@@ -147,8 +131,28 @@ void callback_message_error_handler(WindowHandle handle, wEvent event, uint32_t 
 void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_deletion_dialog_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 void callback_taskbar_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_start_menu_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+void callback_filecopy_handler(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
+
+// Paths and desktop icons for files arriving in a folder (windows/filecopy.c)
+
+// First free "<dir>/<name>", "<dir>/<name (2)>", ... (names kept within
+// VFS_NAME_MAX). Writes the full path and the bare name.
+bool dwm_path_unique(const char* dir, const char* name, char* out_path, size_t path_size, char* out_name);
+
+// "<home>/usr/desktop". False when there is no home device.
+bool dwm_desktop_get_directory(char* out, size_t size);
+
+// Desktop icon for a new file or folder at (x, y), or on the next free grid
+// spot when either is negative
+void dwm_desktop_add_item_icon(const char* path, const char* name, int x, int y);
+
+// Remove desktop icons for a path that is gone (and anything below it)
+void dwm_desktop_forget_path(const char* path);
 
 // Internal routines
+
+void dwm_theme_init(void);   // dwm_theme.c: load the default theme
 
 struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, WindowProcedure proc);
 
@@ -165,6 +169,7 @@ void dwm_update_mouse(struct WindowContext* ctx);
 void dwm_update_window_dragging(struct WindowContext* ctx);
 void dwm_update_icon_dragging(struct WindowContext* ctx);
 void dwm_update_window_resizing(struct WindowContext* ctx);
+void dwm_update_window_capture(struct WindowContext* ctx);
 
 void dwm_sync_child_positions(struct WindowObject* parent);
 void dwm_calculate_icon_bounds(struct IconObject* icon);
@@ -175,9 +180,24 @@ void dwm_process_window_events(struct WindowObject* window);
 void dwm_process_context_menu_events(struct WindowContext* ctx, uint16_t index);
 
 void dwm_set_focus(struct WindowObject* target);
+void dwm_set_desktop_focus(void);
+struct WindowObject* dwm_get_focused_window(void);
+void dwm_process_focus_change(void);
 void dwm_calculate_flush_region(struct WindowContext* ctx);
 
 struct WindowObject* dwm_get_window_by_id(uint32_t id);
+
+bool rects_intersect(int x1, int y1, int w1, int h1, int x2, int y2, int w2, int h2);
+
+// Desktop icon rename (dwm_rename.c)
+bool dwm_desktop_rename_begin(struct IconObject* icon);
+bool dwm_desktop_rename_commit(void);
+void dwm_desktop_rename_cancel(void);
+bool dwm_desktop_rename_active(void);
+struct IconObject* dwm_desktop_rename_icon(void);
+void dwm_desktop_rename_forget_icon(struct IconObject* icon);
+bool dwm_desktop_rename_handle_click(const struct WindowContext* ctx);
+void dwm_desktop_rename_draw(const struct WindowContext* ctx);
 
 struct WindowObject* dwm_get_root_parent(struct WindowObject* window);
 

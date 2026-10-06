@@ -1,3 +1,4 @@
+
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/console/display.h>
@@ -88,7 +89,7 @@ void dwm_update_window_dragging(struct WindowContext* ctx) {
             }
             
             dragdrop.dragged_window->surface_x = new_x;
-            dragdrop.dragged_window->surface_y = new_y + dragdrop.dragged_window->titlebar_height + 1;
+            dragdrop.dragged_window->surface_y = new_y + dragdrop.dragged_window->titlebar_height + (dragdrop.dragged_window->titlebar_height ? 1 : 0);
             dragdrop.dragged_window->surface_w = dragdrop.dragged_window->w;
             dragdrop.dragged_window->surface_h = dragdrop.dragged_window->h - dragdrop.dragged_window->titlebar_height;
             
@@ -170,7 +171,7 @@ void dwm_update_window_resizing(struct WindowContext* ctx) {
             dragdrop.dragged_resizing->surface_w = dragdrop.dragged_resizing->w;
             dragdrop.dragged_resizing->surface_h = dragdrop.dragged_resizing->h - (dragdrop.dragged_resizing->titlebar_height + border_offset);
             dragdrop.dragged_resizing->surface_x = dragdrop.dragged_resizing->x;
-            dragdrop.dragged_resizing->surface_y = dragdrop.dragged_resizing->y + dragdrop.dragged_resizing->titlebar_height + 1;
+            dragdrop.dragged_resizing->surface_y = dragdrop.dragged_resizing->y + dragdrop.dragged_resizing->titlebar_height + (dragdrop.dragged_resizing->titlebar_height ? 1 : 0);
             
             // Update the positioning coordinates of the resize handle and system buttons
             for (struct list_node* node = dragdrop.dragged_resizing->buttons_head; node != NULL; node = node->next) {
@@ -237,7 +238,7 @@ void dwm_resize_window_buffer(struct WindowObject* window, int new_w, int new_h)
     
     // Fill the newly exposed "L-shape" with a background color
     // (Wait for the client app to catch up and draw its actual UI)
-    uint32_t bg_color = 0xFFCCCCCC; // Use your theme's default window background color here
+    uint32_t bg_color = theme.client.background;
     
     // Fill the new bottom rectangle
     if (new_h > window->h) {
@@ -294,3 +295,36 @@ void dwm_cascade_child_positions(struct WindowObject* parent) {
         current = current->next;
     }
 }
+
+
+// Route pointer motion and the button release to the window that was clicked.
+// Motion is coalesced by dwm_update, so at most one MOUSE_MOVE is posted per
+// frame (plus one before every button change).
+void dwm_update_window_capture(struct WindowContext* ctx) {
+    if (dragdrop.captured_window == 0) return;
+    
+    struct WindowObject* window = dwm_get_window_by_id(dragdrop.captured_window);
+    if (window == NULL) {
+        dragdrop.captured_window = 0;
+        return;
+    }
+    
+    int mx = ctx->mouse.x - window->surface_x;
+    int my = ctx->mouse.y - window->surface_y;
+    uint32_t position = ((uint32_t)(uint16_t)(int16_t)my << 16) | (uint32_t)(uint16_t)(int16_t)mx;
+    
+    int32_t state = 0;
+    if (ctx->left_button_pressed)  state |= DWM_STATE_MOUSE_BTN_LEFT;
+    if (ctx->right_button_pressed) state |= DWM_STATE_MOUSE_BTN_RIGHT;
+    
+    if (ctx->left_button_pressed) {
+        if (ctx->mouse.x != dragdrop.capture_last.x || ctx->mouse.y != dragdrop.capture_last.y) {
+            dragdrop.capture_last = ctx->mouse;
+            dwm_post_message(window->id, DWM_EVENT_MOUSE_MOVE, position, state);
+        }
+    } else {
+        dwm_post_message(window->id, DWM_EVENT_MOUSE_UP, position, state);
+        dragdrop.captured_window = 0;
+    }
+}
+

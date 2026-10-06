@@ -26,8 +26,18 @@ void dwm_update_mouse(struct WindowContext* ctx) {
     
     if (dwm_handle_context_menu_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
+    
+    // Desktop rename: a click inside the box is swallowed, a click anywhere
+    // else commits the new name and is then handled normally
+    if (dwm_desktop_rename_handle_click(ctx)) 
+        return;
+    
     if (dwm_handle_window_clicks(ctx, is_new_left_click, is_new_right_click)) 
         return;
+    
+    // Clicked outside every window: the desktop takes focus, so the focused
+    // window gets DWM_EVENT_FOCUS_LOST (closes popups like the start menu)
+    dwm_set_desktop_focus();
     
     dwm_handle_icon_clicks(ctx, is_new_left_click, is_new_right_click);
 }
@@ -70,7 +80,7 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         root_win = root_win->parent;
     }
     
-    struct WindowObject* old_focused = (workspace.window_tail != NULL) ? (struct WindowObject*)workspace.window_tail->data : NULL;
+    struct WindowObject* old_focused = dwm_get_focused_window();
     if (old_focused != root_win) {
         dwm_set_focus(root_win);
         root_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
@@ -131,6 +141,11 @@ bool dwm_handle_window_clicks(struct WindowContext* ctx, bool is_new_left_click,
         
         if (is_new_left_click) 
             dragdrop.dragged_window = clicked_win;
+    } else if (is_new_left_click) {
+        // Client area: keep feeding this window the pointer until release
+        // (drag-to-select, sliders, ...)
+        dragdrop.captured_window = clicked_win->id;
+        dragdrop.capture_last = ctx->mouse;
     }
     
     return true;
@@ -190,6 +205,7 @@ void dwm_handle_icon_clicks(struct WindowContext* ctx, bool is_new_left_click, b
                 dragdrop.is_dragging = false;
                 dragdrop.icon_drag_offset_x = ctx->mouse.x - clicked_icon->x;
                 dragdrop.icon_drag_offset_y = ctx->mouse.y - clicked_icon->y;
+                
                 context.last_focused_icon = clicked_icon;
                 context.last_icon_click_time = current_time;
             }
@@ -314,3 +330,5 @@ struct WindowObject* dwm_find_clicked_window(struct list_node* tail_node, int mo
     }
     return NULL;
 }
+
+

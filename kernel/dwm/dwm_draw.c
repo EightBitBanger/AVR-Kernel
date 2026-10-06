@@ -1,3 +1,4 @@
+
 #include <kernel/dwm/dwm.h>
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/console/display.h>
@@ -159,12 +160,16 @@ void dwm_render_window_recursive(struct WindowObject* window, const struct Windo
 
 
 void dwm_draw_desktop(const struct WindowContext* ctx) {
-    const uint32_t screen_stride = vinfo->framebuffer_pitch / 4;
+    // Window contents are copied into the BACK buffer, which is packed with
+    // a stride of the display width (see draw_set_buffer_default). The
+    // hardware pitch only applies to the front buffer; using it here skews
+    // every row (and overruns the back buffer) when the pitch is padded.
+    const uint32_t screen_stride = display_get_width();
     
     // Clear out background pixels for all localized dirty regions
     for (int i = 0; i < ctx->dirty_count; i++) {
         struct Rect r = ctx->dirty_regions[i];
-        draw_rect_filled(r.x, r.y, r.w, r.h, theme.bg_color);
+        draw_rect_filled(r.x, r.y, r.w, r.h, theme.desktop.background);
     }
     
     uint16_t bar_x = 0;
@@ -175,7 +180,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
     for (int i = 0; i < ctx->dirty_count; i++) {
         struct Rect r = ctx->dirty_regions[i];
         if (rects_intersect(r.x, r.y, r.w, r.h, bar_x, bar_y, bar_w, bar_h)) {
-            draw_rect_filled(bar_x, bar_y, bar_w, bar_h, theme.bg_color);
+            draw_rect_filled(bar_x, bar_y, bar_w, bar_h, theme.desktop.background);
             break;
         }
     }
@@ -202,19 +207,25 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
             if (current_icon->icon_sprite != NULL) {
                 draw_sprite_blend(current_icon->icon_sprite->data, current_icon->width, current_icon->height, current_icon->x, current_icon->y, 0xFF000000);
             } else {
-                draw_rect_filled(current_icon->x, current_icon->y, current_icon->width, current_icon->height, 0xFFFFFFFF);
+                draw_rect_filled(current_icon->x, current_icon->y, current_icon->width, current_icon->height, theme.desktop.icon_text);
             }
             
-            uint16_t text_y = current_icon->y + 45; 
-            size_t length = strlen(current_icon->name);
-            uint16_t string_width = length * 6;
-            int16_t text_start_x = current_icon->x + ((current_icon->width - string_width) / 2);
-            
-            draw_text(text_start_x, text_y, current_icon->name, 0xFFFFFFFF);
+            // The rename box replaces the label while the icon is renamed
+            if (current_icon != dwm_desktop_rename_icon()) {
+                uint16_t text_y = current_icon->y + 45; 
+                size_t length = strlen(current_icon->name);
+                uint16_t string_width = length * 6;
+                int16_t text_start_x = current_icon->x + ((current_icon->width - string_width) / 2);
+                
+                draw_text(text_start_x, text_y, current_icon->name, theme.desktop.icon_text);
+            }
         }
         
         current_node = current_node->next;
     }
+    
+    // Desktop rename box (above the icons, below every window)
+    dwm_desktop_rename_draw(ctx);
     
     // Sync positions before drawing
     for (struct list_node* node = workspace.window_head; node != NULL; node = node->next) {
@@ -233,7 +244,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
         if ((window->style & DWM_WSTYLE_TOPMOST) || (window->parent != NULL) || (window->style & DWM_WSTYLE_CHILD)) 
             continue;
         
-        dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
+        dwm_render_window_recursive(window, ctx, back_buffer, screen_stride);
     }
     
     // Draw top most windows
@@ -246,7 +257,7 @@ void dwm_draw_desktop(const struct WindowContext* ctx) {
             continue;
         }
         
-        dwm_render_window_recursive(window, ctx, frame_buffer, screen_stride);
+        dwm_render_window_recursive(window, ctx, back_buffer, screen_stride);
     }
     
     // Context menus
@@ -295,7 +306,7 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     int32_t ww = window_handle->w;
     int32_t wh = window_handle->h;
     
-    struct WindowObject* focused_window = (workspace.window_tail != NULL) ? (struct WindowObject*)workspace.window_tail->data : NULL;
+    struct WindowObject* focused_window = dwm_get_focused_window();
     
     uint32_t current_title_color_low = (window_handle == focused_window) ? window_handle->title_color_low : window_handle->inactive_color_low;
     uint32_t current_title_color_high = (window_handle == focused_window) ? window_handle->title_color_high : window_handle->inactive_color_high;
@@ -311,7 +322,8 @@ void dwm_draw_window(struct WindowObject* window_handle) {
     int div_w = window_handle->x + window_handle->w;
     int div_h = window_handle->y + window_handle->titlebar_height - 1;
     
-    draw_line(div_x, div_y, div_w, div_h, window_handle->border_color);
+    if (window_handle->titlebar_height > 0)
+        draw_line(div_x, div_y, div_w, div_h, window_handle->border_color);
     
     // Draw the window outer borders
     for (uint8_t b = 1; b <= window_handle->border_width; b++) {
@@ -344,10 +356,10 @@ void dwm_draw_window(struct WindowObject* window_handle) {
         int32_t field_abs_x = surface_abs_x + field->x;
         int32_t field_abs_y = surface_abs_y + field->y;
         
-        uint32_t box_bg        = 0xFF202020;
-        uint32_t box_bdr       = 0xFF404040;
-        uint32_t text_color    = 0xFF08F008;
-        uint32_t cursor_color  = 0xFFF0F0F0;
+        uint32_t box_bg        = theme.edit.background;
+        uint32_t box_bdr       = theme.edit.border;
+        uint32_t text_color    = theme.edit.text;
+        uint32_t cursor_color  = theme.edit.cursor;
         
         uint16_t font_width    = 6;
         uint16_t font_height   = 8; // Defined height for vertical alignment
@@ -420,9 +432,14 @@ void dwm_draw_rect_filled(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t c
     draw_rect_filled(x, y, w, h, color);
 }
 
-void dwm_draw_rect_filled_gradient(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
+void dwm_draw_rect_filled_gradient_vertical(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
     if (context.event_window == NULL) return;
     draw_rect_gradient_vertical_blend(x, y, w, h, color_high, color_low);
+}
+
+void dwm_draw_rect_filled_gradient_horizontal(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color_low, uint32_t color_high) {
+    if (context.event_window == NULL) return;
+    draw_rect_gradient_horizontal_blend(x, y, w, h, color_high, color_low);
 }
 
 void dwm_draw_sprite(int16_t x, int16_t y, struct Image* image) {
@@ -435,3 +452,5 @@ void dwm_set_cursor(uint32_t* sprite, int16_t width, int16_t height) {
     images.current_cursor.width = width;
     images.current_cursor.height = height;
 }
+
+

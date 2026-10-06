@@ -12,4 +12,8 @@
 #define DWM_MAX_TITLE_LEN                     128
 #define DWM_MAX_PATH_LEN                      128
 
+// Image libraries
+
+//#define ADD_IMAGE_LIB
+
 #endif

@@ -1,3 +1,4 @@
+
 #include <kernel/dwm/windows/message_error.h>
 #include <kernel/dwm/dwm_core_internal.h>
 
@@ -82,11 +83,11 @@ void callback_message_error_handler(WindowHandle handle, wEvent event, uint32_t 
     const uint16_t sprite_x        = 40;
     const uint16_t sprite_y        = 22;
     
-    const uint32_t color_bg        = 0xFF08080F;
-    const uint32_t color_btn       = 0xFF1C1C2A;
-    const uint32_t color_border    = 0xFF444466;
-    const uint32_t color_text      = 0xFF3FFF3F;
-    const uint32_t color_label     = 0xFFFFFFFF;
+    const uint32_t color_bg        = theme.client.background;
+    const uint32_t color_btn       = theme.button.fill;
+    const uint32_t color_border    = theme.button.border;
+    const uint32_t color_text      = theme.button.text;
+    const uint32_t color_label     = theme.client.text;
     
     struct WindowObject* window = dwm_get_window_by_id(handle);
     if (window == NULL) return;
@@ -102,7 +103,7 @@ void callback_message_error_handler(WindowHandle handle, wEvent event, uint32_t 
             // Message string text
             char* message_resource = (char*)dwm_window_resource_get_by_name(handle, "text");
             if (message_resource != NULL) {
-                dwm_draw_text(msg_x, msg_y, message_resource, window->title_text_color);
+                dwm_draw_text(msg_x, msg_y, message_resource, color_label);
             }
             
             // Render OK button box
@@ -152,3 +153,4 @@ void callback_message_error_handler(WindowHandle handle, wEvent event, uint32_t 
             break;
     }
 }
+

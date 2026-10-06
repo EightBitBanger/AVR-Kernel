@@ -1,6 +1,8 @@
 #include <kernel/dwm/images/cursor.h>
 #include <kernel/dwm/rendering/sprite.h>
 
+#ifdef ADD_IMAGE_LIB
+
 const struct Sprite rc_cursor_pointer = {
     .width  = 11,
     .height = 11,
@@ -88,3 +90,5 @@ const struct Sprite rc_cursor_angle = {
         0,0,0,0,0,0,0,0,0,0,0
     }
 };
+
+#endif

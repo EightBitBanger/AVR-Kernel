@@ -1,6 +1,8 @@
 #include <kernel/dwm/images/ui.h>
 #include <kernel/dwm/rendering/sprite.h>
 
+#ifdef ADD_IMAGE_LIB
+
 const struct Sprite rc_image_error = {
     .width  = 31,
     .height = 38,
@@ -85,3 +87,5 @@ const struct Sprite rc_image_error = {
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,36,0,0,0,0,0,0,0,0,0,0
     }
 };
+
+#endif

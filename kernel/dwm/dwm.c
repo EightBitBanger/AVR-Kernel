@@ -1,9 +1,12 @@
+
 #include <kernel/dwm/dwm.h>
 #include <kernel/arch/x86/virtual/vmm.h>
 #include <kernel/dwm/dwm_core_internal.h>
 #include <kernel/dwm/dwm_context_menu.h>
 
+#include <kernel/kernel.h>
 #include <kernel/vfs/vfs.h>
+#include <kernel/resources/resource_manager.h>
 
 #include <kernel/console/mouse.h>
 #include <kernel/console/display.h>
@@ -11,8 +14,6 @@
 #include <kernel/util/string.h>
 #include <kernel/util/list.h>
 #include <kernel/util/map.h>
-
-struct DWMTheme theme;
 
 struct DWMWorkspace    workspace;
 struct DWMContext      context;
@@ -23,25 +24,131 @@ struct DWMContextMenu  ctxmenu;
 struct DWMImages       images;
 struct DWMCascade      cascade;
 
+// ==========================================
+// Image resources
+// ==========================================
+
+const struct DWMBuiltinImage dwm_builtin_images[] = {
+    
+#ifdef ADD_IMAGE_LIB
+    
+    { "icon_folder",     &rc_icon_folder         },
+    { "icon_file",       &rc_icon_file           },
+    { "icon_document",   &rc_icon_document       },
+    { "icon_system",     &rc_icon_system         },
+    { "icon_storage",    &rc_icon_storage        },
+    { "image_error",     &rc_image_error         },
+    { "ui_close",        &rc_button_close        },
+    { "ui_close_red",    &rc_button_close_red    },
+    { "ui_close_purple", &rc_button_close_purple },
+    { "ui_minimize",     &rc_button_minimize     },
+    { "ui_back",         &rc_button_back         },
+    { "ui_new",          &rc_button_plus         },
+    { "ui_button",       &rc_button              },
+    { "ui_start",        &rc_button_new          },
+    { "cur_edge",        &rc_cursor_edge         },
+    { "cur_pointer",     &rc_cursor_pointer      },
+    { "cur_angle",       &rc_cursor_angle        },
+    
+#endif
+    
+};
+
+const uint32_t dwm_builtin_image_count = sizeof(dwm_builtin_images) / sizeof(dwm_builtin_images[0]);
+
+bool dwm_get_image_directory(char* out, size_t size) {
+    if (out == NULL || size == 0) return false;
+    
+    struct LocalPaths paths;
+    kernel_get_local_paths(&paths);
+    
+    // No home device was found
+    if (paths.home[0] == '\0') return false;
+    
+    memset(out, '\0', size);
+    strncpy(out, paths.home, size - 1);
+    strncat(out, "/sys/images", size - strlen(out) - 1);
+    return true;
+}
+
+// Load one sprite resource file (RSRC header + sprite payload, as written by
+// resource_save) and register it under `name`.
+static bool dwm_resource_image_load_file(const char* name, const char* path) {
+    struct Sprite* sprite = resource_sprite_load(path);
+    if (sprite == NULL) return false;
+    
+    struct Image* img = (struct Image*)malloc(sizeof(struct Image));
+    if (img == NULL) {
+        resource_free(RESOURCE_TYPE_SPRITE, sprite);
+        return false;
+    }
+    
+    img->width  = sprite->width;
+    img->height = sprite->height;
+    img->data   = (uint32_t*)malloc(sizeof(uint32_t) * img->width * img->height);
+    if (img->data == NULL) {
+        free(img);
+        resource_free(RESOURCE_TYPE_SPRITE, sprite);
+        return false;
+    }
+    
+    sprite_get_bitmap(img->data, sprite);
+    resource_free(RESOURCE_TYPE_SPRITE, sprite);
+    
+    dwm_resource_load(name, img);
+    return true;
+}
+
+// Load DWM images in two passes:
+//
+//   1. Every sprite file in <home>/sys/images, registered under its file name.
+//      An image does not need an entry in dwm_builtin_images to be loaded:
+//      the file "icon_folder" becomes the resource "icon_folder".
+//   2. Any built-in image whose name is still missing (no home device, file
+//      absent or unreadable) is loaded from the compiled-in sprite.
+static void dwm_load_images(void) {
+    char image_dir[DWM_MAX_PATH_LEN];
+    
+    if (dwm_get_image_directory(image_dir, sizeof(image_dir)) &&
+        vfs_directory_check(image_dir)) {
+        
+        uint32_t item_count = vfs_directory_get_item_count(image_dir);
+        for (uint32_t i = 0; i < item_count; i++) {
+            char item_name[DWM_MAX_PATH_LEN];
+            memset(item_name, '\0', sizeof(item_name));
+            if (!vfs_directory_get_item(image_dir, i, item_name))
+                continue;
+            
+            // Already loaded (duplicate listing)
+            if (dwm_resource_find(item_name) != NULL)
+                continue;
+            
+            char image_path[DWM_MAX_PATH_LEN];
+            memset(image_path, '\0', sizeof(image_path));
+            strncpy(image_path, image_dir, sizeof(image_path) - 1);
+            strncat(image_path, "/", sizeof(image_path) - strlen(image_path) - 1);
+            strncat(image_path, item_name, sizeof(image_path) - strlen(image_path) - 1);
+            
+            if (vfs_directory_check(image_path))
+                continue;
+            
+            // Non-sprite files fail the header check and are skipped
+            dwm_resource_image_load_file(item_name, image_path);
+        }
+    }
+    
+    for (uint32_t i = 0; i < dwm_builtin_image_count; i++) {
+        const struct DWMBuiltinImage* image = &dwm_builtin_images[i];
+        if (dwm_resource_find(image->name) == NULL)
+            dwm_resource_sprite_load(image->name, image->sprite);
+    }
+}
+
 void dwm_initiate(void) {
     mutex_init(&dwm_mutex);
     
-    // Theme
-    theme.bg_color          = 0xFF0E0E1A;
-    theme.w_border          = 0xFF2A2A2A;
-    theme.w_background      = 0xFF6F6F6F;
-    theme.w_title_text      = 0xFFEFEFEF;
-    
-    theme.w_title_low       = 0xFF008000;
-    theme.w_title_high      = 0xFF001900;
-    
-    theme.w_inactive_low    = 0xFF505050;
-    theme.w_inactive_high   = 0xFF101010;
-    theme.ctx_bg            = 0x8F222222;
-    theme.ctx_border        = 0x8F444444;
-    theme.ctx_separator     = 0x8F111111;
-    theme.ctx_highlight     = 0x8F777777;
-    theme.ctx_text          = 0x8FE0E0E0;
+    // Theme (must come before any window is created)
+    dwm_theme_init();
     
     // Workspace
     workspace.next_edit_field_id = 0;
@@ -49,6 +156,9 @@ void dwm_initiate(void) {
     
     workspace.window_head = NULL;
     workspace.window_tail = NULL;
+    
+    workspace.desktop_focused = false;
+    workspace.last_focus = 0;
     
     Point display_center;
     display_center.x = display_get_width() / 2;
@@ -86,6 +196,7 @@ void dwm_initiate(void) {
     dragdrop.dragged_resizing = NULL;
     dragdrop.resize_offset_x = 0;
     dragdrop.resize_offset_y = 0;
+    dragdrop.captured_window = 0;
     
     // Input
     input.last_key_pressed = 0;
@@ -108,47 +219,31 @@ void dwm_initiate(void) {
     cascade.y = cascade.w * cascade_mul;
     cascade.max = 400;
     
-    // Load resources
-    dwm_resource_sprite_load("icon_folder",      &rc_icon_folder);
-    dwm_resource_sprite_load("icon_file",        &rc_icon_file);
-    dwm_resource_sprite_load("icon_document",    &rc_icon_document);
-    dwm_resource_sprite_load("icon_system",      &rc_icon_system);
-    dwm_resource_sprite_load("icon_storage",     &rc_icon_storage);
-    dwm_resource_sprite_load("image_error",      &rc_image_error);
-    dwm_resource_sprite_load("ui_close",         &rc_button_close);
-    dwm_resource_sprite_load("ui_close_red",     &rc_button_close_red);
-    dwm_resource_sprite_load("ui_close_purple",  &rc_button_close_purple);
-    dwm_resource_sprite_load("ui_minimize",      &rc_button_minimize);
-    dwm_resource_sprite_load("ui_back",          &rc_button_back);
-    dwm_resource_sprite_load("ui_new",           &rc_button_plus);
-    dwm_resource_sprite_load("ui_button",        &rc_button);
-    
+    // Load image resources from <home>/sys/images (built-in fallback)
+    dwm_load_images();
+
     for(int i = 0; i < MAX_CONTEXT_MENUS; i++) {
         ctxmenu.menus[i].visible = false;
         ctxmenu.menus[i].x = 0;
         ctxmenu.menus[i].y = 0;
         ctxmenu.menus[i].w = 0;
         ctxmenu.menus[i].h = 0;
-        ctxmenu.menus[i].color_bg         = theme.ctx_bg;
-        ctxmenu.menus[i].color_border     = theme.ctx_border;
-        ctxmenu.menus[i].color_separator  = theme.ctx_separator;
-        ctxmenu.menus[i].color_highlight  = theme.ctx_highlight;
-        ctxmenu.menus[i].color_text       = theme.ctx_text;
+        ctxmenu.menus[i].color_bg         = theme.menu.background;
+        ctxmenu.menus[i].color_border     = theme.menu.border;
+        ctxmenu.menus[i].color_separator  = theme.menu.separator;
+        ctxmenu.menus[i].color_highlight  = theme.menu.highlight;
+        ctxmenu.menus[i].color_text       = theme.menu.text;
         ctxmenu.menus[i].hovered_item     = -1;
         ctxmenu.menus[i].item_height      = 0;
         ctxmenu.menus[i].item_count       = 0;
     }
-    
-    dwm_resource_sprite_load("cur_edge",    &rc_cursor_edge);
-    dwm_resource_sprite_load("cur_pointer", &rc_cursor_pointer);
-    dwm_resource_sprite_load("cur_angle",   &rc_cursor_angle);
     
     struct Image* def_cursor = dwm_resource_find("cur_pointer");
     if (def_cursor) {
         dwm_set_cursor(def_cursor->data, def_cursor->width, def_cursor->height);
     }
     
-    draw_rect_filled(0, 0, display_get_width(), display_get_height(), theme.bg_color);
+    draw_rect_filled(0, 0, display_get_width(), display_get_height(), theme.desktop.background);
     draw_flush_region(0, 0, display_get_width(), display_get_height());
 }
 
@@ -174,6 +269,7 @@ static void dwm_destroy_window_internal(WindowHandle handle) {
     
     if (dragdrop.dragged_window == window_handle) dragdrop.dragged_window = NULL;
     if (dragdrop.dragged_resizing == window_handle) dragdrop.dragged_resizing = NULL;
+    if (dragdrop.captured_window == window_handle->id) dragdrop.captured_window = 0;
     
     int abs_x, abs_y;
     dwm_get_absolute_position(window_handle, &abs_x, &abs_y);
@@ -221,7 +317,10 @@ static void dwm_destroy_window_internal(WindowHandle handle) {
 
     if (workspace.window_tail != NULL) {
         struct WindowObject* tail_win = (struct WindowObject*)workspace.window_tail->data;
-        dwm_set_focus(tail_win); 
+        // If the desktop holds focus (e.g. a popup closed because the desktop
+        // was clicked) leave it there instead of refocusing the next window
+        if (!workspace.desktop_focused)
+            dwm_set_focus(tail_win); 
         tail_win->flags |= (DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE);
         
         int tail_abs_x, tail_abs_y;
@@ -289,6 +388,12 @@ void dwm_destroy_icon(struct IconObject* icon) {
         }
     }
     if (!explicitly_found) return;
+    
+    // Don't leave the rename box pointing at a freed icon
+    dwm_desktop_rename_forget_icon(icon);
+    if (context.focused_icon == icon)      context.focused_icon = NULL;
+    if (context.last_focused_icon == icon) context.last_focused_icon = NULL;
+    if (dragdrop.dragged_icon == icon)     dragdrop.dragged_icon = NULL;
     
     list_remove(&workspace.icon_head, &workspace.icon_tail, icon);
     free(icon);
@@ -384,6 +489,9 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     if (window_object->style & DWM_WSTYLE_NOBORDERS) {
         window_object->border_width = 0;
         window_object->titlebar_height = 0;
+    } else if (window_object->style & DWM_WSTYLE_NOTITLEBAR) {
+        window_object->border_width = 1;
+        window_object->titlebar_height = 0;
     } else {
         window_object->border_width = 1;
         window_object->titlebar_height = 20;
@@ -418,20 +526,21 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
     window_object->buffer_h  = w_class.height - window_object->titlebar_height - border_offset;
     
     window_object->surface_x = window_object->x;
-    window_object->surface_y = window_object->y + window_object->titlebar_height + 1;
+    // The +1 skips the titlebar divider; titlebar-less windows have none
+    window_object->surface_y = window_object->y + window_object->titlebar_height + (window_object->titlebar_height ? 1 : 0);
     window_object->buffer_w = w_class.width;
     window_object->buffer_h = w_class.height;
     
     window_object->max_width = w_class.max_width;
     window_object->max_height = w_class.max_height;
 
-    window_object->border_color         = theme.w_border;
-    window_object->background_color     = theme.w_background;
-    window_object->title_text_color     = theme.w_title_text;
-    window_object->title_color_low      = theme.w_title_low;
-    window_object->title_color_high     = theme.w_title_high;
-    window_object->inactive_color_low   = theme.w_inactive_low;
-    window_object->inactive_color_high  = theme.w_inactive_high;
+    window_object->border_color         = theme.frame.border;
+    window_object->background_color     = theme.frame.background;
+    window_object->title_text_color     = theme.frame.title_text;
+    window_object->title_color_low      = theme.frame.active_low;
+    window_object->title_color_high     = theme.frame.active_high;
+    window_object->inactive_color_low   = theme.frame.inactive_low;
+    window_object->inactive_color_high  = theme.frame.inactive_high;
     
     window_object->flags = DWM_WFLAG_REDRAW | DWM_WFLAG_REFRESH | DWM_WFLAG_REDECORATE;
     window_object->event_callback = proc;
@@ -455,6 +564,9 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
         return NULL;
     }
     
+    // A new window is appended at the tail, so it takes focus from the desktop
+    workspace.desktop_focused = false;
+    
     int redraw_x, redraw_y;
     dwm_get_absolute_position(window_object, &redraw_x, &redraw_y);
     dwm_draw_redraw(redraw_x - window_object->border_width, 
@@ -464,15 +576,21 @@ struct WindowObject* dwm_allocate_window(WindowClass w_class, uint16_t w_style, 
 
     mutex_unlock(&dwm_mutex);
 
-    if (!(w_style & DWM_WSTYLE_NOCLOSEBOX)) {
+    // Titlebar buttons need a titlebar to live in
+    if (!(w_style & (DWM_WSTYLE_NOCLOSEBOX | DWM_WSTYLE_NOTITLEBAR))) {
         struct Image* button_close = dwm_resource_find("ui_close_red");
         struct Image* button_minimize  = dwm_resource_find("ui_minimize");
         
-        int16_t close_x = w_class.width - button_close->width;
-        int16_t close_min = w_class.width - button_close->width - button_minimize->width;
-        int16_t vertical = (window_object->titlebar_height / button_close->height) - 1;
-        if (button_close != NULL)    window_add_button(window_object, close_x, vertical, button_close->width, button_close->height, DWM_EVENT_CLOSE, button_close);
-        if (button_minimize != NULL) window_add_button(window_object, close_min, vertical, button_close->width, button_close->height, DWM_EVENT_MINIMIZE, button_minimize);
+        if (button_close != NULL) {
+            int16_t close_x = w_class.width - button_close->width;
+            int16_t vertical = (window_object->titlebar_height / button_close->height) - 1;
+            window_add_button(window_object, close_x, vertical, button_close->width, button_close->height, DWM_EVENT_CLOSE, button_close);
+            
+            if (button_minimize != NULL) {
+                int16_t close_min = w_class.width - button_close->width - button_minimize->width;
+                window_add_button(window_object, close_min, vertical, button_close->width, button_close->height, DWM_EVENT_MINIMIZE, button_minimize);
+            }
+        }
     }
     
     if (w_style & DWM_WSTYLE_RESIZEABLE) {
@@ -564,3 +682,7 @@ void dwm_summon_context_menu(WindowHandle window, uint16_t x, uint16_t y, const 
     
     dwm_create_context_menu(posx, posy, DWM_CONTEXT_MENU_USER, options, number_of_items);
 }
+
+
+
+

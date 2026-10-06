@@ -1,3 +1,4 @@
+
 #include <kernel/dwm/windows/properties.h>
 #include <kernel/dwm/dwm_core_internal.h>
 
@@ -11,7 +12,6 @@
 #include <kernel/vfs/vfs.h>
 #include <kernel/events.h>
 
-// Helper to determine the character length of the VFS knode prefix before a mount point
 static uint16_t get_knode_path_len(const char* file_path) {
     if (!file_path || file_path[0] != '/') {
         return file_path ? (uint16_t)strlen(file_path) : 0;
@@ -257,16 +257,16 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
     uint16_t button_y = ((window->h - button_height) - button_height) - 7;
     
     // Color Configurations
-    uint32_t color_bg            = 0xFF08080F; 
-    uint32_t color_divider       = 0xFF04C004; 
-    uint32_t color_text_primary  = 0xFFFFFFFF; 
-    uint32_t color_text_value    = 0xFF3FFF3F; 
-    uint32_t color_text_mount    = 0xFFFDA008; 
-    uint32_t color_text_inactive = 0xFF8888AA; 
-    uint32_t color_border_active = 0xFF04C004; 
-    uint32_t color_border_normal = 0xFF444466; 
-    uint32_t color_fill_active   = 0xFF04C004; 
-    uint32_t color_fill_button   = 0xFF1C1C2A; 
+    uint32_t color_bg            = theme.client.background;
+    uint32_t color_divider       = theme.client.accent;
+    uint32_t color_text_primary  = theme.client.text;
+    uint32_t color_text_value    = theme.client.text_value;
+    uint32_t color_text_mount    = theme.client.text_mount;
+    uint32_t color_text_inactive = theme.client.text_muted;
+    uint32_t color_border_active = theme.button.border_active;
+    uint32_t color_border_normal = theme.button.border;
+    uint32_t color_fill_active   = theme.client.accent;
+    uint32_t color_fill_button   = theme.button.fill;
     
     switch (event) {
             
@@ -333,7 +333,7 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                     if (free_str != NULL) dwm_draw_text(90, 165, free_str, color_text_value);
                     if (total_str != NULL) dwm_draw_text(90, 180, total_str, color_text_value);
                     
-                    // Draw usage pie (using stoi_commas to parse past comma formatting)
+                    // Draw usage pie
                     uint32_t used  = stoi_commas(used_str);
                     uint32_t total = stoi_commas(total_str);
                     
@@ -353,7 +353,7 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
                     
                     // Draw usage pie dynamically
                     uint32_t values[] = { used_percent, free_percent };
-                    uint32_t colors[] = { 0xFFF700F7, 0xFF0000F6 }; // Used color, Free color
+                    uint32_t colors[] = { theme.chart.used, theme.chart.available };
                     
                     draw_pie_chart_isometric(150, 250, 45, 10, values, colors, sizeof(values) / sizeof(uint32_t));
                 } else { 
@@ -586,3 +586,4 @@ void callback_properties_handler(WindowHandle handle, wEvent event, uint32_t wpa
             break;
     }
 }
+

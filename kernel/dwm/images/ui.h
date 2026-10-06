@@ -1,6 +1,10 @@
 #ifndef _UI_IMAGE_LIBRARY_H_
 #define _UI_IMAGE_LIBRARY_H_
 
+#include <kernel/dwm/configuration.h>
+
+#ifdef ADD_IMAGE_LIB
+
 #include <stdint.h>
 #include <kernel/arch/x86/drivers/display/draw.h>
 
@@ -20,4 +24,5 @@ extern const struct Sprite rc_button_new;
 
 extern const struct Sprite rc_button;
 
+#endif
 #endif

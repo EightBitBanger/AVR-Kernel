@@ -1,6 +1,8 @@
 #include <kernel/dwm/images/icon.h>
 #include <kernel/dwm/rendering/sprite.h>
 
+#ifdef ADD_IMAGE_LIB
+
 const struct Sprite rc_icon_file = {
     .width  = 31,
     .height = 38,
@@ -258,6 +260,7 @@ const struct Sprite rc_icon_system = {
     }
 };
 
+
 const struct Sprite rc_icon_folder = {
     .width  = 42,
     .height = 34,
@@ -444,3 +447,4 @@ const struct Sprite rc_icon_storage = {
     }
 };
 
+#endif

@@ -1,6 +1,8 @@
 #include <kernel/dwm/images/ui.h>
 #include <kernel/dwm/rendering/sprite.h>
 
+#ifdef ADD_IMAGE_LIB
+
 const struct Sprite rc_button_check = {
     .width  = 8,
     .height = 8,
@@ -378,3 +380,5 @@ const struct Sprite rc_button = {
         0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0
     }
 };
+
+#endif
