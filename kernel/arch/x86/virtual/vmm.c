@@ -1,6 +1,7 @@
 #include <kernel/arch/x86/virtual/vmm.h>
 #include <kernel/panic/panic_error.h>
 #include <kernel/util/string.h>
+#include <kernel/arch/x86/irq.h>
 #include <stdbool.h>
 
 #define VM_START          0x10000000U           
@@ -18,6 +19,67 @@ static int find_contiguous_bits(uint8_t* bitmap, size_t bitmap_size, size_t num_
 // Statically reserve a full page directory and all page tables in BSS
 uint32_t page_directory[VM_PAGE_DIR_SIZE] __attribute__((aligned(PAGE_SIZE)));
 static uint32_t static_page_tables[VM_PAGE_DIR_SIZE][VM_PAGE_TABLE_SIZE] __attribute__((aligned(PAGE_SIZE)));
+
+//
+// Page Attribute Table (write-combining support)
+//
+
+#define MSR_IA32_PAT        0x277U
+#define PAT_TYPE_WC         0x01U
+#define CPUID_EDX_PAT       (1U << 16)
+#define CR0_CD              (1U << 30)
+#define CR0_NW              (1U << 29)
+
+// Fallback when PAT is missing: uncached, the previous behavior
+static uint32_t vm_wc_flags = VM_PRESENT | VM_READWRITE | VM_PWT | VM_PCD;
+static bool     vm_wc_available = false;
+
+uint32_t vmm_get_write_combining_flags(void) {
+    return vm_wc_flags;
+}
+
+bool vmm_has_write_combining(void) {
+    return vm_wc_available;
+}
+
+// Reprogram PAT entry 1 (selected by PWT=1, PCD=0, PAT=0) from its power-on
+// default WT to WC. Entries 0, 2 and 3 keep their defaults (WB, UC-, UC), so
+// existing mappings (plain = WB, MMIO with PCD = UC-) are unaffected. Nothing
+// maps with PWT alone before this runs.
+//
+// Follows the SDM sequence: caches off, flush, write MSR, flush TLB, caches on.
+static void vmm_pat_init(void) {
+    uint32_t eax = 1, ebx, ecx, edx;
+    __asm__ volatile("cpuid" : "+a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx));
+    if (!(edx & CPUID_EDX_PAT))
+        return;
+
+    uint32_t lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(MSR_IA32_PAT));
+    lo = (lo & ~0x0000FF00U) | (PAT_TYPE_WC << 8);
+
+    uint32_t irq_flags = irq_save();
+
+    uint32_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    __asm__ volatile("mov %0, %%cr0" : : "r"((cr0 | CR0_CD) & ~CR0_NW) : "memory");
+    __asm__ volatile("wbinvd" ::: "memory");
+
+    __asm__ volatile("wrmsr" : : "a"(lo), "d"(hi), "c"(MSR_IA32_PAT) : "memory");
+
+    // Flush the whole (non-global) TLB by reloading CR3
+    uint32_t cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+    __asm__ volatile("wbinvd" ::: "memory");
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0) : "memory");
+
+    irq_restore(irq_flags);
+
+    vm_wc_flags     = VM_PRESENT | VM_READWRITE | VM_PWT;
+    vm_wc_available = true;
+}
 
 void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     memset(virt_bitmap, 0x00, VIRT_BITMAP_SIZE);
@@ -57,13 +119,19 @@ void vmm_init(struct MultibootInfo* mbi, uint32_t identity_map_size) {
     // Switch on the hardware MMU to activate address translation execution
     uint32_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
-    cr0 |= 0x80000000U; 
+    cr0 |= 0x80000000U;
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0));
+
+    // Enable write-combining memory type before anything maps the framebuffer
+    vmm_pat_init();
 }
 
 void* vmm_alloc_pages(size_t num_pages) {
+    uint32_t irq_flags = irq_save();
+    
     int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
     if (virt_start_page == -1) {
+        irq_restore(irq_flags);
         kernel_crashout(0x00, 0x00000000, 0x03, "Out of physical memory");
         return NULL;
     }
@@ -74,8 +142,9 @@ void* vmm_alloc_pages(size_t num_pages) {
         uint32_t current_vaddr = start_vaddr + (i * PAGE_SIZE);
         uint32_t phys_frame = pmm_alloc_frame();
         
-        if (phys_frame == 0) {
+        if (phys_frame == PMM_NO_FRAME) {
             vmm_free_pages((void*)start_vaddr, i);
+            irq_restore(irq_flags);
             
             kernel_crashout(0x00, 0x00000000, 0x03, "Out of physical memory");
             return NULL;
@@ -87,11 +156,16 @@ void* vmm_alloc_pages(size_t num_pages) {
         virt_bitmap[bit / 8] |= (1U << (bit % 8));
     }
     
+    irq_restore(irq_flags);
     return (void*)start_vaddr;
 }
 
 void vmm_free_pages(void* virtual_addr, size_t num_pages) {
-    uint32_t vaddr = ((uint32_t)virtual_addr + 0xFFFU) & ~0xFFFU;
+    // Round DOWN to the containing page (rounding up would skip a page)
+    uint32_t vaddr = (uint32_t)virtual_addr & ~0xFFFU;
+    if (vaddr < VM_START || vaddr >= VM_END) return;
+    
+    uint32_t irq_flags = irq_save();
     size_t virt_start_page = (vaddr - VM_START) / PAGE_SIZE;
     
     for (size_t i = 0; i < num_pages; i++) {
@@ -114,6 +188,8 @@ void vmm_free_pages(void* virtual_addr, size_t num_pages) {
         size_t bit = virt_start_page + i;
         virt_bitmap[bit / 8] &= ~(1U << (bit % 8));
     }
+    
+    irq_restore(irq_flags);
 }
 
 void vmm_unmap_page(uint32_t virtual_addr) {
@@ -170,9 +246,12 @@ void* vmm_map_mmio_region(uint32_t phys_addr, uint32_t size_bytes, uint32_t flag
     uint32_t total_size  = size_bytes + page_offset;
     uint32_t num_pages   = (total_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
     
+    uint32_t irq_flags = irq_save();
+    
     // Allocate a chunk of virtual address space inside VM_START -> VM_END
     int virt_start_page = find_contiguous_bits(virt_bitmap, VIRT_BITMAP_SIZE, num_pages);
     if (virt_start_page == -1) {
+        irq_restore(irq_flags);
         return NULL; 
     }
     
@@ -190,6 +269,7 @@ void* vmm_map_mmio_region(uint32_t phys_addr, uint32_t size_bytes, uint32_t flag
         virt_bitmap[bit / 8] |= (1U << (bit % 8));
     }
     
+    irq_restore(irq_flags);
     return (void*)(start_vaddr + page_offset);
 }
 

@@ -1,31 +1,9 @@
 #include <kernel/mutex.h>
 #include <kernel/memory/malloc.h>
+#include <kernel/arch/x86/irq.h>
 
 // Reference the current running thread defined in scheduler.c
 extern ThreadBlock* current_thread;
-
-static inline uint32_t irq_save(void) {
-    uint32_t eflags;
-    __asm__ volatile (
-        "pushfl\n\t"
-        "popl %0\n\t"
-        "cli"
-        : "=r"(eflags)
-        :
-        : "memory"
-    );
-    return eflags;
-}
-
-static inline void irq_restore(uint32_t eflags) {
-    __asm__ volatile (
-        "pushl %0\n\t"
-        "popfl"
-        :
-        : "r"(eflags)
-        : "memory", "cc"
-    );
-}
 
 void mutex_init(mutex_t* mutex) {
     if (!mutex) return;
@@ -64,12 +42,17 @@ void mutex_lock(mutex_t* mutex) {
     }
     mutex->wait_tail = &waiter;
     
-    // Mark current thread as BLOCKED and yield CPU
+    // Mark current thread as BLOCKED and yield CPU.
+    // THREAD_BLOCKED is only ever cleared by mutex_unlock (sleepers use
+    // THREAD_SLEEPING), so when we resume, ownership has been handed to us.
     current_thread->state = THREAD_BLOCKED;
-    irq_restore(flags);
     
-    // Yield CPU via int $0x80; execution resumes here once unblocked by mutex_unlock
+    // Yield with interrupts still disabled so nothing can run between
+    // queueing ourselves and switching away. int $0x80 works with IF=0 and
+    // execution resumes here (IF=0) once mutex_unlock readies us.
     thread_yield();
+    
+    irq_restore(flags);
 }
 
 bool mutex_trylock(mutex_t* mutex) {
@@ -119,3 +102,4 @@ void mutex_unlock(mutex_t* mutex) {
     
     irq_restore(flags);
 }
+

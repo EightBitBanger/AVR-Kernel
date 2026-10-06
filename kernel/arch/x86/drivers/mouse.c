@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <kernel/arch/x86/io.h>
+#include <kernel/arch/x86/irq.h>
 #include <kernel/boot/x86/interrupt.h>
 #include <kernel/console/display.h>
 #include <kernel/console/mouse.h>
@@ -118,13 +119,25 @@ void mouse_initiate(void) {
 
 void mouse_enqueue_event(int32_t x, int32_t y, bool left, bool right, bool middle) {
     uint32_t next_head = (mouse_queue_head + 1) % MOUSE_QUEUE_SIZE;
-    
-    // If the queue is full, we drop the oldest event to keep fresh data flowing.
-    // Alternatively, you could just return and drop the new event.
+
+    // Queue full. The producer (this IRQ) must never write tail: the DWM
+    // thread may be halfway through copying that slot in mouse_dequeue_event(),
+    // and moving tail under it loses or tears an event. Instead, fold the new
+    // state into the newest queued event so position and buttons stay current.
     if (next_head == mouse_queue_tail) {
-        mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE; 
+        uint32_t newest = (mouse_queue_head + MOUSE_QUEUE_SIZE - 1) % MOUSE_QUEUE_SIZE;
+        if (newest != mouse_queue_tail) {
+            // Safe: the consumer only reads the slot at tail
+            mouse_queue[newest].x = x;
+            mouse_queue[newest].y = y;
+            mouse_queue[newest].left_button = left;
+            mouse_queue[newest].right_button = right;
+            mouse_queue[newest].middle_button = middle;
+            mouse_queue[newest].timestamp = timer_get_ms();
+        }
+        return;
     }
-    
+
     mouse_queue[mouse_queue_head].x = x;
     mouse_queue[mouse_queue_head].y = y;
     mouse_queue[mouse_queue_head].left_button = left;
@@ -133,7 +146,8 @@ void mouse_enqueue_event(int32_t x, int32_t y, bool left, bool right, bool middl
     mouse_queue[mouse_queue_head].timestamp = timer_get_ms();
     
     // Update head last so the consumer doesn't read incomplete data
-    mouse_queue_head = next_head; 
+    __asm__ volatile("" ::: "memory");
+    mouse_queue_head = next_head;
 }
 
 bool mouse_dequeue_event(MouseEvent* out_event) {
@@ -142,8 +156,12 @@ bool mouse_dequeue_event(MouseEvent* out_event) {
         return false; 
     }
     
+    // Copy with the IRQ masked: when the queue is full the producer coalesces
+    // into the newest slot, which is the tail slot when only one is queued.
+    uint32_t flags = irq_save();
     *out_event = mouse_queue[mouse_queue_tail];
     mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
+    irq_restore(flags);
     
     return true;
 }

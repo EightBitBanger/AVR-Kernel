@@ -1,28 +1,24 @@
 extern isr_callback_timer_handler
 
 global isr_timer
-    
+
+; NOTE: unused; vector 0x20 is scheduler_context. Kept aligned for safety.
 isr_timer:
-    pusha          ; Save all general-purpose registers
+    pusha                  ; Save all general-purpose registers
     
-    ; Allocate 512 bytes on the stack for FPU/SSE state + 16 bytes for alignment safety
-    sub esp, 528           
-    mov eax, esp
-    add eax, 15
-    and eax, 0xFFFFFFF0    ; Aligns EAX to a strict 16-byte boundary
+    ; Carve out a 512-byte FXSAVE area and align it to 16 bytes. Aligning ESP
+    ; itself also satisfies the i386 SysV ABI, which requires ESP % 16 == 0 at
+    ; every CALL into C (GCC may use movaps on stack slots otherwise).
+    mov ebp, esp           ; EBP was saved by pusha; callee-saved across the call
+    sub esp, 512
+    and esp, 0xFFFFFFF0
     
-    fxsave [eax]           ; Save the entire FPU/MMX/SSE/XMM state
+    fxsave [esp]           ; Save the entire FPU/MMX/SSE/XMM state
     
     call isr_callback_timer_handler
     
-    ; Re-calculate the exact same 16-byte aligned address to restore
-    mov eax, esp
-    add eax, 15
-    and eax, 0xFFFFFFF0
+    fxrstor [esp]          ; Restore the entire FPU/MMX/SSE/XMM state
     
-    fxrstor [eax]          ; Restore the entire FPU/MMX/SSE/XMM state
-    
-    add esp, 528           ; Clean up the stack allocation
+    mov esp, ebp           ; Drop the FXSAVE area and alignment padding
     popa                   ; Restore registers
-    iret                   ; Interrupt return (clears flags, restores CS/EIP)
-    
+    iret

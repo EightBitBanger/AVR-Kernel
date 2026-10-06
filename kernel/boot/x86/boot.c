@@ -14,7 +14,7 @@
 #include <kernel/arch/x86/virtual/vmm.h>
 
 // Buses
-#include <kernel/arch/x86/bus/pci.h>
+#include <kernel/arch/x86/bus/pci/pci.h>
 
 // Drivers
 #include <kernel/arch/x86/drivers/ata/ata.h>
@@ -32,56 +32,156 @@
 #include <kernel/console/console.h>
 #include <kernel/console/virtual_key.h>
 
+#include <kernel/vfs/vfs.h>
+#include <kernel/resources/resource_manager.h>
 #include <kernel/registry/registry.h>
 #include <kernel/dwm/dwm.h>
 #include <kernel/panic/panic_error.h>
 #include <kernel/scheduler/scheduler.h>
+#include <kernel/mutex.h>
+#include <kernel/arch/x86/irq.h>
+#include <kernel/boot/x86/malloc_stress.h>
 
 #define BOOT_DELAY_MS  500
 
 extern char _kernel_program_end[];
 
+// How long the worker threads sleep when nothing wakes them. The DWM still
+// redraws at ~60 Hz for animations/timers; input wakes it immediately.
+#define DWM_FRAME_MS           16
+#define KERNEL_EVENT_POLL_MS   10
+
+static mutex_t kernel_big_lock;
+
+// Signal this to wake the kernel event thread early (e.g. from
+// kernel_event_post). Without a signal it still polls every
+// KERNEL_EVENT_POLL_MS.
+Event kernel_wakeup_event = EVENT_INITIALIZER;
+
 static void thread_dwm_main(void) {
     while (1) {
+        // Sleep until a keyboard/mouse IRQ fires or the frame timer expires
+        event_wait(&input_event, DWM_FRAME_MS);
+        
+        mutex_lock(&kernel_big_lock);
+        
+        // Keyboard input is queued by the IRQ and delivered here, in thread
+        // context, instead of calling into the DWM from the interrupt handler.
+        uint16_t key;
+        while (input_key_pop(&key)) {
+            // A desktop icon rename takes the keyboard until it ends
+            if (dwm_desktop_rename_key(key))
+                continue;
+            dwm_post_message(dwm_window_get_focus(), DWM_EVENT_KEYBOARD, key, 0);
+        }
+        
         dwm_update();
-        thread_yield();
+        
+        mutex_unlock(&kernel_big_lock);
     }
 }
 
 static void thread_kernel_main(void) {
-    while(1) {
+    while (1) {
+        event_wait(&kernel_wakeup_event, KERNEL_EVENT_POLL_MS);
+        
+        mutex_lock(&kernel_big_lock);
         kernel_event_update();
-        thread_yield();
+        mutex_unlock(&kernel_big_lock);
     }
 }
 
-static void dummy_runner(void) {
-    while(1){
-        thread_sleep(1000);
-    }
+static inline uint32_t align_page_up(uint32_t value) {
+    return (value + 0xFFFU) & ~0xFFFU;
 }
 
+// Write the compiled-in images to <home>/sys/images/<name> so dwm_initiate
+// can load them from disk. Files that already exist are left alone, so an
+// image edited on disk is never overwritten by the built-in copy.
+// Uses the same names and directory as the DWM loader (dwm_builtin_images,
+// dwm_get_image_directory), so the two can't drift apart.
+static void boot_export_images(void) {
+    struct LocalPaths paths;
+    kernel_get_local_paths(&paths);
+    
+    // No home device: nowhere to save, the DWM uses the built-in images
+    if (paths.home[0] == '\0')
+        return;
+    
+    char sys_dir[128];
+    memset(sys_dir, '\0', sizeof(sys_dir));
+    strncpy(sys_dir, paths.home, sizeof(sys_dir) - 1);
+    strncat(sys_dir, "/sys", sizeof(sys_dir) - strlen(sys_dir) - 1);
+    
+    char image_dir[128];
+    if (!dwm_get_image_directory(image_dir, sizeof(image_dir)))
+        return;
+    
+    if (!vfs_directory_check(sys_dir) && !vfs_mkdir(sys_dir))
+        return;
+    if (!vfs_directory_check(image_dir) && !vfs_mkdir(image_dir))
+        return;
+    
+    for (uint32_t i = 0; i < dwm_builtin_image_count; i++) {
+        const struct DWMBuiltinImage* image = &dwm_builtin_images[i];
+        
+        char image_path[128];
+        memset(image_path, '\0', sizeof(image_path));
+        strncpy(image_path, image_dir, sizeof(image_path) - 1);
+        strncat(image_path, "/", sizeof(image_path) - strlen(image_path) - 1);
+        strncat(image_path, image->name, sizeof(image_path) - strlen(image_path) - 1);
+        
+        if (vfs_exists(image_path))
+            continue;
+        
+        // A failed save is not fatal: the DWM falls back to the built-in copy
+        resource_save(image_path, RESOURCE_TYPE_SPRITE, image->sprite);
+    }
+}
 
 void kmain(uint32_t magic, struct MultibootInfo* mbi) {
-    if (magic != MULTIBOOT_BOOTLOADER_MAGIC) 
+    if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         return;
     
-    if ((mbi->flags & (1 << 11)) == 0) 
+    // The framebuffer_* fields are only valid when bit 12 is set. Bit 11 only
+    // describes the VBE fields, which this kernel never reads.
+    if (!(mbi->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO))
         return;
     
-    uint32_t framebuffer_pixels      = mbi->framebuffer_width * mbi->framebuffer_height;
-    uint32_t framebuffer_size_bytes  = framebuffer_pixels * sizeof(uint32_t);
+    // The drawing code assumes a direct-color 32 bpp linear framebuffer
+    if (mbi->framebuffer_type != MULTIBOOT_FRAMEBUFFER_TYPE_RGB || mbi->framebuffer_bpp != 32)
+        return;
+    
+    // Without PAE a 32-bit kernel cannot map a framebuffer above 4 GB
+    if ((mbi->framebuffer_addr >> 32) != 0)
+        return;
+    
+    if (mbi->framebuffer_pitch < mbi->framebuffer_width * sizeof(uint32_t))
+        return;
+    
+    uint32_t framebuffer_phys        = (uint32_t)mbi->framebuffer_addr;
+    uint32_t framebuffer_page_offset = framebuffer_phys & 0xFFFU;
+    
+    // The hardware framebuffer spans pitch * height bytes. The pitch may be
+    // padded beyond width * 4, so the front buffer reservation must be sized
+    // from the pitch, or the VRAM mapping spills over the back buffer.
+    uint32_t vram_bytes              = mbi->framebuffer_pitch * mbi->framebuffer_height;
+    
+    // The back buffer is tightly packed (stride = width, see draw.c)
+    uint32_t back_buffer_bytes       = mbi->framebuffer_width * mbi->framebuffer_height * sizeof(uint32_t);
     
     // 16 byte aligned
     uint32_t heap_start              = ((uint32_t)_kernel_program_end + 0xFU) & ~0xFU;
     uint32_t heap_size               = 1024U * 1024U * 4U;
     uint32_t block_size              = 16U;
     
-    // 4k page aligned
-    uint32_t front_buffer            = (heap_start + heap_size + 0xFFFU) & ~0xFFFU;
-    uint32_t back_buffer             = (front_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
+    // 4k page aligned virtual window for VRAM. If the physical framebuffer is
+    // not page aligned, the first pixel sits at the same offset into the page.
+    uint32_t front_buffer_region     = align_page_up(heap_start + heap_size);
+    uint32_t front_buffer            = front_buffer_region + framebuffer_page_offset;
+    uint32_t back_buffer             = align_page_up(front_buffer + vram_bytes);
     
-    uint32_t _kernel_memory_end      = (back_buffer + framebuffer_size_bytes + 0xFFFU) & ~0xFFFU;
+    uint32_t _kernel_memory_end      = align_page_up(back_buffer + back_buffer_bytes);
     
     gdt_init();
     idt_init();
@@ -103,6 +203,7 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     
     // Fire up the scheduler
     scheduler_init();
+    mutex_init(&kernel_big_lock);
     
     // Event messaging system
     kernel_event_init();
@@ -120,12 +221,11 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     draw_set_frame_back_buffer(back_buffer);
     draw_set_buffer_default();
     
-    // Map the graphics front frame buffer 
-    // as a cached write combine buffer
-    if (mbi->flags & (1 << 12)) { 
-        uint32_t vram_bytes = mbi->framebuffer_pitch * mbi->framebuffer_height;
-        vmm_map_hardware_region(mbi->framebuffer_addr, front_buffer, vram_bytes, VM_WRITE_COMBINING);
-    }
+    // Map the hardware framebuffer over the reserved window as write-combining
+    // (falls back to uncached when the CPU has no PAT). The reservation above
+    // covers exactly vram_bytes plus the page offset, so this cannot overlap
+    // the back buffer.
+    vmm_map_hardware_region(framebuffer_phys, front_buffer, vram_bytes, VM_WRITE_COMBINING);
     
     // Initiate keyboard and mouse
     static char keyboard_string[255];
@@ -183,10 +283,15 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     pci_init();
     
     // Get primary knode directories
+    
+    const char path_mnt[] = "/mnt";
+    const char path_sys[] = "/sys";
+    const char root_dev[] = "dev";
+    const char root_mnt[] = "mnt";
+    
     uint32_t root_node = knode_get_root();
-    uint32_t dev_directory = knode_find_by_name(root_node, "dev");
-    uint32_t mnt_directory = knode_find_by_name(root_node, "mnt");
-    //uint32_t pci_directory = create_knode("pci", dev_directory);
+    uint32_t dev_directory = knode_find_by_name(root_node, root_dev);
+    uint32_t mnt_directory = knode_find_by_name(root_node, root_mnt);
     
     // Courtesy delay for boot output
     uint64_t old_ms = timer_get_ms();
@@ -199,7 +304,24 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     //
     // Load the registry
     
-    registry_hive_initiate("/mnt/ata0/sys");
+    struct LocalPaths paths;
+    kernel_get_local_paths(&paths);
+    
+    {
+        char sys_path[128];
+        strncpy(sys_path, paths.home, 128);
+        strncat(sys_path, "/sys", 128);
+        
+        registry_hive_initiate(sys_path);
+    }
+    
+    //
+    // Save the built-in images to <home>/sys/images (missing files only).
+    // Runs before dwm_initiate so the DWM finds them on the very first boot.
+    
+#ifdef ADD_IMAGE_LIB
+    boot_export_images();
+#endif
     
     //
     // Initiate the DWM graphical environment
@@ -212,9 +334,6 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     uint16_t sep = 90;
     uint16_t posx = 30;
     uint16_t posy = 30;
-    
-    const char* path_mnt = "/mnt";
-    const char* path_sys = "/sys";
     
     // Mounted device icons
     uint32_t number_of_mounts = knode_get_reference_count(mnt_directory);
@@ -233,63 +352,62 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
         posx += sep;
     }
     
-    // Desktop directory files
-    char home_path[128];
-    memset(home_path, '\0', sizeof(home_path));
+    // File / folder icons
+    
     uint32_t item_count = vfs_directory_get_item_count(path_mnt);
     for (unsigned int i=0; i < item_count; i++) {
-        char temp_path[128];
-        strncpy(temp_path, path_mnt, 128);
         
-        char item_name[128];
-        if (!vfs_directory_get_item(path_mnt, i, item_name)) 
+        // Check user directory
+        
+        char user_path[128];
+        memset(user_path, '\0', sizeof(user_path));
+        strncpy(user_path, path_mnt, 128);
+        
+        char device_name[128];
+        if (!vfs_directory_get_item(path_mnt, i, device_name)) 
             continue;
         
-        strncat(temp_path, "/", 128);
-        strncat(temp_path, item_name, 128);
-        strncat(temp_path, "/usr/desktop", 128);
+        strncat(user_path, "/", 128);
+        strncat(user_path, device_name, 128);
+        strncat(user_path, "/usr/desktop", 128);
         
-        if (vfs_directory_check(temp_path)) {
+        // Find the desktop directory under user
+        if (!vfs_directory_check(user_path)) 
+            continue;
+        
+        // Load desktop icons
+        uint32_t desktop_item_count = vfs_directory_get_item_count(user_path);
+        for (unsigned int d=0; d < desktop_item_count; d++) {
+            char desktop_item_path[128];
+            char desktop_item_name[128];
+            if (!vfs_directory_get_item(user_path, d, desktop_item_name)) 
+                continue;
             
-            uint32_t desktop_item_count = vfs_directory_get_item_count(temp_path);
-            for (unsigned int d=0; d < desktop_item_count; d++) {
-                char desktop_item_path[128];
-                char desktop_item_name[128];
-                if (!vfs_directory_get_item(temp_path, d, desktop_item_name)) 
-                    continue;
-                
-                memcpy(desktop_item_path, temp_path, 128);
-                strncat(desktop_item_path, "/", 128);
-                strncat(desktop_item_path, desktop_item_name, 128);
-                
-                // Folder
-                if (vfs_directory_check(desktop_item_path)) {
-                    dwm_create_folder(posx, posy, desktop_item_name, desktop_item_path);
-                    posx += sep;
-                } 
-                
-                // File
-                else {
-                    dwm_create_file(posx, posy, desktop_item_name, desktop_item_path);
-                    posx += sep;
-                }
-                
+            memcpy(desktop_item_path, user_path, 128);
+            strncat(desktop_item_path, "/", 128);
+            strncat(desktop_item_path, desktop_item_name, 128);
+            
+            // Folder
+            if (vfs_directory_check(desktop_item_path)) {
+                dwm_create_folder(posx, posy, desktop_item_name, desktop_item_path);
+                posx += sep;
+            } 
+            
+            // File
+            else {
+                dwm_create_file(posx, posy, desktop_item_name, desktop_item_path);
+                posx += sep;
             }
-            
         }
     }
+    
+    // Restore saved icon positions from <home>/usr/icons (if present)
+    dwm_desktop_layout_load();
     
     //
     // TODOs
     
-    // User event call back messaging
-    //  wEvent GetMessage();
-    //  int16_t DispatchEvent()
-    
-    
     // TODO scalable vector font or MSDF
-    
-    // TODO color themes to handle color
     
     // TODO key combination binding
     
@@ -298,12 +416,22 @@ void kmain(uint32_t magic, struct MultibootInfo* mbi) {
     //detach();
     
     
-    //for (unsigned int i=0; i < 128; i++) 
-    //    thread_create(dummy_runner, PRIORITY_LOW);
     
+    
+    
+    // Create both workers before either can run. Otherwise the timer can
+    // switch to the HIGH-priority DWM thread right after the first create,
+    // and if that thread ne1ver sleeps the NORMAL-priority boot thread (and
+    // with it the second thread_create) never runs again.
+    
+    dwm_filecopy_init(&kernel_big_lock);
+    
+    uint32_t irq_flags = irq_save();
     
     thread_create(thread_dwm_main, PRIORITY_HIGH);
     thread_create(thread_kernel_main, PRIORITY_HIGH);
+    
+    irq_restore(irq_flags);
     
     while(1) {
         thread_sleep(1000);

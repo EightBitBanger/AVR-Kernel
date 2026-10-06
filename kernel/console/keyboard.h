@@ -2,6 +2,7 @@
 #define KEYBOARD_IO_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 void kb_init(void);
 
@@ -14,5 +15,9 @@ void kb_clear_input_state(void);
 
 void kb_isr_callback(void);
 void kb_event_handler(void);
+
+bool kb_shift_down(void);
+bool kb_ctrl_down(void);
+bool kb_alt_down(void);
 
 #endif

@@ -53,9 +53,12 @@ void draw_set_origin(int32_t x, int32_t y) {
 }
 
 void draw_set_buffer_default(void) {
+    // The back buffer is allocated as width * height * 4 bytes (see kmain) and
+    // draw_flush_region() reads it with a stride of display_width, so draw into
+    // it with that same stride. Only the hardware front buffer uses the pitch.
     buffer_width = display_width;
     buffer_height = display_height;
-    buffer_stride = vinfo->framebuffer_pitch / 4; 
+    buffer_stride = display_width; 
     frame_buffer = back_buffer;
 }
 
@@ -73,11 +76,19 @@ void draw_set_clip_rect(int32_t x, int32_t y, int32_t w, int32_t h) {
     clipping_plain.max_y = y + h;
 }
 
+// clamp() in util/math is integer-only: clamp(0.5f, 0, 1) truncated to 0,
+// so every channel came out as either 0 or 255.
+static inline float clampf_unit(float v) {
+    if (v < 0.0f) return 0.0f;
+    if (v > 1.0f) return 1.0f;
+    return v;
+}
+
 uint32_t make_color(float a, float r, float g, float b) {
-    uint32_t a_int = (uint32_t)(clamp(a, 0.0f, 1.0f) * 255.0f);
-    uint32_t r_int = (uint32_t)(clamp(r, 0.0f, 1.0f) * 255.0f);
-    uint32_t g_int = (uint32_t)(clamp(g, 0.0f, 1.0f) * 255.0f);
-    uint32_t b_int = (uint32_t)(clamp(b, 0.0f, 1.0f) * 255.0f);
+    uint32_t a_int = (uint32_t)(clampf_unit(a) * 255.0f + 0.5f);
+    uint32_t r_int = (uint32_t)(clampf_unit(r) * 255.0f + 0.5f);
+    uint32_t g_int = (uint32_t)(clampf_unit(g) * 255.0f + 0.5f);
+    uint32_t b_int = (uint32_t)(clampf_unit(b) * 255.0f + 0.5f);
     
     return (a_int << 24) | (r_int << 16) | (g_int << 8) | b_int;
 }
@@ -208,6 +219,10 @@ void draw_flush_region(int x, int y, int width, int height) {
             rem_pixels--;
         }
     }
+
+    // The front buffer is now mapped write-combining: drain the WC buffers so
+    // the frame reaches VRAM now instead of whenever the CPU evicts them.
+    __asm__ volatile("sfence" ::: "memory");
 }
 
 
@@ -409,6 +424,54 @@ void draw_rect_gradient_vertical_blend(int x, int y, int width, int height, uint
         }
         
         cur_a += a_step; cur_r += r_step; cur_g += g_step; cur_b += b_step;
+    }
+}
+
+void draw_rect_gradient_horizontal_blend(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to) {
+    int screen_x_start = x + display_base_x;
+    x += display_base_x; y += display_base_y;
+    
+    int x_start = (x < clipping_plain.min_x) ? clipping_plain.min_x : x;
+    int y_start = (y < clipping_plain.min_y) ? clipping_plain.min_y : y;
+    int x_end = (x + width > clipping_plain.max_x) ? clipping_plain.max_x : x + width;
+    int y_end = (y + height > clipping_plain.max_y) ? clipping_plain.max_y : y + height;
+    
+    if (x_start >= x_end || y_start >= y_end || width <= 1) return;
+    
+    int a1 = (color_from >> 24) & 0xFF, r1 = (color_from >> 16) & 0xFF, g1 = (color_from >> 8) & 0xFF, b1 = color_from & 0xFF;
+    int a2 = (color_to >> 24)   & 0xFF, r2 = (color_to >> 16)   & 0xFF, g2 = (color_to >> 8)   & 0xFF, b2 = color_to   & 0xFF;
+    
+    // 16.16 fixed point; multiply rather than shift since the deltas can be negative
+    int div = width - 1;
+    int a_step = ((a2 - a1) * 65536) / div;
+    int r_step = ((r2 - r1) * 65536) / div;
+    int g_step = ((g2 - g1) * 65536) / div;
+    int b_step = ((b2 - b1) * 65536) / div;
+    
+    // Start the interpolation where the clipped region begins
+    int initial_offset = x_start - screen_x_start;
+    int start_a = (a1 * 65536) + (a_step * initial_offset);
+    int start_r = (r1 * 65536) + (r_step * initial_offset);
+    int start_g = (g1 * 65536) + (g_step * initial_offset);
+    int start_b = (b1 * 65536) + (b_step * initial_offset);
+    
+    int width_to_draw = x_end - x_start;
+    
+    for (int curr_y = y_start; curr_y < y_end; curr_y++) {
+        uint32_t* dest = &frame_buffer[(curr_y * buffer_stride) + x_start];
+        
+        int cur_a = start_a, cur_r = start_r, cur_g = start_g, cur_b = start_b;
+        
+        for (int i = 0; i < width_to_draw; i++) {
+            uint32_t final_color = ((uint32_t)(uint8_t)(cur_a >> 16) << 24) |
+                                   ((uint32_t)(uint8_t)(cur_r >> 16) << 16) |
+                                   ((uint32_t)(uint8_t)(cur_g >> 16) << 8)  |
+                                    (uint32_t)(uint8_t)(cur_b >> 16);
+            
+            dest[i] = blend_pixels(final_color, dest[i]);
+            
+            cur_a += a_step; cur_r += r_step; cur_g += g_step; cur_b += b_step;
+        }
     }
 }
 

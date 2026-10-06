@@ -14,28 +14,31 @@ struct ClippingPlane {
     int32_t max_y;
 };
 
-inline uint32_t blend_pixels(uint32_t src, uint32_t dest) {
-    uint8_t alpha = (src >> 24) & 0xFF;
+static inline uint32_t blend_pixels(uint32_t src, uint32_t dest) {
+    int32_t alpha = (int32_t)((src >> 24) & 0xFF);
     
     if (alpha == 0)   return dest;
     if (alpha == 255) return src;
     
-    uint32_t src_r = (src >> 16) & 0xFF;
-    uint32_t src_g = (src >> 8)  & 0xFF;
-    uint32_t src_b = src         & 0xFF;
+    // Signed math: (src - dest) is negative whenever the source channel is
+    // darker than the destination. With uint32_t it wrapped, and the division
+    // turned the wrap into garbage that bled into neighbouring channels.
+    int32_t src_r = (int32_t)((src >> 16) & 0xFF);
+    int32_t src_g = (int32_t)((src >> 8)  & 0xFF);
+    int32_t src_b = (int32_t)( src        & 0xFF);
     
-    uint32_t dest_r = (dest >> 16) & 0xFF;
-    uint32_t dest_g = (dest >> 8)  & 0xFF;
-    uint32_t dest_b = dest         & 0xFF;
+    int32_t dest_r = (int32_t)((dest >> 16) & 0xFF);
+    int32_t dest_g = (int32_t)((dest >> 8)  & 0xFF);
+    int32_t dest_b = (int32_t)( dest        & 0xFF);
     
-    uint32_t out_r = dest_r + ((src_r - dest_r) * alpha) / 255;
-    uint32_t out_g = dest_g + ((src_g - dest_g) * alpha) / 255;
-    uint32_t out_b = dest_b + ((src_b - dest_b) * alpha) / 255;
+    uint32_t out_r = (uint32_t)(dest_r + ((src_r - dest_r) * alpha) / 255);
+    uint32_t out_g = (uint32_t)(dest_g + ((src_g - dest_g) * alpha) / 255);
+    uint32_t out_b = (uint32_t)(dest_b + ((src_b - dest_b) * alpha) / 255);
     
     return (0xFF000000) | (out_r << 16) | (out_g << 8) | out_b;
 }
 
-inline void draw_pixel(int x, int y, uint32_t color) {
+static inline void draw_pixel(int x, int y, uint32_t color) {
     extern uint32_t* frame_buffer;
     extern uint32_t buffer_stride;
     
@@ -68,6 +71,7 @@ void draw_rect(int x, int y, int width, int height, uint32_t color);
 void draw_rect_filled(int x, int y, int width, int height, uint32_t color);
 void draw_rect_filled_blend(int x, int y, int width, int height, uint32_t color);
 void draw_rect_gradient_vertical_blend(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to);
+void draw_rect_gradient_horizontal_blend(int x, int y, int width, int height, uint32_t color_from, uint32_t color_to);
 
 void draw_circle(int xc, int yc, int r, uint32_t color);
 
@@ -81,3 +85,4 @@ void draw_pie_chart(int center_x, int center_y, int radius, const uint32_t* slic
 void draw_pie_chart_isometric(int center_x, int center_y, int radius, int depth, const uint32_t* slices, const uint32_t* colors, size_t count);
 
 #endif
+

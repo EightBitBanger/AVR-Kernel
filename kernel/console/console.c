@@ -89,6 +89,24 @@ uint32_t console_get_mounted_directory(void) {
     return fs_current.mount_directory;
 }
 
+// Cached device context of the currently mounted filesystem (mount knode
+// reference 1), or NULL when the working directory is not inside a mount.
+// This is the ONLY context that should be used for a mounted device: every
+// context shares the device's sector buffer, so a second one corrupts the
+// first one's cache.
+static struct FSDeviceContext* console_get_mount_context(void) {
+    struct WorkingDirectory fs_current;
+    kernel_get_working_directory(&fs_current);
+    if (fs_current.mount_device == FS_NULL)
+        return NULL;
+    
+    struct FSDeviceContext* ctx =
+        (struct FSDeviceContext*)knode_get_reference(fs_current.current_directory, 1);
+    if (ctx == NULL || (uint32_t)ctx == KMALLOC_NULL || !ctx->is_open)
+        return NULL;
+    return ctx;
+}
+
 void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uint32_t fs_addr, uint16_t depth) {
     uint32_t knode_stack[16];
     uint32_t fs_stack[16];
@@ -109,20 +127,19 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
         knode_addr = parent;
     }
     
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
-    
-    struct FSPartitionBlock partition;
-    struct FSDeviceContext ctx;
+    // Use the mount's cached device context. Opening a second context on the
+    // same device aliases its sector buffer (device_address) and leaves the
+    // cached context's sector_frame pointing at the wrong data.
+    struct FSDeviceContext* ctx = NULL;
     bool fs_valid = false;
 
-    if (fs_current.mount_device != FS_NULL && fs_addr != FS_NULL) {
-        ctx = fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
-        if (ctx.is_open) {
+    if (fs_addr != FS_NULL) {
+        ctx = console_get_mount_context();
+        if (ctx) {
             fs_valid = true;
             while (fs_addr != FS_NULL && fs_count < 16) {
                 fs_stack[fs_count++] = fs_addr;
-                uint32_t parent = fs_directory_get_parent(&ctx, fs_addr);
+                uint32_t parent = fs_directory_get_parent(ctx, fs_addr);
                 if (parent == fs_addr) break;
                 fs_addr = parent;
             }
@@ -158,7 +175,7 @@ void console_get_path(char* path, uint16_t path_length, uint32_t knode_addr, uin
             }
             
             struct FSFileHeader header;
-            fs_mem_read(&ctx, fs_stack[i], &header, sizeof(header));
+            fs_mem_read(ctx, fs_stack[i], &header, sizeof(header));
             
             if (offset > 1 && offset < (path_length - 1)) 
                 path[offset++] = '/';
@@ -322,22 +339,9 @@ void console_print_fs_entry(uint32_t directory_address) {
     if (directory_address == FS_NULL) 
         return;
         
-    struct WorkingDirectory fs_current;
-    kernel_get_working_directory(&fs_current);
-    
-    // Retrieve active FSDeviceContext pointer directly from mount knode
-    struct FSDeviceContext* ctx = (struct FSDeviceContext*)knode_get_reference(fs_current.current_directory, 1);
-    
-    // Safety check: Avoid NULL dereference on ctx->device_type if context is missing
-    struct FSDeviceContext local_ctx;
-    if (!ctx || !ctx->is_open) {
-        uint16_t device_type = ctx ? ctx->device_type : FS_DEVICE_TYPE_ATA;
-        struct FSPartitionBlock partition;
-        local_ctx = fs_device_open(fs_current.mount_device, &partition, device_type);
-        ctx = &local_ctx;
-    }
-    
-    if (!ctx->is_open)
+    // Never open a temporary context here (see console_get_mount_context)
+    struct FSDeviceContext* ctx = console_get_mount_context();
+    if (!ctx)
         return;
     
     for (uint32_t reference_index = 0;; reference_index++) {
@@ -387,3 +391,4 @@ void console_print_fs_entry(uint32_t directory_address) {
         print("\n");
     }
 }
+

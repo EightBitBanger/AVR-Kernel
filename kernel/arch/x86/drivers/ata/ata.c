@@ -6,7 +6,7 @@ uint16_t io_base_address =0;
 
 static inline bool ata_wait_ready(uint16_t io_base, uint8_t mask, uint8_t value, uint32_t timeout) {
     for (uint32_t i = 0; i < timeout; i++) {
-        uint8_t status = inb(io_base_address + 7);
+        uint8_t status = inb(io_base + 7);
         // Ensure BUSY (0x80) is clear, and our target condition matches
         if (!(status & 0x80) && ((status & mask) == value)) {
             return true;
@@ -95,55 +95,69 @@ bool ata_write_sector(uint32_t address, const uint8_t* buffer) {
     return true;
 }
 
+// Read total_bytes starting at sector `address`. Whole sectors go straight into
+// the caller's buffer; a trailing partial sector goes through a bounce buffer,
+// so the caller's buffer is never written past total_bytes.
 bool ata_read_bytes(uint32_t address, uint8_t* buffer, size_t total_bytes) {
     if (buffer == NULL || total_bytes == 0) {
         return false;
     }
     
-    // Calculate how many 512-byte sectors we need to read
-    size_t total_sectors = total_bytes / ATA_SECTOR_SIZE;
-    
-    // If the requested bytes don't perfectly align with a sector, 
-    // round up to ensure we cover the entire payload.
-    if (total_bytes % ATA_SECTOR_SIZE != 0) {
-        total_sectors++;
-    }
+    size_t full_sectors = total_bytes / ATA_SECTOR_SIZE;
+    size_t tail_bytes   = total_bytes % ATA_SECTOR_SIZE;
     
     uint32_t current_lba = address;
     uint8_t* current_buffer_ptr = buffer;
     
-    for (size_t i = 0; i < total_sectors; i++) {
-        // Read a single 512-byte chunk into the current window of our large buffer
+    for (size_t i = 0; i < full_sectors; i++) {
         if (!ata_read_sector(current_lba, current_buffer_ptr)) {
             return false; // Disk read failure or timeout
         }
-        
         current_lba++;
         current_buffer_ptr += ATA_SECTOR_SIZE;
+    }
+    
+    if (tail_bytes > 0) {
+        uint8_t bounce[ATA_SECTOR_SIZE];
+        if (!ata_read_sector(current_lba, bounce)) {
+            return false;
+        }
+        memcpy(current_buffer_ptr, bounce, tail_bytes);
     }
     
     return true;
 }
 
+// Write total_bytes starting at sector `address`. A trailing partial sector is
+// read-modify-written so the bytes after total_bytes on disk are preserved and
+// the caller's buffer is never read past total_bytes.
 bool ata_write_bytes(uint32_t address, const uint8_t* buffer, size_t total_bytes) {
     if (buffer == NULL || total_bytes == 0) 
         return false;
     
-    size_t total_sectors = total_bytes / ATA_SECTOR_SIZE;
-    
-    if (total_bytes % ATA_SECTOR_SIZE != 0) 
-        total_sectors++;
+    size_t full_sectors = total_bytes / ATA_SECTOR_SIZE;
+    size_t tail_bytes   = total_bytes % ATA_SECTOR_SIZE;
     
     uint32_t current_lba = address;
     const uint8_t* current_buffer_ptr = buffer;
     
-    for (size_t i = 0; i < total_sectors; i++) {
+    for (size_t i = 0; i < full_sectors; i++) {
         if (!ata_write_sector(current_lba, current_buffer_ptr)) {
             return false;
         }
-        
         current_lba++;
         current_buffer_ptr += ATA_SECTOR_SIZE;
+    }
+    
+    if (tail_bytes > 0) {
+        uint8_t bounce[ATA_SECTOR_SIZE];
+        if (!ata_read_sector(current_lba, bounce)) {
+            return false;
+        }
+        memcpy(bounce, current_buffer_ptr, tail_bytes);
+        if (!ata_write_sector(current_lba, bounce)) {
+            return false;
+        }
     }
     
     return true;

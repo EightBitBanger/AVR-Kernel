@@ -1,3 +1,4 @@
+
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -19,9 +20,15 @@ extern char* keyboard_string;
 extern uint8_t keyboard_length;
 extern uint8_t keyboard_length_max;
 
-static bool is_ctrl_pressed = false;
-static bool is_alt_pressed  = false;
-static bool is_shift_pressed = false;
+// Modifier state, left and right keys tracked separately so releasing one
+// while the other is still held doesn't clear the modifier
+static volatile bool lctrl_down  = false, rctrl_down  = false;
+static volatile bool lalt_down   = false, ralt_down   = false;
+static volatile bool lshift_down = false, rshift_down = false;
+
+bool kb_shift_down(void) { return lshift_down || rshift_down; }
+bool kb_ctrl_down(void)  { return lctrl_down  || rctrl_down;  }
+bool kb_alt_down(void)   { return lalt_down   || ralt_down;   }
 
 // Native PS/2 Scan Code Set 1 Table
 static const char scancode_to_ascii_set1[] = {
@@ -157,7 +164,7 @@ uint16_t kb_getc(void) {
     uint8_t scancode = inb(0x60);
     bool is_extended = false;
     
-    // Handle extended scroll scan codes (0xE0 prefix)
+    // Handle extended scan codes (0xE0 prefix)
     if (scancode == 0xE0) {
         // Spin briefly until the second byte of the sequence lands in the buffer
         int timeout = 20000;
@@ -179,45 +186,52 @@ uint16_t kb_getc(void) {
     bool is_break = (scancode & 0x80) ? true : false;
     scancode &= 0x7F; // Strip bit 7 to isolate the core scancode identifier
     
-    // State tracking for modifier keys
-    if (scancode == 0x1D) {         // Left Ctrl
-        is_ctrl_pressed = !is_break;
-    } else if (scancode == 0x38) {  // Left Alt
-        is_alt_pressed = !is_break;
-    } else if (scancode == 0x2A || scancode == 0x36) { // Left/Right Shift
-        is_shift_pressed = !is_break;
+    // Fake shifts (E0 2A / E0 AA / E0 36 / E0 B6) wrap the gray navigation
+    // keys when NumLock is on. Holding Shift and pressing an arrow sends a
+    // fake Shift *release* first, which used to clear the real Shift state
+    // right before the arrow was processed. They are not real key events.
+    if (is_extended && (scancode == 0x2A || scancode == 0x36))
+        return 0;
+    
+    // Modifier state tracking
+    switch (scancode) {
+        case 0x1D: if (is_extended) rctrl_down = !is_break; else lctrl_down = !is_break; break;
+        case 0x38: if (is_extended) ralt_down  = !is_break; else lalt_down  = !is_break; break;
+        case 0x2A: lshift_down = !is_break; break;
+        case 0x36: rshift_down = !is_break; break;
     }
     
     // Handle Ctrl+Alt+Del Reset Sequence
-    if (scancode == 0x53 && !is_break) {
-        if (is_ctrl_pressed && is_alt_pressed) {
-            system_restart();
-        }
+    if (scancode == 0x53 && !is_break && kb_ctrl_down() && kb_alt_down()) {
+        system_restart();
     }
     
     // Forward the key state updates down to virtual tracking subsystems
     kb_vkey_set(scancode, !is_break);
     
-    if (!is_break) {
-        
-        if (is_extended) {
-            if (scancode == 0x48 || scancode == 0x4B || scancode == 0x4D || scancode == 0x50 || scancode == 0x53) {
-                return (uint16_t)(scancode << 8);
-            }
-            return 0;
-        }
-        
-        if (scancode < sizeof(scancode_to_ascii_set1)) {
-            if (is_shift_pressed) {
-                current_character = scancode_to_ascii_shifted_set1[scancode];
-            } else {
-                current_character = scancode_to_ascii_set1[scancode];
-            }
-        }
-        
-        return (uint16_t)current_character;
+    if (is_break) {
+        current_character = 0x00;
+        return 0;
     }
     
-    current_character = 0x00;
-    return 0;
+    if (is_extended) {
+        switch (scancode) {
+            case 0x47: case 0x48: case 0x49:   // Home, Up, PgUp
+            case 0x4B: case 0x4D:              // Left, Right
+            case 0x4F: case 0x50: case 0x51:   // End, Down, PgDn
+            case 0x53:                         // Delete
+                return (uint16_t)(scancode << 8);
+        }
+        return 0;
+    }
+    
+    if (scancode < sizeof(scancode_to_ascii_set1)) {
+        current_character = kb_shift_down() ? scancode_to_ascii_shifted_set1[scancode]
+                                            : scancode_to_ascii_set1[scancode];
+    } else {
+        // Keypad / function keys: no character (previously returned a stale one)
+        current_character = 0x00;
+    }
+    
+    return (uint16_t)current_character;
 }

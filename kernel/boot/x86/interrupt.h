@@ -23,4 +23,17 @@ void idt_init(void);
 
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags);
 
+//
+// Input delivery from IRQ handlers to thread context
+//
+
+#include <kernel/scheduler/scheduler.h>
+
+// Signaled by the keyboard and mouse IRQs whenever new input arrives
+extern Event input_event;
+
+// Pop one queued key code (as returned by kb_getc). Thread context only.
+// Returns false when the queue is empty.
+bool input_key_pop(uint16_t* key);
+
 #endif

@@ -8,33 +8,24 @@ isr_page_fault:
     ; Stack currently looks like: [EFLAGS] -> [CS] -> [EIP] -> [Error Code] <- ESP
     
     ; Push all general-purpose registers to preserve state for the panic screen
-    pusha 
+    pusha                  ; error code now at esp + 32
     
-    ; Allocate 512 bytes on the stack for FPU/SSE state + 16 bytes for alignment safety
-    sub esp, 528           
-    mov eax, esp
-    add eax, 15
-    and eax, 0xFFFFFFF0    ; Aligns EAX to a strict 16-byte boundary
+    mov ebx, [esp + 32]    ; Error code
+    mov ecx, cr2           ; Faulting linear address
     
-    fxsave [eax]           ; Save the entire FPU/MMX/SSE/XMM state
+    ; The handler never returns, so no FPU state needs saving. Align ESP for
+    ; the C call: 4 (pad) + 3 arguments * 4 = 16.
+    and esp, 0xFFFFFFF0
+    sub esp, 4
     
-    push 0x01    ; Third argument to C function: fault type
-    
-    ; Read the faulting address from CR2
-    mov eax, cr2
-    push eax    ; Second argument to C function: faulting_address
-    
-    ; Get the error code (its now shifted down because of pusha + push eax)
-    ; pusha takes 32 bytes + 4 bytes for eax = 36 bytes. 
-    ; The error code is at esp + 36
-    mov ebx, [esp + 36] 
-    push ebx    ; First argument to C function: error_code
+    push dword 0x01        ; Third argument: fault type (PT_PAGE_FAULT)
+    push ecx               ; Second argument: faulting_address
+    push ebx               ; First argument: error_code
     
     call isr_callback_fault_handler
     
-    ; (Optional) If your handler ever returned, you'd clean up the stack here,
-    ; but since it loops infinitely, execution stops here.
+    ; The handler never returns
     cli
+.hang:
     hlt
-    
-    
+    jmp .hang

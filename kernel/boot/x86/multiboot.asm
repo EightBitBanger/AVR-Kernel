@@ -34,15 +34,17 @@ section .text
 global _start
     
 _start:
-    ; Set up the stack safely
-    mov esp, stack_top    
-    and esp, 0xFFFFFFF0    
-    
-    ; Push the arguments onto the stack for our C function (cdecl convention)
-    ; GRUB leaves the Multiboot Info structure pointer in EBX and Magic in EAX.
-    push ebx                                    ; Argument 2: Multiboot info pointer
-    push eax                                    ; Argument 1: Multiboot magic number
-    
+    cli
+
+    ; GRUB leaves the Multiboot magic in EAX and the info pointer in EBX.
+    ; CPUID below clobbers both, so park them in callee-saved registers.
+    mov esi, eax                                ; Multiboot magic
+    mov edi, ebx                                ; Multiboot info pointer
+
+    ; Set up the stack
+    mov esp, stack_top
+    and esp, 0xFFFFFFF0
+
     ; -------------------------------------------------------------------------
     ; FLOATING POINT & SSE INITIALIZATION
     ; -------------------------------------------------------------------------
@@ -51,18 +53,30 @@ _start:
     or eax, (1 << 1) | (1 << 5)                 ; Set MP (Bit 1) & NE (Bit 5)
     mov cr0, eax
     finit                                       ; Initialize FPU
-    
+
     mov eax, 0x1
     cpuid
-    test edx, (1 << 25)                         ; Check for SSE
-    jz .skip_sse                 
-    
+
+    ; OSFXSR may only be set when FXSAVE/FXRSTOR exist (CPUID.1:EDX bit 24).
+    ; Every ISR stub and the scheduler use FXSAVE, so this is required.
+    test edx, (1 << 24)
+    jz .hang
+
     mov eax, cr4
-    or eax, (1 << 9) | (1 << 10)                ; Set OSFXSR & OSXMMEXCPT
+    or eax, (1 << 9)                            ; OSFXSR
+    test edx, (1 << 25)                         ; SSE present?
+    jz .no_sse
+    or eax, (1 << 10)                           ; OSXMMEXCPT
+.no_sse:
     mov cr4, eax
-    
-.skip_sse:
-    
+
+    ; The i386 SysV ABI (which GCC assumes) requires ESP to be 16-byte
+    ; aligned at the CALL instruction. Two 4-byte argument pushes would leave
+    ; it 8 bytes off, so pad by 8 first: 8 + 4 + 4 = 16.
+    sub esp, 8
+    push edi                                    ; Argument 2: Multiboot info pointer
+    push esi                                    ; Argument 1: Multiboot magic number
+
     extern kmain
     call kmain                                  ; Kernel entry point
     

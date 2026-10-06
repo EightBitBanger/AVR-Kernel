@@ -6,6 +6,16 @@
 #define MULTIBOOT_BOOTLOADER_MAGIC  0x2BADB002
 #define MULTIBOOT_MEMORY_AVAILABLE  1
 
+// MultibootInfo.flags bits (Multiboot 1 spec, section 3.3)
+#define MULTIBOOT_INFO_MEMORY           (1U << 0)   // mem_lower / mem_upper
+#define MULTIBOOT_INFO_MEM_MAP          (1U << 6)   // mmap_addr / mmap_length
+#define MULTIBOOT_INFO_VBE_INFO         (1U << 11)  // vbe_* fields
+#define MULTIBOOT_INFO_FRAMEBUFFER_INFO (1U << 12)  // framebuffer_* fields
+
+#define MULTIBOOT_FRAMEBUFFER_TYPE_INDEXED  0
+#define MULTIBOOT_FRAMEBUFFER_TYPE_RGB      1
+#define MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT 2
+
 struct MultibootInfo {
     uint32_t flags;
     uint32_t mem_lower;

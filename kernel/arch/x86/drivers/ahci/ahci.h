@@ -11,6 +11,7 @@
 
 #define ATA_CMD_READ_DMA_EX          0x25
 #define ATA_CMD_WRITE_DMA_EX         0x35
+#define ATA_CMD_FLUSH_CACHE_EX       0xEA
 
 // Physical Region Descriptor Table (PRDT) entry manages data buffers
 struct AHCI_PRDT_Entry {
@@ -22,12 +23,16 @@ struct AHCI_PRDT_Entry {
     uint32_t interrupt  : 1;       // Bit 31: Interrupt on completion
 };
 
+// One 4 KB command table holds the 128-byte header plus this many PRDT entries
+#define AHCI_MAX_PRDT            248
+#define AHCI_PRDT_MAX_BYTES      0x400000U   // 4 MB per PRDT entry
+
 // Command table containing the structural components of a specific command
 struct AHCI_Command_Table {
     uint8_t  command_fis[64];       // Frame Information Structure command packet
     uint8_t  atapi_command[16];     // ATAPI command packet setup space
     uint8_t  reserved[48];
-    struct AHCI_PRDT_Entry prdt_entries[1]; // Flexible array of PRDT data pointers
+    struct AHCI_PRDT_Entry prdt_entries[AHCI_MAX_PRDT]; // Scatter/gather list (one entry per physical run)
 };
 
 // Command Header structure located within the Command List array
@@ -91,13 +96,24 @@ struct AHCI_HBA_Memory_Space {
 // Initiate the AHCI driver
 void ahci_init(void* abar_virtual_address);
 
-// Read from an AHCI port
+// Size of the HBA register block that must be mapped (0x1100 bytes for 32 ports)
+#define AHCI_HBA_MMIO_SIZE  ((uint32_t)sizeof(struct AHCI_HBA_Memory_Space))
+
+// Read from an AHCI port.
+// The buffer may span pages; each physically contiguous run gets its own PRDT entry.
+// It must be 2-byte aligned and mapped.
 bool ahci_read_sectors(struct AHCI_Port_Registers* port, uint64_t start_lba, uint32_t count, uint8_t* buffer);
 
 // Write to an AHCI port
 bool ahci_write_sectors(struct AHCI_Port_Registers* port, uint64_t start_lba, uint32_t count, const uint8_t* buffer);
 
+// Commit the drive's volatile write cache to the media (FLUSH CACHE EXT).
+// Call before power-off; without it, recently written sectors can be lost.
+bool ahci_flush_cache(struct AHCI_Port_Registers* port);
+
 // Get an AHCI device port
 struct AHCI_Port_Registers* ahci_get_port(int port_num);
 
 #endif
+
+

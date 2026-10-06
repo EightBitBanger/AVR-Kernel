@@ -1,6 +1,7 @@
 #include <kernel/memory/malloc.h>
 #include <kernel/arch/x86/virtual/vmm.h>
 #include <kernel/arch/x86/slab.h>
+#include <kernel/arch/x86/irq.h>
 
 #include <kernel/util/string.h>
 #include <stdbool.h>
@@ -21,7 +22,7 @@ struct LargeAllocHeader {
     uint32_t magic;
 };
 
-void* malloc(size_t size) {
+static void* malloc_unlocked(size_t size) {
     if (size == 0) return NULL;
     
     // Find a suitable slab
@@ -51,7 +52,7 @@ void* malloc(size_t size) {
     return (void*)((uint8_t*)raw_mem + PAGE_SIZE);
 }
 
-void free(void* ptr) {
+static void free_unlocked(void* ptr) {
     if (!ptr) return;
     
     // Check if the pointer is page aligned
@@ -73,11 +74,11 @@ void free(void* ptr) {
     slab_free(cache, ptr);
 }
 
-void* realloc(void* ptr, size_t size) {
-    if (!ptr) return malloc(size);
+static void* realloc_unlocked(void* ptr, size_t size) {
+    if (!ptr) return malloc_unlocked(size);
     
     if (size == 0) {
-        free(ptr);
+        free_unlocked(ptr);
         return NULL;
     }
     
@@ -134,7 +135,7 @@ void* realloc(void* ptr, size_t size) {
     }
     
     // fallback path: Allocate a completely new block of memory
-    void* new_ptr = malloc(size);
+    void* new_ptr = malloc_unlocked(size);
     if (!new_ptr) {
         return NULL; // Out of memory, original pointer remains valid
     }
@@ -144,7 +145,33 @@ void* realloc(void* ptr, size_t size) {
     memcpy(new_ptr, ptr, copy_size);
     
     // Free the old memory block
-    free(ptr);
+    free_unlocked(ptr);
     
     return new_ptr;
 }
+
+// Public entry points. The slab lists and page bookkeeping are shared by every
+// thread (and the scheduler's reaper runs inside the timer IRQ), so each call
+// runs with interrupts disabled.
+
+void* malloc(size_t size) {
+    uint32_t flags = irq_save();
+    void* ptr = malloc_unlocked(size);
+    irq_restore(flags);
+    return ptr;
+}
+
+void free(void* ptr) {
+    if (!ptr) return;
+    uint32_t flags = irq_save();
+    free_unlocked(ptr);
+    irq_restore(flags);
+}
+
+void* realloc(void* ptr, size_t size) {
+    uint32_t flags = irq_save();
+    void* new_ptr = realloc_unlocked(ptr, size);
+    irq_restore(flags);
+    return new_ptr;
+}
+

@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <kernel/arch/x86/io.h>
+#include <kernel/arch/x86/irq.h>
 #include <kernel/util/timer.h>
 
 #include <kernel/scheduler/scheduler.h>
@@ -23,10 +24,16 @@ void timer_init(void) {
 }
 
 uint64_t timer_get_ms(void) {
-    return current_ms;
+    // A 64-bit load is two 32-bit loads on i386; keep the IRQ from
+    // incrementing current_ms between them (torn read).
+    uint32_t flags = irq_save();
+    uint64_t value = current_ms;
+    irq_restore(flags);
+    return value;
 }
 
 void isr_callback_timer_handler(void) {
     outb(0x20, 0x20); // End of Interrupt
     current_ms++;
 }
+

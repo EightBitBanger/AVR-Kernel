@@ -2,6 +2,7 @@
 #include <kernel/panic/panic_error.h>
 
 #include <kernel/arch/x86/heap.h>
+#include <kernel/arch/x86/irq.h>
 
 static uint32_t kmalloc_block_size       = 0;
 static uint32_t kmalloc_pool_size        = 0;
@@ -203,7 +204,7 @@ void heap_init(uint32_t block_size, uint32_t total_memory) {
     kmalloc_bitmap_write();
 }
 
-uint32_t kmalloc(uint32_t size) {
+static uint32_t kmalloc_unlocked(uint32_t size) {
     if (size == 0)
         return KMALLOC_NULL;
     
@@ -260,7 +261,7 @@ uint32_t kmalloc(uint32_t size) {
     return KMALLOC_NULL;
 }
 
-void kfree(uint32_t address) {
+static void kfree_unlocked(uint32_t address) {
     if (!kmalloc_is_valid(address))
         return;
     
@@ -288,6 +289,22 @@ void kfree(uint32_t address) {
     kmalloc_bitmap_write();
 }
 
+// Public entry points: the bitmap is shared by every thread, so run with
+// interrupts disabled. (kernel_crashout on OOM is fine with IF=0.)
+
+uint32_t kmalloc(uint32_t size) {
+    uint32_t flags = irq_save();
+    uint32_t address = kmalloc_unlocked(size);
+    irq_restore(flags);
+    return address;
+}
+
+void kfree(uint32_t address) {
+    uint32_t flags = irq_save();
+    kfree_unlocked(address);
+    irq_restore(flags);
+}
+
 uint8_t kmalloc_get_type(uint32_t address) {
     if (!kmalloc_is_valid(address)) return 0;
     struct KMallocHeader header;
@@ -296,12 +313,14 @@ uint8_t kmalloc_get_type(uint32_t address) {
 }
 
 void kmalloc_set_type(uint32_t address, uint8_t type) {
-    if (!kmalloc_is_valid(address)) return;
+    uint32_t irq_flags = irq_save();
+    if (!kmalloc_is_valid(address)) { irq_restore(irq_flags); return; }
     struct KMallocHeader header;
     uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
     kmalloc_header_read(header_address_rel, &header);
     header.type = type;
     kmalloc_header_write(header_address_rel, &header);
+    irq_restore(irq_flags);
 }
 
 uint8_t kmalloc_get_flags(uint32_t address) {
@@ -312,12 +331,14 @@ uint8_t kmalloc_get_flags(uint32_t address) {
 }
 
 void kmalloc_set_flags(uint32_t address, uint8_t flags) {
-    if (!kmalloc_is_valid(address)) return;
+    uint32_t irq_flags = irq_save();
+    if (!kmalloc_is_valid(address)) { irq_restore(irq_flags); return; }
     struct KMallocHeader header;
     uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
     kmalloc_header_read(header_address_rel, &header);
     header.flags = flags;
     kmalloc_header_write(header_address_rel, &header);
+    irq_restore(irq_flags);
 }
 
 uint8_t kmalloc_get_permissions(uint32_t address) {
@@ -328,12 +349,14 @@ uint8_t kmalloc_get_permissions(uint32_t address) {
 }
 
 void kmalloc_set_permissions(uint32_t address, uint8_t permissions) {
-    if (!kmalloc_is_valid(address)) return;
+    uint32_t irq_flags = irq_save();
+    if (!kmalloc_is_valid(address)) { irq_restore(irq_flags); return; }
     struct KMallocHeader header;
     uint32_t header_address_rel = (address - KMALLOC_HEADER_SIZE) - __KMALLOC_HEAP_BEGIN__;
     kmalloc_header_read(header_address_rel, &header);
     header.perm = permissions;
     kmalloc_header_write(header_address_rel, &header);
+    irq_restore(irq_flags);
 }
 
 uint32_t kmalloc_get_size(uint32_t address) {
@@ -398,3 +421,4 @@ void kmemset(uint32_t destination, unsigned char value, uint32_t size) {
     void* dest_ptr = (void*)(uintptr_t)destination;
     memset(dest_ptr, value, size);
 }
+

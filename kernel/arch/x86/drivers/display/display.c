@@ -91,7 +91,8 @@ uint16_t display_get_rows(void) {
 
 void display_putc(const char ch) {
     draw_rect_filled(cursor_position * console_glyph_width, cursor_line * console_glyph_height, 6, 8, background_color);
-    draw_glyph(char_rom, ch, console_glyph_width, console_glyph_height, cursor_position * console_glyph_width, cursor_line * console_glyph_height, foreground_color, background_color, transparent_color);
+    // Last argument is a boolean "transparent background" flag (it was being passed a color)
+    draw_glyph(char_rom, ch, console_glyph_width, console_glyph_height, cursor_position * console_glyph_width, cursor_line * console_glyph_height, foreground_color, background_color, 1);
     
     int cursor_x = (int)(cursor_position * console_glyph_width);
     int cursor_y = (int)(cursor_line * console_glyph_height);
@@ -103,18 +104,24 @@ void display_newline(void) {
     extern uint32_t* back_buffer;
     if (!back_buffer) return;
     
-    uint32_t pitch = vinfo->framebuffer_pitch;
-    uint32_t stride = pitch / 4; // Width in 32-bit pixels
-    uint32_t height = display_get_height();
+    // The back buffer is tightly packed (stride = display width), unlike the
+    // hardware front buffer which uses framebuffer_pitch.
     uint32_t width = display_get_width();
+    uint32_t height = display_get_height();
+    uint32_t stride = width;
+    uint32_t row_bytes = width * sizeof(uint32_t);
+    
+    // Scroll by one console line (the cursor advances by console_glyph_height,
+    // not FONT_HEIGHT, so scrolling by 8 rows drifted text out of alignment)
+    uint32_t line_height = console_glyph_height;
     
     // Move existing lines up
-    size_t bytes_per_text_row = FONT_HEIGHT * pitch; 
-    size_t bytes_to_move = (height - FONT_HEIGHT) * pitch;
+    size_t bytes_per_text_row = (size_t)line_height * row_bytes; 
+    size_t bytes_to_move = (size_t)(height - line_height) * row_bytes;
     memmove(back_buffer, (uint8_t*)back_buffer + bytes_per_text_row, bytes_to_move);
     
     // Clear the new bottom line
-    for (uint32_t y = height - FONT_HEIGHT; y < height; y++) {
+    for (uint32_t y = height - line_height; y < height; y++) {
         uint32_t* row_pixels = &back_buffer[y * stride];
         for (uint32_t x = 0; x < width; x++) {
             row_pixels[x] = background_color;
@@ -151,3 +158,4 @@ void display_clear(void) {
 
 void console_set_blink_rate(uint8_t rate) {
 }
+

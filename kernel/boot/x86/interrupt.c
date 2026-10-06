@@ -12,6 +12,9 @@ extern void scheduler_context(void);
 extern void scheduler_yield_context(void);
 
 extern void isr_dummy(void);
+extern void isr_dummy_master(void);
+extern void isr_dummy_slave(void);
+extern const uint32_t isr_exception_table[32];
 extern void isr_div_zero(void);
 extern void isr_mouse(void);
 extern void isr_keyboard(void);
@@ -37,10 +40,20 @@ void idt_init(void) {
     idtp.limit = (sizeof(struct idt_entry) * 256) - 1;
     idtp.base  = (uint32_t)&idt;
     
-    for (int i = 0; i < 256; i++) 
+    // CPU exceptions: report and halt (see isr_exceptions.asm)
+    for (int i = 0; i < 32; i++) 
+        idt_set_gate(i, isr_exception_table[i], 0x08, 0x8E);
+    
+    // Unclaimed PIC IRQs: acknowledge on the right controller(s)
+    for (int i = 0x20; i < 0x28; i++) 
+        idt_set_gate(i, (uint32_t)isr_dummy_master, 0x08, 0x8E);
+    for (int i = 0x28; i < 0x30; i++) 
+        idt_set_gate(i, (uint32_t)isr_dummy_slave, 0x08, 0x8E);
+    
+    // Everything else: no EOI
+    for (int i = 0x30; i < 256; i++) 
         idt_set_gate(i, (uint32_t)isr_dummy, 0x08, 0x8E);
     
-    idt_set_gate(0,    (uint32_t)isr_div_zero,              0x08, 0x8E);
     idt_set_gate(0x20, (uint32_t)scheduler_context,     0x08, 0x8E);
     idt_set_gate(0x80, (uint32_t)scheduler_yield_context,   0x08, 0x8E);
     
@@ -74,8 +87,32 @@ void isr_callback_div_zero_handler(void) {
 }
 
 void c_dummy_handler(void) {
-    
+    // Not a PIC IRQ: no EOI
+}
+
+void c_dummy_master_handler(void) {
     interrupt_end();
+}
+
+void c_dummy_slave_handler(void) {
+    slave_interrupt_end();
+}
+
+static const char* exception_names[32] = {
+    "DIVIDE ERROR", "DEBUG", "NMI", "BREAKPOINT",
+    "OVERFLOW", "BOUND RANGE EXCEEDED", "INVALID OPCODE", "DEVICE NOT AVAILABLE",
+    "DOUBLE FAULT", "COPROCESSOR SEGMENT OVERRUN", "INVALID TSS", "SEGMENT NOT PRESENT",
+    "STACK-SEGMENT FAULT", "GENERAL PROTECTION FAULT", "PAGE FAULT", "RESERVED",
+    "x87 FLOATING-POINT ERROR", "ALIGNMENT CHECK", "MACHINE CHECK", "SIMD FLOATING-POINT ERROR",
+    "VIRTUALIZATION EXCEPTION", "CONTROL PROTECTION", "RESERVED", "RESERVED",
+    "RESERVED", "RESERVED", "RESERVED", "RESERVED",
+    "HYPERVISOR INJECTION", "VMM COMMUNICATION", "SECURITY EXCEPTION", "RESERVED"
+};
+
+void isr_callback_exception_handler(uint32_t vector, uint32_t error_code, uint32_t eip) {
+    const char* name = (vector < 32) ? exception_names[vector] : "UNKNOWN EXCEPTION";
+    kernel_crashout(error_code, eip, PT_CPU_EXCEPTION, name);
+    while (1);
 }
 
 void isr_callback_fault_handler(uint32_t error_code, uint32_t faulting_address, uint8_t type) {
@@ -86,17 +123,63 @@ void isr_callback_fault_handler(uint32_t error_code, uint32_t faulting_address, 
     interrupt_end();
 }
 
+//
+// Keyboard ring buffer
+//
+// Single producer (keyboard IRQ) / single consumer (DWM thread). The IRQ only
+// writes head, the consumer only writes tail, so no lock is needed on this
+// single-CPU kernel; the compiler barriers keep the slot write ordered before
+// the index publish. When full, new keys are dropped (the consumer owns tail).
+
+#define INPUT_KEY_QUEUE_SIZE 64   // Must be a power of two
+
+static uint16_t key_queue[INPUT_KEY_QUEUE_SIZE];
+static volatile uint32_t key_queue_head = 0;
+static volatile uint32_t key_queue_tail = 0;
+
+Event input_event = EVENT_INITIALIZER;
+
+static void input_key_push(uint16_t key) {
+    uint32_t head = key_queue_head;
+    uint32_t next = (head + 1) & (INPUT_KEY_QUEUE_SIZE - 1);
+    if (next == key_queue_tail)
+        return;   // Full: drop
+
+    key_queue[head] = key;
+    __asm__ volatile("" ::: "memory");
+    key_queue_head = next;
+}
+
+bool input_key_pop(uint16_t* key) {
+    uint32_t tail = key_queue_tail;
+    if (tail == key_queue_head)
+        return false;
+
+    __asm__ volatile("" ::: "memory");
+    *key = key_queue[tail];
+    __asm__ volatile("" ::: "memory");
+    key_queue_tail = (tail + 1) & (INPUT_KEY_QUEUE_SIZE - 1);
+    return true;
+}
+
 void keyboard_handler_c(void) {
     if (ps2_check_keyboard()) {
         uint16_t last_key_pressed = kb_getc();
-        
-        dwm_post_message(dwm_window_get_focus(), DWM_EVENT_KEYBOARD, last_key_pressed, 0);
+
+        // Don't call into the DWM from interrupt context: it is not
+        // reentrant and may be mid-update. Queue the key and wake the DWM.
+        if (last_key_pressed != 0)
+            input_key_push(last_key_pressed);
     }
+
+    // Also covers mouse bytes that ps2_check_keyboard() routed to the mouse
+    event_signal(&input_event);
     interrupt_end();
 }
 
 void mouse_handler_c(void) {
     mouse_event_handler();
-    
+    event_signal(&input_event);
+
     slave_interrupt_end();
 }
