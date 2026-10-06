@@ -1,3 +1,4 @@
+
 #ifndef PROGRAM_EXPLORER_INTERNAL_H
 #define PROGRAM_EXPLORER_INTERNAL_H
 
@@ -13,13 +14,6 @@ extern struct Image* icon_storage;
 extern struct Image* ui_button_back;
 extern struct Image* ui_button_new;
 
-extern uint32_t background;
-extern uint32_t path_bg;
-extern uint32_t path_border;
-extern uint32_t text_knode;
-extern uint32_t text_mount;
-extern uint32_t navbar_div;
-extern uint32_t item_text;
 
 extern struct ExplorerWindowState* window_list_head;
 
@@ -66,3 +60,4 @@ struct ExplorerWindowState {
 };
 
 #endif
+

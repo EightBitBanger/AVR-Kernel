@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -12,9 +13,6 @@
 
 #include <kernel/util/string.h>
 #include <kernel/util/parser.h>
-
-uint32_t notepad_bg         = 0xFF08080F; // Matching the dark palette
-uint32_t notepad_text_color = 0xFFD0D0DF;
 
 uint8_t context_directive = 0; // Context menu directive
 
@@ -133,3 +131,4 @@ WindowHandle notepad_create_instance(const char* title, const char* path) {
     dwm_window_set_focus(window);
     return window;
 }
+

@@ -1,3 +1,6 @@
+
+
+
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -5,25 +8,68 @@
 #include <kernel/dwm/dwm.h>
 #include <kernel/events.h>
 #include <kernel/util/string.h>
+#include <kernel/memory/malloc.h>
+#include <kernel/console/keyboard.h>
 
 #include <kernel/programs/notepad/internal.h>
 
 // Matching definitions from the kernel driver mappings
 #define KBD_CUSTOM_BACKSPACE    0x01
 #define KBD_CUSTOM_ENTER        0x02
-#define KBD_SCANCODE_DELETE     0x53
 
-// Native PS/2 Scan Code Set 1 Arrow Keys
+// Native PS/2 Scan Code Set 1
+#define KBD_SCANCODE_DELETE     0x53
+#define KBD_SCANCODE_HOME       0x47
+#define KBD_SCANCODE_END        0x4F
 #define KBD_SCANCODE_UP         0x48
 #define KBD_SCANCODE_LEFT       0x4B
 #define KBD_SCANCODE_RIGHT      0x4D
 #define KBD_SCANCODE_DOWN       0x50
 
+#define KBD_SCANCODE_LSHIFT     0x2A
+#define KBD_SCANCODE_RSHIFT     0x36
+#define KBD_SCANCODE_CTRL       0x1D   // Right ctrl is E0 1D, same low byte
+
+#define KBD_SCANCODE_A          0x1E
+#define KBD_SCANCODE_C          0x2E
+#define KBD_SCANCODE_V          0x2F
+#define KBD_SCANCODE_X          0x2D
+
 // Menu Bar Layout Geometry
 #define MENUBAR_HEIGHT          16
 #define MENUBAR_TEXT_X          10
 #define MENUBAR_TEXT_Y          4
-#define MENUBAR_CLICK_WIDTH     36 
+#define MENUBAR_CLICK_WIDTH     36
+
+// Selection highlight
+#define SELECTION_COLOR         (dwm_get_theme()->edit.selection)
+#define CARET_COLOR             (dwm_get_theme()->client.text_value)
+
+// The renderer builds each visual line in a fixed scratch buffer, so a line
+// can never be wider than this. Every layout function uses the same limit.
+#define LINE_SCRATCH_SIZE       128
+
+// Context menus
+static const char* file_menu_options[]   = { "New", "Open", "Save", "Clear", "Exit" };
+static const char* canvas_menu_options[] = { "Cut", "Copy", "Paste", "Delete", "Select all" };
+
+#define FILE_MENU_COUNT    (sizeof(file_menu_options)   / sizeof(file_menu_options[0]))
+#define CANVAS_MENU_COUNT  (sizeof(canvas_menu_options) / sizeof(canvas_menu_options[0]))
+
+// ==========================================
+// Modifier keys
+// ==========================================
+//
+// Shift / Ctrl come from the keyboard driver. Modifier keys produce no
+// character, so they never arrive as DWM_EVENT_KEYBOARD messages and can't
+// be tracked from the key stream here.
+
+static bool notepad_shift_down(void) { return kb_shift_down(); }
+static bool notepad_ctrl_down(void)  { return kb_ctrl_down();  }
+
+// ==========================================
+// State lookup
+// ==========================================
 
 static struct NotepadWindowState* get_notepad_window_state(WindowHandle handle) {
     struct NotepadWindowState* current = notepad_window_list_head;
@@ -39,446 +85,711 @@ static void handle_notepad_resize(struct NotepadWindowState* state, uint32_t wpa
     state->win_height = (uint16_t)((wparam >> 16) & 0xFFFF);
 }
 
-// Helper to calculate current row and column of a given index
-static void get_cursor_layout_pos(struct NotepadWindowState* state, uint16_t max_chars, uint32_t target_idx, uint16_t* out_row, uint16_t* out_col) {
+// ==========================================
+// Layout
+// ==========================================
+//
+// Rules shared by drawing, the arrow keys and mouse hit testing:
+//   - byte i sits at (row, col); the caret "at i" is drawn left of byte i
+//   - '\n' ends the row
+//   - any other byte advances col; reaching max_chars wraps to the next row
+// The buffer is binary: '\0' is an ordinary byte and is drawn as a space.
+
+static uint16_t notepad_max_chars(WindowHandle handle) {
+    uint16_t window_width = dwm_window_get_width(handle);
+    int chars = ((int)window_width - (TEXT_PADDING_X * 2)) / TEXT_FONT_CHAR_WIDTH;
+    if (chars < 1) chars = 1;
+    if (chars > LINE_SCRATCH_SIZE - 1) chars = LINE_SCRATCH_SIZE - 1;
+    return (uint16_t)chars;
+}
+
+static void layout_pos_of(struct NotepadWindowState* state, uint16_t max_chars, uint32_t target_idx,
+                          uint16_t* out_row, uint16_t* out_col) {
     uint16_t r = 0, c = 0;
     for (uint32_t i = 0; i < target_idx && i < state->text_length; i++) {
         if (state->text_buffer[i] == '\n') {
             r++;
             c = 0;
-        } else {
-            c++;
-            if (c >= max_chars) {
-                r++;
-                c = 0;
-            }
+        } else if (++c >= max_chars) {
+            r++;
+            c = 0;
         }
     }
     *out_row = r;
     *out_col = c;
 }
 
-// Find a buffer index based on target layout coordinates
-static uint32_t get_index_from_layout_pos(struct NotepadWindowState* state, uint16_t max_chars, uint16_t target_row, uint16_t target_col) {
+// Caret index nearest to (row, col). Past the end of a line snaps to the end
+// of that line, past the last row snaps to the end of the text.
+static uint32_t layout_index_at(struct NotepadWindowState* state, uint16_t max_chars,
+                                uint16_t target_row, uint16_t target_col) {
     uint16_t r = 0, c = 0;
-    uint32_t last_valid_on_row = 0;
-    
-    for (uint32_t i = 0; i <= state->text_length; i++) {
-        if (r == target_row && c == target_col) {
-            return i;
-        }
-        
-        if (i == state->text_length) {
-            if (r == target_row) return i;
-            break;
-        }
-        
-        if (r == target_row) {
-            last_valid_on_row = i;
-        }
-        
-        char target = state->text_buffer[i];
-        if (target == '\n') {
-            if (r == target_row) {
-                // If column is past line length, snap to the newline character
-                return i;
-            }
+    for (uint32_t i = 0; i < state->text_length; i++) {
+        if (r == target_row && c >= target_col) return i;
+
+        if (state->text_buffer[i] == '\n') {
+            if (r == target_row) return i;   // Before the line break
             r++;
             c = 0;
-        } else {
-            c++;
-            if (c >= max_chars) {
-                if (r == target_row) return i;
-                r++;
-                c = 0;
-            }
+        } else if (++c >= max_chars) {
+            r++;
+            c = 0;
         }
     }
-    
-    if (target_row > r) {
-        return state->text_length;
-    }
-    
-    return last_valid_on_row;
+    return state->text_length;
 }
 
-static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowState* state, uint32_t wparam) {
-    char ascii_char = (char)(wparam & 0xFF);
-    uint16_t scancode = (uint8_t)((wparam >> 8) & 0xFF);
+// Window-local point (signed: may be outside the window while dragging)
+static uint32_t layout_index_from_point(WindowHandle handle, struct NotepadWindowState* state,
+                                        int x, int y) {
+    uint16_t max_chars = notepad_max_chars(handle);
+    int text_top = TEXT_PADDING_Y + MENUBAR_HEIGHT;
+
+    if (y < text_top) y = text_top;
+    if (x < TEXT_PADDING_X) x = TEXT_PADDING_X;
+
+    // Round to the nearest gap between characters, not the cell under the pointer
+    int col = (x - TEXT_PADDING_X + (TEXT_FONT_CHAR_WIDTH / 2)) / TEXT_FONT_CHAR_WIDTH;
+    int row = (y - text_top) / TEXT_FONT_LINE_HEIGHT;
+
+    if (col > max_chars - 1) col = max_chars - 1;
+    if (row > 0xFFFF) row = 0xFFFF;
+
+    return layout_index_at(state, max_chars, (uint16_t)row, (uint16_t)col);
+}
+
+// ==========================================
+// Selection & editing primitives
+// ==========================================
+
+static bool has_selection(struct NotepadWindowState* state) {
+    return state->sel_anchor != state->cursor_index;
+}
+
+static uint32_t selection_start(struct NotepadWindowState* state) {
+    return (state->sel_anchor < state->cursor_index) ? state->sel_anchor : state->cursor_index;
+}
+
+static uint32_t selection_end(struct NotepadWindowState* state) {
+    return (state->sel_anchor > state->cursor_index) ? state->sel_anchor : state->cursor_index;
+}
+
+// Move the caret. extend = keep the anchor where it is (grow the selection)
+static void move_cursor(struct NotepadWindowState* state, uint32_t index, bool extend) {
+    if (index > state->text_length) index = state->text_length;
+    state->cursor_index = index;
+    if (!extend) state->sel_anchor = index;
+}
+
+static void select_range(struct NotepadWindowState* state, uint32_t start, uint32_t end) {
+    state->sel_anchor   = start;
+    state->cursor_index = end;
+}
+
+// Make room for `extra` more bytes. The buffer is binary, so no terminator.
+static bool ensure_capacity(struct NotepadWindowState* state, uint32_t extra) {
+    uint32_t needed = state->text_length + extra;
+    if (state->text_buffer != NULL && needed <= state->text_capacity) return true;
+
+    uint32_t new_capacity = (state->text_capacity > 0) ? state->text_capacity : 2048;
+    while (new_capacity < needed) new_capacity *= 2;
+
+    char* new_buf = (char*)realloc(state->text_buffer, new_capacity);
+    if (new_buf == NULL) return false;
+
+    state->text_buffer = new_buf;
+    state->text_capacity = new_capacity;
+    return true;
+}
+
+static void delete_range(struct NotepadWindowState* state, uint32_t start, uint32_t end) {
+    if (end > state->text_length) end = state->text_length;
+    if (start >= end) return;
+
+    memmove(&state->text_buffer[start], &state->text_buffer[end], state->text_length - end);
+    state->text_length -= (end - start);
+    move_cursor(state, start, false);
+}
+
+static bool delete_selection(struct NotepadWindowState* state) {
+    if (!has_selection(state)) return false;
+    delete_range(state, selection_start(state), selection_end(state));
+    return true;
+}
+
+// Insert raw bytes at the caret, replacing the selection
+static bool insert_bytes(struct NotepadWindowState* state, const char* data, uint32_t length) {
+    delete_selection(state);
+    if (length == 0) return true;
+    if (!ensure_capacity(state, length)) return false;
+
+    uint32_t at = state->cursor_index;
+    memmove(&state->text_buffer[at + length], &state->text_buffer[at], state->text_length - at);
+    memcpy(&state->text_buffer[at], data, length);
+    state->text_length += length;
+    move_cursor(state, at + length, false);
+    return true;
+}
+
+// ==========================================
+// Clipboard commands
+// ==========================================
+
+// Copies plain text as TEXT, so explorer/desktop Paste and other programs
+// see it as text. A selection containing '\0' bytes (the buffer is binary)
+// goes up as raw BINARY instead, so nothing is lost.
+static bool notepad_copy(struct NotepadWindowState* state) {
+    if (!has_selection(state)) return false;
     
-    if (scancode == 0 && ascii_char == 0) {
-        scancode = (uint8_t)(wparam & 0xFF); 
+    uint32_t start  = selection_start(state);
+    uint32_t length = selection_end(state) - start;
+    const char* data = &state->text_buffer[start];
+    
+    bool has_nul = false;
+    for (uint32_t i = 0; i < length; i++) {
+        if (data[i] == '\0') { has_nul = true; break; }
     }
     
-    // Filter out key releases
-    if ((scancode & 0x80) || (wparam & 0x80000000)) {
-        return; 
+    bool ok = has_nul ? dwm_clipboard_set(data, length)
+                      : dwm_clipboard_set_text_n(data, length);
+    if (!ok) {
+        dwm_summon_message_box("Copy", "The selection is too large to copy");
     }
-    
-    // Process arrow navigation keys first
-    if (scancode == KBD_SCANCODE_LEFT || scancode == KBD_SCANCODE_RIGHT || 
-        scancode == KBD_SCANCODE_UP || scancode == KBD_SCANCODE_DOWN) {
-        
-        uint16_t window_width = dwm_window_get_width(handle);
-        uint16_t max_chars = (window_width - (TEXT_PADDING_X * 2)) / TEXT_FONT_CHAR_WIDTH;
-        if (max_chars == 0) max_chars = 1;
-        
-        uint16_t cur_row = 0, cur_col = 0;
-        get_cursor_layout_pos(state, max_chars, state->cursor_index, &cur_row, &cur_col);
-        
-        switch (scancode) {
-            case KBD_SCANCODE_LEFT:
-                if (state->cursor_index > 0) {
-                    state->cursor_index--;
-                    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-                }
-                return;
-                
-            case KBD_SCANCODE_RIGHT:
-                if (state->cursor_index < state->text_length) {
-                    state->cursor_index++;
-                    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-                }
-                return;
-                
-            case KBD_SCANCODE_UP:
-                if (cur_row > 0) {
-                    state->cursor_index = get_index_from_layout_pos(state, max_chars, cur_row - 1, cur_col);
-                    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-                }
-                return;
-                
-            case KBD_SCANCODE_DOWN:
-                state->cursor_index = get_index_from_layout_pos(state, max_chars, cur_row + 1, cur_col);
-                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-                return;
-        }
-    }
-    
-    // 2. PROCESS DELETE KEY
-    if (scancode == KBD_SCANCODE_DELETE) {
-        if (state->cursor_index < state->text_length && state->text_length > 0) {
-            for (uint32_t i = state->cursor_index; i < state->text_length - 1; i++) {
-                state->text_buffer[i] = state->text_buffer[i + 1];
-            }
-            state->text_length--;
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-        }
-        return;
-    }
-    
-    // 3. PROCESS BACKSPACE KEY
-    if (ascii_char == KBD_CUSTOM_BACKSPACE) {
-        if (state->cursor_index > 0 && state->text_length > 0) {
-            for (uint32_t i = state->cursor_index - 1; i < state->text_length; i++) {
-                state->text_buffer[i] = state->text_buffer[i + 1];
-            }
-            state->text_length--;
-            state->cursor_index--;
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-        }
-        return;
-    }
-    
-    // If it was a non-navigation special key with ascii_char == 0, drop it here
-    if (ascii_char == 0) {
-        return;
-    }
-    
-    // Process Backspace (Removes character BEFORE the cursor)
-    if (ascii_char == KBD_CUSTOM_BACKSPACE) {
-        if (state->cursor_index > 0 && state->text_length > 0) {
-            for (uint32_t i = state->cursor_index - 1; i < state->text_length; i++) {
-                state->text_buffer[i] = state->text_buffer[i + 1];
-            }
-            state->text_length--;
-            state->cursor_index--;
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-        }
-        return;
-    }
-    
-    // Delete
-    if (scancode == KBD_SCANCODE_DELETE) {
-        if (state->cursor_index < state->text_length && state->text_length > 0) {
-            for (uint32_t i = state->cursor_index; i < state->text_length - 1; i++) {
-                state->text_buffer[i] = state->text_buffer[i + 1];
-            }
-            state->text_length--;
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-        }
-        return;
-    }
-    
-    // Dynamic array expanding bounds check
-    if (state->text_length >= (state->text_capacity - 1)) {
-        uint32_t new_capacity = state->text_capacity * 2;
-        char* new_buf = (char*)realloc(state->text_buffer, new_capacity);
-        if (new_buf) {
-            state->text_buffer = new_buf;
-            state->text_capacity = new_capacity;
-        }
-    }
-    
-    // Process binary input streams
-    if (state->text_length < (state->text_capacity - 1)) {
-        if (ascii_char == KBD_CUSTOM_ENTER) {
-            ascii_char = '\n';
-        }
-        
-        for (uint32_t i = state->text_length; i > state->cursor_index; i--) {
-            state->text_buffer[i] = state->text_buffer[i - 1];
-        }
-        
-        state->text_buffer[state->cursor_index] = ascii_char;
-        state->text_length++;
-        state->cursor_index++;
-        
-        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+    return ok;
+}
+
+static void notepad_cut(struct NotepadWindowState* state) {
+    // Only delete what actually made it onto the clipboard
+    if (notepad_copy(state)) {
+        delete_selection(state);
     }
 }
+
+// Raw BINARY bytes are pasted as they are. Anything else that reads as text
+// (TEXT, or FILES: copied files paste as their paths, one per line) goes
+// through dwm_clipboard_get_text. Both copy out, so no borrowed pointers.
+static void notepad_paste(struct NotepadWindowState* state) {
+    DWMClipboardInfo info;
+    dwm_clipboard_get_info(&info);
+    
+    char* data = NULL;
+    uint32_t size = 0;
+    
+    if (info.format == DWM_CLIPBOARD_BINARY) {
+        if (info.size == 0) return;
+        data = (char*)malloc(info.size);
+        if (data != NULL) {
+            size = dwm_clipboard_get_data(data, info.size);
+            if (size > info.size) size = info.size;
+        }
+    } else if (dwm_clipboard_has_format(DWM_CLIPBOARD_TEXT)) {
+        uint32_t length = dwm_clipboard_get_text(NULL, 0);
+        if (length == 0) return;
+        data = (char*)malloc(length + 1);
+        if (data != NULL) {
+            size = dwm_clipboard_get_text(data, length + 1);
+            if (size > length) size = length;
+        }
+    } else {
+        return;   // Empty, or an image
+    }
+    
+    if (data == NULL || !insert_bytes(state, data, size)) {
+        dwm_summon_message_box("Paste", "Not enough memory to paste");
+    }
+    if (data != NULL) free(data);
+}
+
+static void notepad_select_all(struct NotepadWindowState* state) {
+    select_range(state, 0, state->text_length);
+}
+
+// ==========================================
+// Word selection (double click)
+// ==========================================
+
+// 0 = word, 1 = blank, 2 = line break, 3 = anything else
+static int char_class(char ch) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+        (ch >= '0' && ch <= '9') || ch == '_') return 0;
+    if (ch == ' ' || ch == '\t' || ch == '\0') return 1;
+    if (ch == '\n') return 2;
+    return 3;
+}
+
+static void select_word_at(struct NotepadWindowState* state, uint32_t index) {
+    if (state->text_length == 0) return;
+
+    // A double click right after the last char targets that char
+    if (index >= state->text_length) index = state->text_length - 1;
+
+    int cls = char_class(state->text_buffer[index]);
+    if (cls == 2) {
+        select_range(state, index, index + 1);
+        return;
+    }
+
+    uint32_t start = index;
+    uint32_t end = index + 1;
+    while (start > 0 && char_class(state->text_buffer[start - 1]) == cls) start--;
+    while (end < state->text_length && char_class(state->text_buffer[end]) == cls) end++;
+
+    select_range(state, start, end);
+}
+
+// ==========================================
+// Keyboard
+// ==========================================
+
+static void handle_notepad_keypress(WindowHandle handle, struct NotepadWindowState* state, uint32_t wparam) {
+    char ascii_char  = (char)(wparam & 0xFF);
+    uint8_t scancode = (uint8_t)((wparam >> 8) & 0xFF);
+
+    bool released = (scancode & 0x80) || (wparam & 0x80000000);
+    uint8_t key = scancode & 0x7F;
+
+    if (released) return;
+
+    bool shift = notepad_shift_down();
+    bool ctrl  = notepad_ctrl_down();
+
+    bool is_navigation = (key == KBD_SCANCODE_LEFT || key == KBD_SCANCODE_RIGHT ||
+                          key == KBD_SCANCODE_UP   || key == KBD_SCANCODE_DOWN  ||
+                          key == KBD_SCANCODE_HOME || key == KBD_SCANCODE_END);
+
+    // ---- Ctrl shortcuts (matched by scancode, or by letter as a fallback) ----
+    if (ctrl && !is_navigation) {
+        char letter = ascii_char | 0x20;   // Lower case
+
+        if (key == KBD_SCANCODE_A || letter == 'a') {
+            notepad_select_all(state);
+        } else if (key == KBD_SCANCODE_C || letter == 'c') {
+            notepad_copy(state);
+            return;                          // Nothing changed on screen
+        } else if (key == KBD_SCANCODE_X || letter == 'x') {
+            notepad_cut(state);
+        } else if (key == KBD_SCANCODE_V || letter == 'v') {
+            notepad_paste(state);
+        } else {
+            return;                          // Swallow other Ctrl+key combos
+        }
+
+        state->has_preferred_col = false;
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        return;
+    }
+
+    // ---- Navigation (Shift extends the selection) ----
+    if (is_navigation) {
+        uint16_t max_chars = notepad_max_chars(handle);
+        uint16_t cur_row = 0, cur_col = 0;
+        layout_pos_of(state, max_chars, state->cursor_index, &cur_row, &cur_col);
+
+        if (key != KBD_SCANCODE_UP && key != KBD_SCANCODE_DOWN) {
+            state->has_preferred_col = false;
+        }
+
+        switch (key) {
+            case KBD_SCANCODE_LEFT:
+                if (!shift && has_selection(state)) {
+                    move_cursor(state, selection_start(state), false);   // Collapse to the left edge
+                } else if (state->cursor_index > 0) {
+                    move_cursor(state, state->cursor_index - 1, shift);
+                }
+                break;
+
+            case KBD_SCANCODE_RIGHT:
+                if (!shift && has_selection(state)) {
+                    move_cursor(state, selection_end(state), false);
+                } else if (state->cursor_index < state->text_length) {
+                    move_cursor(state, state->cursor_index + 1, shift);
+                }
+                break;
+
+            case KBD_SCANCODE_UP:
+            case KBD_SCANCODE_DOWN:
+                if (!state->has_preferred_col) {
+                    state->preferred_col = cur_col;
+                    state->has_preferred_col = true;
+                }
+
+                if (key == KBD_SCANCODE_UP) {
+                    if (cur_row == 0) {
+                        move_cursor(state, 0, shift);
+                    } else {
+                        move_cursor(state, layout_index_at(state, max_chars, cur_row - 1, state->preferred_col), shift);
+                    }
+                } else {
+                    move_cursor(state, layout_index_at(state, max_chars, cur_row + 1, state->preferred_col), shift);
+                }
+                break;
+
+            case KBD_SCANCODE_HOME:   // Ctrl+Home = start of the document
+                if (ctrl) move_cursor(state, 0, shift);
+                else      move_cursor(state, layout_index_at(state, max_chars, cur_row, 0), shift);
+                break;
+
+            case KBD_SCANCODE_END:    // Ctrl+End = end of the document
+                if (ctrl) move_cursor(state, state->text_length, shift);
+                else      move_cursor(state, layout_index_at(state, max_chars, cur_row, max_chars), shift);
+                break;
+        }
+
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        return;
+    }
+
+    state->has_preferred_col = false;
+
+    // ---- Delete (character after the caret, or the selection) ----
+    if (key == KBD_SCANCODE_DELETE) {
+        if (!delete_selection(state) && state->cursor_index < state->text_length) {
+            delete_range(state, state->cursor_index, state->cursor_index + 1);
+        }
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        return;
+    }
+
+    // ---- Backspace (character before the caret, or the selection) ----
+    if (ascii_char == KBD_CUSTOM_BACKSPACE) {
+        if (!delete_selection(state) && state->cursor_index > 0) {
+            delete_range(state, state->cursor_index - 1, state->cursor_index);
+        }
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+        return;
+    }
+
+    // Any other special key with no character
+    if (ascii_char == 0) return;
+
+    // ---- Typed character (replaces the selection) ----
+    if (ascii_char == KBD_CUSTOM_ENTER) ascii_char = '\n';
+
+    insert_bytes(state, &ascii_char, 1);
+    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+}
+
+// ==========================================
+// Mouse
+// ==========================================
 
 static void handle_notepad_mouse(WindowHandle handle, struct NotepadWindowState* state, uint32_t wparam, int32_t lparam) {
     uint16_t click_x = (uint16_t)(wparam & 0xFFFF);
     uint16_t click_y = (uint16_t)((wparam >> 16) & 0xFFFF);
-    
-    const char* file_menu_options[] = { "New", "Open", "Save", "Clear", "Exit" };
-    const char* canvas_menu_options[] = { "Cut", "Copy", "Delete", "Paste" };
-    
-    // Right-click context menu
+
+    // Right-click context menu (keeps the current selection for Cut / Copy)
     if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
-        context_directive = 0;
-        dwm_summon_context_menu(handle, click_x, click_y, canvas_menu_options, 4);
+        context_directive = CONTEXT_DIRECTIVE_CANVAS;
+        dwm_summon_context_menu(handle, click_x, click_y, canvas_menu_options, CANVAS_MENU_COUNT);
         return;
     }
-    
-    // Left-click processing
-    if (lparam & DWM_STATE_MOUSE_BTN_LEFT) {
-        
-        uint16_t titlebar_height = dwm_get_titlebar_height(handle);
-        
-        uint16_t btn_x = MENUBAR_TEXT_X;
-        uint16_t btn_y = 0;
-        uint16_t btn_w = MENUBAR_CLICK_WIDTH;
-        uint16_t btn_h = MENUBAR_HEIGHT;
-        
-        // Standard AABB Hit Test
-        if (click_x >= btn_x && click_x < (btn_x + btn_w) &&
-            click_y >= btn_y && click_y < (btn_y + btn_h)) {
-            
-            // Summon menu directly anchored to the bottom-left of the button bounds
-            context_directive = 1;
-            dwm_summon_context_menu(handle, btn_x, btn_y + btn_h, file_menu_options, 5);
-            return;
-        }
-        
-        // Canvas Text Index Selection
-        uint16_t text_top_y = TEXT_PADDING_Y + MENUBAR_HEIGHT;
-        if (click_y >= text_top_y) {
-            uint16_t rel_x = (click_x >= TEXT_PADDING_X) ? (click_x - TEXT_PADDING_X) : 0;
-            uint16_t rel_y = click_y - text_top_y;
-            
-            uint16_t target_row = rel_y / TEXT_FONT_LINE_HEIGHT;
-            uint16_t target_col = rel_x / TEXT_FONT_CHAR_WIDTH;
-            
-            uint16_t window_width = dwm_window_get_width(handle);
-            uint16_t max_chars_per_line = (window_width - (TEXT_PADDING_X * 2)) / TEXT_FONT_CHAR_WIDTH;
-            if (max_chars_per_line == 0) max_chars_per_line = 1;
-            
-            state->cursor_index = get_index_from_layout_pos(state, max_chars_per_line, target_row, target_col);
-            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
-        }
+
+    if (!(lparam & DWM_STATE_MOUSE_BTN_LEFT)) return;
+
+    // Titlebar / border clicks arrive with a negative y (above the surface)
+    if ((int16_t)click_y < 0 || (int16_t)click_x < 0) return;
+
+    // "File" menu button
+    if (click_x >= MENUBAR_TEXT_X && click_x < (MENUBAR_TEXT_X + MENUBAR_CLICK_WIDTH) &&
+        click_y < MENUBAR_HEIGHT) {
+        context_directive = CONTEXT_DIRECTIVE_FILE;
+        dwm_summon_context_menu(handle, MENUBAR_TEXT_X, MENUBAR_HEIGHT, file_menu_options, FILE_MENU_COUNT);
+        return;
+    }
+
+    // Anything else on the menubar row does nothing (and doesn't start a drag)
+    if (click_y < MENUBAR_HEIGHT) return;
+
+    uint32_t index = layout_index_from_point(handle, state, click_x, click_y);
+    state->has_preferred_col = false;
+
+    if (lparam & DWM_STATE_MOUSE_DOUBLE_CLK) {
+        select_word_at(state, index);
+        state->mouse_selecting = false;
+    } else {
+        // Shift+click extends the existing selection
+        move_cursor(state, index, notepad_shift_down());
+        state->mouse_selecting = true;
+    }
+
+    dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+}
+
+static void handle_notepad_mouse_move(WindowHandle handle, struct NotepadWindowState* state, uint32_t wparam, int32_t lparam) {
+    if (!state->mouse_selecting) return;
+    if (!(lparam & DWM_STATE_MOUSE_BTN_LEFT)) {
+        state->mouse_selecting = false;
+        return;
+    }
+
+    // Signed: the pointer may be left of / above the window while dragging
+    int x = (int16_t)(wparam & 0xFFFF);
+    int y = (int16_t)((wparam >> 16) & 0xFFFF);
+
+    uint32_t index = layout_index_from_point(handle, state, x, y);
+    if (index != state->cursor_index) {
+        move_cursor(state, index, true);
+        dwm_window_send_event(handle, DWM_EVENT_REDRAW);
     }
 }
 
+// ==========================================
+// Drawing
+// ==========================================
+
 static void handle_notepad_redraw(WindowHandle handle, struct NotepadWindowState* state) {
+    const struct DWMTheme* t = dwm_get_theme();
+
     uint16_t window_width = dwm_window_get_width(handle);
     uint16_t window_height = dwm_window_get_height(handle);
-    
-    dwm_draw_rect_filled(NOTEPAD_BG_X, NOTEPAD_BG_Y, window_width, window_height, notepad_bg);
-    
-    dwm_draw_rect_filled(0, 0, window_width, MENUBAR_HEIGHT, 0xFF1C1C2A);
-    dwm_draw_line(0, MENUBAR_HEIGHT - 1, window_width, 0, 0xFF444466);
-    dwm_draw_text(MENUBAR_TEXT_X, MENUBAR_TEXT_Y, "File", 0xFFFFFFFF);
-    
-    uint16_t max_chars_per_line = (window_width - (TEXT_PADDING_X * 2)) / TEXT_FONT_CHAR_WIDTH;
-    if (max_chars_per_line == 0) max_chars_per_line = 1;
-    
-    uint16_t current_row = 0;
-    uint16_t current_col = 0;
-    
-    char line_scratchpad[128];
+
+    dwm_draw_rect_filled(NOTEPAD_BG_X, NOTEPAD_BG_Y, window_width, window_height, t->client.background);
+
+    dwm_draw_rect_filled(0, 0, window_width, MENUBAR_HEIGHT, t->button.fill);
+    dwm_draw_line(0, MENUBAR_HEIGHT - 1, window_width, 0, t->button.border);
+    dwm_draw_text(MENUBAR_TEXT_X, MENUBAR_TEXT_Y, "File", t->client.text);
+
+    if (state->text_buffer == NULL) return;
+
+    uint16_t max_chars = notepad_max_chars(handle);
+    int16_t start_y = TEXT_PADDING_Y + MENUBAR_HEIGHT;
+
+    uint32_t sel_start = selection_start(state);
+    uint32_t sel_end   = selection_end(state);
+
+    char line_scratchpad[LINE_SCRATCH_SIZE];
     uint16_t scratch_idx = 0;
-    uint16_t dynamic_start_y = TEXT_PADDING_Y + MENUBAR_HEIGHT;
-    
-    int16_t cursor_render_x = TEXT_PADDING_X;
-    int16_t cursor_render_y = dynamic_start_y;
-    
+
+    uint16_t row = 0;
+    uint16_t col = 0;
+
+    // Pending selection run on the current row (merged into one rect)
+    bool     hl_active = false;
+    uint16_t hl_col = 0;
+    uint16_t hl_len = 0;
+
+    bool     cursor_visible = false;
+    int16_t  cursor_x = 0;
+    int16_t  cursor_y = 0;
+
     for (uint32_t i = 0; i <= state->text_length; i++) {
+        int16_t row_y = start_y + (row * TEXT_FONT_LINE_HEIGHT);
+
+        // Everything from here on is below the window
+        if (row_y > window_height) break;
+
         if (i == state->cursor_index) {
-            cursor_render_x = TEXT_PADDING_X + (current_col * TEXT_FONT_CHAR_WIDTH);
-            cursor_render_y = dynamic_start_y + (current_row * TEXT_FONT_LINE_HEIGHT);
+            cursor_visible = true;
+            cursor_x = TEXT_PADDING_X + (col * TEXT_FONT_CHAR_WIDTH);
+            cursor_y = row_y;
         }
-        
+
         if (i == state->text_length) break;
-        
+
         char target = state->text_buffer[i];
-        bool force_flush = false;
-        
+
+        // Selection: extend the run or start a new one. A selected line break
+        // gets one cell so selected empty lines are still visible.
+        if (i >= sel_start && i < sel_end) {
+            if (!hl_active) {
+                hl_active = true;
+                hl_col = col;
+                hl_len = 0;
+            }
+            hl_len++;
+        }
+
+        bool end_of_row = false;
+
         if (target == '\n') {
-            force_flush = true;
+            end_of_row = true;
         } else {
-            // Binary safety: Safe visualization of unprintable or null bytes
             if (target == '\0') {
-                line_scratchpad[scratch_idx++] = ' '; // Render null as space or '.'
+                line_scratchpad[scratch_idx++] = ' ';
             } else if (target < 32 || target > 126) {
-                line_scratchpad[scratch_idx++] = '.'; // Safe substitution for control characters
+                line_scratchpad[scratch_idx++] = '.';   // Control / non-ASCII byte
             } else {
                 line_scratchpad[scratch_idx++] = target;
             }
-            current_col++;
-            
-            if (current_col >= max_chars_per_line || scratch_idx >= (sizeof(line_scratchpad) - 1)) {
-                force_flush = true;
-            }
+            col++;
+            if (col >= max_chars) end_of_row = true;
         }
-        
-        if (force_flush || i == (state->text_length - 1)) {
+
+        bool selection_ends = hl_active && (i + 1 >= sel_end);
+
+        // Highlight goes down before the row's text so the glyphs land on top
+        if (hl_active && (end_of_row || selection_ends)) {
+            dwm_draw_rect_filled(TEXT_PADDING_X + (hl_col * TEXT_FONT_CHAR_WIDTH), row_y - 2,
+                                 hl_len * TEXT_FONT_CHAR_WIDTH, TEXT_FONT_LINE_HEIGHT, SELECTION_COLOR);
+            hl_active = false;
+        }
+
+        if (end_of_row || i == state->text_length - 1) {
             if (scratch_idx > 0) {
                 line_scratchpad[scratch_idx] = '\0';
-                int16_t render_x = TEXT_PADDING_X;
-                int16_t render_y = dynamic_start_y + (current_row * TEXT_FONT_LINE_HEIGHT);
-                dwm_draw_text(render_x, render_y, line_scratchpad, notepad_text_color);
+                dwm_draw_text(TEXT_PADDING_X, row_y, line_scratchpad, t->client.text_soft);
             }
-            
             scratch_idx = 0;
-            if (target == '\n' || force_flush) {
-                current_col = 0;
-                current_row++;
+
+            if (end_of_row) {
+                row++;
+                col = 0;
             }
         }
     }
-    
-    dwm_draw_line(cursor_render_x, cursor_render_y, 0, TEXT_FONT_LINE_HEIGHT, 0xFF3FFF3F);
+
+    if (cursor_visible) {
+        dwm_draw_line(cursor_x, cursor_y - 1, 0, TEXT_FONT_LINE_HEIGHT - 2, CARET_COLOR);
+    }
+}
+
+// ==========================================
+// File
+// ==========================================
+
+static void notepad_save(struct NotepadWindowState* state) {
+    uint8_t permissions = 0;
+    vfs_get_permissions(state->file_path, &permissions);
+
+    if (!(permissions & VFS_PERMISSION_WRITE)) {
+        dwm_summon_message_error("Write error", "Access denied", "", "image_error");
+        return;
+    }
+
+    // Size the file to exactly the buffer first: writes don't reliably extend
+    // a file, and without this a shorter document left stale bytes behind
+    if (!vfs_truncate(state->file_path, state->text_length)) {
+        dwm_summon_message_box("File Menu", "Unable to save file");
+        return;
+    }
+
+    if (state->text_length == 0) return;
+
+    File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
+    if (file == VFS_INVALID_FILE) {
+        dwm_summon_message_box("File Menu", "Unable to save file");
+        return;
+    }
+
+    vfs_seek(file, 0);
+    int32_t written = vfs_write(file, state->text_buffer, state->text_length);
+    vfs_close(file);
+
+    if (written != (int32_t)state->text_length) {
+        dwm_summon_message_box("File Menu", "Unable to save file");
+    }
 }
 
 void dialog_callback(const char* path, bool cancelled) {
-    
+
 }
 
+// ==========================================
+// Window procedure
+// ==========================================
 
 void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam) {
     struct NotepadWindowState* state = get_notepad_window_state(handle);
     if (!state) return;
-    
+
+    // Every edit path assumes a buffer exists (the load path can leave it NULL)
+    if (state->text_buffer == NULL && event != DWM_EVENT_DESTROY) {
+        state->text_capacity = 0;
+        state->text_length = 0;
+        if (!ensure_capacity(state, 1)) return;
+    }
+
     switch (event) {
     case DWM_EVENT_MOUSE:
         handle_notepad_mouse(handle, state, wparam, lparam);
         break;
-        
+
+    case DWM_EVENT_MOUSE_MOVE:
+        handle_notepad_mouse_move(handle, state, wparam, lparam);
+        break;
+
+    case DWM_EVENT_MOUSE_UP:
+        state->mouse_selecting = false;
+        break;
+
     case DWM_EVENT_KEYBOARD:
         handle_notepad_keypress(handle, state, wparam);
         break;
-        
+
+    // Drop any drag-select in progress when focus changes
+    case DWM_EVENT_FOCUS_GAINED:
+    case DWM_EVENT_FOCUS_LOST:
+        state->mouse_selecting = false;
+        break;
+
     case DWM_EVENT_RESIZE:
         handle_notepad_resize(state, wparam);
         break;
-        
+
     case DWM_EVENT_REDRAW:
         handle_notepad_redraw(handle, state);
         break;
-        
+
     case DWM_EVENT_DESTROY:
         free_notepad_window_state(handle);
         dwm_window_send_event(handle, DWM_EVENT_CLOSE);
         return;
-        
+
     case DWM_EVENT_CONTEXT_MENU:
-        
+
         if (context_directive == CONTEXT_DIRECTIVE_FILE) {
             switch (wparam) {
-                
+
             case 0: // New
                 dwm_summon_message_box("File Menu", "Creating a new file...");
                 break;
-                
+
             case 1: // Open
                 dwm_summon_message_box("File Menu", "Opening file dialog...");
                 break;
-                
-            case 2: {// Save
-                
-                uint8_t permissions=0;
-                vfs_get_permissions(state->file_path, &permissions);
-                
-                if (!(permissions & VFS_PERMISSION_WRITE)) {
-                    
-                    dwm_summon_message_error("Write error", "Access denied", "", "image_error");
-                    
-                } else {
-                    
-                    File file = vfs_open(state->file_path, VFS_OPEN_WRITE);
-                    if (file != VFS_INVALID_FILE) {
-                        uint32_t size = vfs_get_size(file);
-                        
-                        // Check file resize
-                        if (state->text_length > size) {
-                            size = state->text_length;
-                            
-                            // Resize file
-                            if (!vfs_truncate(state->file_path, state->text_length)) {
-                                
-                                dwm_summon_message_box("File Menu", "Unable to save file");
-                            }
-                        }
-                        
-                        vfs_write(file, state->text_buffer, size);
-                        vfs_close(file);
-                        
-                        //WindowHandle dialog_window = dwm_summon_file_dialog("Save file", state->file_path, DIALOG_FILE_MODE_SAVE, dialog_callback);
-                        
-                    } else {
-                        
-                        // File not valid, prompt to save file
-                        
-                    }
-                }
+
+            case 2: // Save
+                notepad_save(state);
                 break;
-            }
+
             case 3: // Clear
                 state->text_length = 0;
-                state->cursor_index = 0;
-                state->text_buffer[0] = '\0';
+                move_cursor(state, 0, false);
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
-                
+
             case 4: // Exit
                 dwm_window_send_event(handle, DWM_EVENT_DESTROY);
                 break;
-            
             }
         } else if (context_directive == CONTEXT_DIRECTIVE_CANVAS) {
             switch (wparam) {
-                
+
             case 0: // Cut
-                dwm_summon_message_box("Canvas", "Cut");
+                notepad_cut(state);
                 break;
-                
+
             case 1: // Copy
-                dwm_summon_message_box("Canvas", "Copy");
+                notepad_copy(state);
                 break;
-                
-            case 2: // Delete
-                dwm_summon_message_box("Canvas", "Delete");
+
+            case 2: // Paste
+                notepad_paste(state);
                 break;
-                
-            case 3: // Paste
-                dwm_summon_message_box("Canvas", "Paste");
+
+            case 3: // Delete
+                delete_selection(state);
                 break;
-                
+
+            case 4: // Select all
+                notepad_select_all(state);
+                break;
             }
-            
+
+            state->has_preferred_col = false;
+            dwm_window_send_event(handle, DWM_EVENT_REDRAW);
         }
         return;
     }
 }
+

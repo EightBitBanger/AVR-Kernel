@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -23,8 +24,15 @@ static void finalize_rename(WindowHandle handle, struct ExplorerWindowState* sta
     
     struct Item* target_item = &state->items[state->context_item_index];
     
-    if (strlen(new_name) > 0 && strcmp(target_item->name, new_name) != 0) {
-        vfs_rename(target_item->path, new_name);
+    // target_item->name was cleared when the rename started, so compare
+    // against the last path segment instead
+    const char* old_name = strrchr(target_item->path, '/');
+    old_name = (old_name != NULL) ? old_name + 1 : target_item->path;
+    
+    if (strlen(new_name) > 0 && strcmp(old_name, new_name) != 0) {
+        if (!vfs_rename(target_item->path, new_name)) {
+            dwm_summon_message_box("Rename", "Name is invalid, too long or taken");
+        }
     }
     
     populate_state_from_vfs(state, state->full_path);
@@ -166,8 +174,8 @@ static void handle_explorer_mouse(WindowHandle handle, struct ExplorerWindowStat
             if (lparam & DWM_STATE_MOUSE_BTN_RIGHT) {
                 state->context_item_index = (int32_t)i;
                 
-                const char* item_menu_options[] = { "Open", "Copy", "Rename", "Delete", "Properties" };
-                dwm_summon_context_menu(handle, click_x, click_y, item_menu_options, 5);
+                const char* item_menu_options[] = { "Open", "Cut", "Copy", "Rename", "Delete", "Properties" };
+                dwm_summon_context_menu(handle, click_x, click_y, item_menu_options, 6);
                 state->context_directive = 1;
                 return;
             }
@@ -201,34 +209,36 @@ static void handle_explorer_resize(struct ExplorerWindowState* state, uint32_t w
 }
 
 static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowState* state) {
+    const struct DWMTheme* t = dwm_get_theme();
+    
     uint16_t window_width = dwm_window_get_width(handle);
     uint16_t window_height = dwm_window_get_height(handle);
     
-    dwm_draw_rect_filled(EXPLORER_BG_X, EXPLORER_BG_Y, window_width, window_height, background);
+    dwm_draw_rect_filled(EXPLORER_BG_X, EXPLORER_BG_Y, window_width, window_height, t->client.background);
     
     if (ui_button_back != NULL) {
-        dwm_draw_rect_filled(BACK_BTN_CONTAINER_X, BACK_BTN_CONTAINER_Y, BACK_BTN_CONTAINER_W, BACK_BTN_CONTAINER_H, path_bg);
-        dwm_draw_rect(BACK_BTN_BORDER_X, BACK_BTN_BORDER_Y, BACK_BTN_BORDER_W, BACK_BTN_BORDER_H, path_border);
+        dwm_draw_rect_filled(BACK_BTN_CONTAINER_X, BACK_BTN_CONTAINER_Y, BACK_BTN_CONTAINER_W, BACK_BTN_CONTAINER_H, t->edit.background);
+        dwm_draw_rect(BACK_BTN_BORDER_X, BACK_BTN_BORDER_Y, BACK_BTN_BORDER_W, BACK_BTN_BORDER_H, t->edit.border);
         dwm_draw_sprite(BACK_BTN_SPRITE_X, BACK_BTN_SPRITE_Y, ui_button_back);
     }
     
     uint16_t path_field_width = window_width - PATH_FIELD_BG_X - 10;
-    dwm_draw_rect_filled(PATH_FIELD_BG_X, PATH_FIELD_BG_Y, path_field_width, PATH_FIELD_BG_H, path_bg);
-    dwm_draw_rect(PATH_FIELD_BORDER_X, PATH_FIELD_BORDER_Y, path_field_width + 2, PATH_FIELD_BORDER_H, path_border);
+    dwm_draw_rect_filled(PATH_FIELD_BG_X, PATH_FIELD_BG_Y, path_field_width, PATH_FIELD_BG_H, t->edit.background);
+    dwm_draw_rect(PATH_FIELD_BORDER_X, PATH_FIELD_BORDER_Y, path_field_width + 2, PATH_FIELD_BORDER_H, t->edit.border);
     
     if (state->fs_current == 0 || state->knode_path_len >= strlen(state->path)) {
-        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, state->path, text_knode);
+        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, state->path, t->edit.text);
     } else {
         char base_buffer[MAX_PATH_LEN];
         memset(base_buffer, 0, MAX_PATH_LEN);
         strncpy(base_buffer, state->path, state->knode_path_len);
         
-        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, base_buffer, text_knode);
+        dwm_draw_text(PATH_TEXT_X, PATH_TEXT_Y, base_buffer, t->edit.text);
         int16_t mount_offset_x = PATH_TEXT_X + (state->knode_path_len * PATH_FONT_CHAR_WIDTH);
-        dwm_draw_text(mount_offset_x, PATH_TEXT_Y, state->path + state->knode_path_len, text_mount);
+        dwm_draw_text(mount_offset_x, PATH_TEXT_Y, state->path + state->knode_path_len, t->client.text_mount);
     }
     
-    dwm_draw_line(NAV_DIVIDER_X, NAV_DIVIDER_Y, window_width, NAV_DIVIDER_H, navbar_div);
+    dwm_draw_line(NAV_DIVIDER_X, NAV_DIVIDER_Y, window_width, NAV_DIVIDER_H, t->client.divider_soft);
     
     uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
     if (max_cols == 0) max_cols = 1;
@@ -258,7 +268,7 @@ static void handle_explorer_redraw(WindowHandle handle, struct ExplorerWindowSta
         size_t length = strlen(state->items[i].name);
         uint16_t string_width = length * ITEM_FONT_CHAR_WIDTH;
         int16_t text_start_x = sp_x + ((ITEM_WIDTH - string_width) / 2);
-        dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_HEIGHT_OFF, state->items[i].name, item_text);
+        dwm_draw_text(text_start_x, sp_y + ITEM_TEXT_HEIGHT_OFF, state->items[i].name, t->client.text_soft);
     }
 }
 
@@ -312,6 +322,12 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                 dwm_window_edit_set_pos(handle, state->edit_handle, edit_x, item_y + ITEM_TEXT_HEIGHT_OFF);
                 
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
+                break;
+            }
+            
+            // Stop accepting characters once the name is at the limit the
+            // file system can store
+            if (dwm_window_edit_get_len(handle, state->edit_handle) >= VFS_NAME_MAX) {
                 break;
             }
             
@@ -383,8 +399,10 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                 dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 break;
             }
-            case 3:
-                dwm_summon_message_box("menu click", "paste");
+            case 3: // Paste
+                dwm_clipboard_paste_into(state->full_path, -1, -1);
+                populate_state_from_vfs(state, state->full_path);
+                dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 state->context_item_index = -1;
                 break;
             case 4:
@@ -407,11 +425,15 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                 state->context_item_index = -1;
                 break;
             }
-            case 1:
-                dwm_summon_message_box("menu click", "copy");
+            case 1:   // Cut
+            case 2: { // Copy
+                struct Item* clicked_item = &state->items[state->context_item_index];
+                dwm_clipboard_put_file(clicked_item->path,
+                                       (wparam == 1) ? DWM_CLIPBOARD_OP_CUT : DWM_CLIPBOARD_OP_COPY);
                 state->context_item_index = -1;
                 break;
-            case 2: // Rename
+            }
+            case 3: // Rename
                 if (state->edit_handle != 0 && state->context_item_index != -1) {
                     uint16_t max_cols = (state->win_width - NAV_X) / ITEM_WIDTH;
                     if (max_cols == 0) max_cols = 1;
@@ -442,13 +464,13 @@ void callback_handler_explorer(WindowHandle handle, wEvent event, uint32_t wpara
                     dwm_window_send_event(handle, DWM_EVENT_REDRAW);
                 }
                 break;
-            case 3: { // Delete
+            case 4: { // Delete
                 struct Item* clicked_item = &state->items[state->context_item_index];
                 dwm_summon_dialog_delete("Deletion request", clicked_item->path, handle, 1);
                 state->context_item_index = -1;
                 break;
             }
-            case 4: { // Properties
+            case 5: { // Properties
                 struct Item* clicked_item = &state->items[state->context_item_index];
                 dwm_summon_properties("Properties", clicked_item->name, clicked_item->path, clicked_item->icon_index);
                 state->context_item_index = -1;

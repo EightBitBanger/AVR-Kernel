@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -21,14 +22,6 @@ struct Image* icon_storage = NULL;
 
 struct Image* ui_button_back;
 struct Image* ui_button_new;
-
-uint32_t background  = 0xFF08080F;
-uint32_t path_bg     = 0xFF202020;
-uint32_t path_border = 0xFF404040;
-uint32_t text_knode  = 0xFF08F008;
-uint32_t text_mount  = 0xFFFDA008;
-uint32_t navbar_div  = 0xFF086008;
-uint32_t item_text   = 0xFFD0D0DF;
 
 struct ExplorerWindowState* window_list_head = NULL;
 
@@ -255,3 +248,4 @@ void populate_state_from_vfs(struct ExplorerWindowState* state, const char* targ
 
     state->total_items = collected;
 }
+

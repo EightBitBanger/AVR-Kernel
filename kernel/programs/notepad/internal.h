@@ -1,3 +1,4 @@
+
 #ifndef PROGRAM_NOTEPAD_INTERNAL_H
 #define PROGRAM_NOTEPAD_INTERNAL_H
 
@@ -8,8 +9,6 @@
 #define CONTEXT_DIRECTIVE_CANVAS        0
 #define CONTEXT_DIRECTIVE_FILE          1
 
-extern uint32_t notepad_bg;
-extern uint32_t notepad_text_color;
 extern uint8_t context_directive;
 
 struct NotepadWindowState {
@@ -26,6 +25,17 @@ struct NotepadWindowState {
     
     uint32_t cursor_index;
     
+    // Selection is [min(sel_anchor, cursor_index), max(...)). When the two are
+    // equal nothing is selected. Every cursor move either drags the anchor
+    // along (plain move) or leaves it in place (shift / mouse drag).
+    uint32_t sel_anchor;
+    bool     mouse_selecting;     // Left button held after clicking the text
+    
+    // Column remembered across Up/Down so the caret doesn't drift left
+    // when it passes through short lines
+    bool     has_preferred_col;
+    uint16_t preferred_col;
+    
     struct NotepadWindowState* next;
 };
 
@@ -38,3 +48,5 @@ void free_notepad_window_state(WindowHandle handle);
 void callback_handler_notepad(WindowHandle handle, wEvent event, uint32_t wparam, int32_t lparam);
 
 #endif
+
+

@@ -8,8 +8,30 @@
 struct RegistryHive hkey_root = { NULL };
 struct RegistryHive hkey_user = { NULL };
 
+// Backing files for the hives, remembered by registry_hive_initiate() so the
+// hives can be written back at shutdown. Empty until the registry is loaded.
+static char hkr_hive_path[REGISTRY_MAX_PATH_LEN] = { 0 };
+static char hku_hive_path[REGISTRY_MAX_PATH_LEN] = { 0 };
+
 static size_t registry_calculate_total_export_size(struct RegistryHive* hive);
 static size_t registry_calculate_key_size_recursive(struct RegistryKey* key);
+
+// vfs_read/vfs_write return the byte count on success and -1 on error.
+// The old code tested `!vfs_read(...)`, which treated -1 (and short reads) as success.
+static bool reg_read_exact(File file, void* buffer, uint32_t size) {
+    if (size == 0) return true;
+    return vfs_read(file, buffer, size) == (int32_t)size;
+}
+
+static bool reg_write_exact(File file, const void* buffer, uint32_t size) {
+    if (size == 0) return true;
+    return vfs_write(file, buffer, size) == (int32_t)size;
+}
+
+static void registry_copy_name(char* dest, const char* src) {
+    strncpy(dest, src, REGISTRY_MAX_NAME_LEN);
+    dest[REGISTRY_MAX_NAME_LEN - 1] = '\0';   // strncpy does not terminate a 16-char name
+}
 
 static void registry_free_value(struct RegistryValue* val) {
     if (!val) return;
@@ -25,7 +47,7 @@ struct RegistryKey* registry_create_key(struct RegistryKey* parent, const char* 
     struct RegistryKey* new_key = (struct RegistryKey*)malloc(sizeof(struct RegistryKey));
     if (!new_key) return NULL;
     
-    strncpy(new_key->name, name, REGISTRY_MAX_NAME_LEN);
+    registry_copy_name(new_key->name, name);
     new_key->permissions = permissions;
     new_key->next = NULL;
     new_key->child_keys = NULL;
@@ -46,7 +68,7 @@ struct RegistryValue* registry_create_value(struct RegistryKey* parent, const ch
     struct RegistryValue* new_val = (struct RegistryValue*)malloc(sizeof(struct RegistryValue));
     if (!new_val) return NULL;
     
-    strncpy(new_val->name, name, REGISTRY_MAX_NAME_LEN);
+    registry_copy_name(new_val->name, name);
     new_val->permissions = permissions;
     new_val->data_len = size;
     new_val->next = NULL;
@@ -132,8 +154,8 @@ static bool registry_export_key_recursive(struct RegistryKey* key, File file_han
     if (!key) return true;
     
     // Write the key metadata out to disk
-    if (!vfs_write(file_handle, key->name, REGISTRY_MAX_NAME_LEN)) return false;
-    if (!vfs_write(file_handle, &key->permissions, sizeof(key->permissions))) return false;
+    if (!reg_write_exact(file_handle, key->name, REGISTRY_MAX_NAME_LEN)) return false;
+    if (!reg_write_exact(file_handle, &key->permissions, sizeof(key->permissions))) return false;
     
     // Count and write the number of values directly under this key
     uint32_t val_count = 0;
@@ -142,19 +164,19 @@ static bool registry_export_key_recursive(struct RegistryKey* key, File file_han
         val_count++;
         v = v->next;
     }
-    if (!vfs_write(file_handle, &val_count, sizeof(val_count))) return false;
+    if (!reg_write_exact(file_handle, &val_count, sizeof(val_count))) return false;
     
     // Serialize each value associated with this key
     v = key->values;
     while (v) {
-        if (!vfs_write(file_handle, v->name, REGISTRY_MAX_NAME_LEN)) return false;
-        if (!vfs_write(file_handle, &v->permissions, sizeof(v->permissions))) return false;
+        if (!reg_write_exact(file_handle, v->name, REGISTRY_MAX_NAME_LEN)) return false;
+        if (!reg_write_exact(file_handle, &v->permissions, sizeof(v->permissions))) return false;
         
         uint32_t val_size = (uint32_t)v->data_len;
-        if (!vfs_write(file_handle, &val_size, sizeof(val_size))) return false;
+        if (!reg_write_exact(file_handle, &val_size, sizeof(val_size))) return false;
         
         if (val_size > 0 && v->data) {
-            if (!vfs_write(file_handle, v->data, val_size)) return false;
+            if (!reg_write_exact(file_handle, v->data, val_size)) return false;
         }
         v = v->next;
     }
@@ -166,7 +188,7 @@ static bool registry_export_key_recursive(struct RegistryKey* key, File file_han
         key_count++;
         child = child->next;
     }
-    if (!vfs_write(file_handle, &key_count, sizeof(key_count))) return false;
+    if (!reg_write_exact(file_handle, &key_count, sizeof(key_count))) return false;
     
     // Recursively export all child branches deeper in the tree
     child = key->child_keys;
@@ -178,52 +200,73 @@ static bool registry_export_key_recursive(struct RegistryKey* key, File file_han
     return true;
 }
 
-static struct RegistryKey* registry_import_key_recursive(struct RegistryKey* parent, File file_handle) {
+// Returns the new key, or NULL on any error. On error the partially built
+// subtree is either already linked under `parent` (and will be released when
+// the caller frees the hive root) or, for the root itself, freed here.
+static struct RegistryKey* registry_import_key_recursive(struct RegistryKey* parent, File file_handle, uint32_t depth) {
     char key_name[REGISTRY_MAX_NAME_LEN];
     uint16_t key_permissions;
     uint32_t val_count = 0;
     uint32_t key_count = 0;
     
+    if (depth > REGISTRY_MAX_DEPTH) return NULL;
+    
     // Read key metadata
-    if (!vfs_read(file_handle, key_name, REGISTRY_MAX_NAME_LEN)) return NULL;
-    if (!vfs_read(file_handle, &key_permissions, sizeof(key_permissions))) return NULL;
+    if (!reg_read_exact(file_handle, key_name, REGISTRY_MAX_NAME_LEN)) return NULL;
+    if (!reg_read_exact(file_handle, &key_permissions, sizeof(key_permissions))) return NULL;
+    key_name[REGISTRY_MAX_NAME_LEN - 1] = '\0';
     
     // Allocate current node and establish parent linkage automatically 
     struct RegistryKey* current_key = registry_create_key(parent, key_name, key_permissions);
     if (!current_key) return NULL;
     
     // Read values attached to this node
-    if (!vfs_read(file_handle, &val_count, sizeof(val_count))) return current_key;
+    if (!reg_read_exact(file_handle, &val_count, sizeof(val_count))) goto fail;
     for (uint32_t i = 0; i < val_count; i++) {
         char val_name[REGISTRY_MAX_NAME_LEN];
         uint16_t val_permissions;
         uint32_t val_size;
         void* val_data = NULL;
         
-        vfs_read(file_handle, val_name, REGISTRY_MAX_NAME_LEN);
-        vfs_read(file_handle, &val_permissions, sizeof(val_permissions));
-        vfs_read(file_handle, &val_size, sizeof(val_size));
+        if (!reg_read_exact(file_handle, val_name, REGISTRY_MAX_NAME_LEN)) goto fail;
+        if (!reg_read_exact(file_handle, &val_permissions, sizeof(val_permissions))) goto fail;
+        if (!reg_read_exact(file_handle, &val_size, sizeof(val_size))) goto fail;
+        val_name[REGISTRY_MAX_NAME_LEN - 1] = '\0';
+        
+        if (val_size > REGISTRY_MAX_VALUE_SIZE) goto fail;
         
         if (val_size > 0) {
             val_data = malloc(val_size);
-            if (val_data) {
-                vfs_read(file_handle, val_data, val_size);
+            if (!val_data) goto fail;
+            if (!reg_read_exact(file_handle, val_data, val_size)) {
+                free(val_data);
+                goto fail;
             }
         }
         
-        registry_create_value(current_key, val_name, val_permissions, val_data, val_size);
+        struct RegistryValue* created = registry_create_value(current_key, val_name, val_permissions, val_data, val_size);
         if (val_data) {
             free(val_data);
         }
+        if (!created) goto fail;
     }
     
     // Process nested child blocks matching the exported topology structure
-    if (!vfs_read(file_handle, &key_count, sizeof(key_count))) return current_key;
+    if (!reg_read_exact(file_handle, &key_count, sizeof(key_count))) goto fail;
     for (uint32_t i = 0; i < key_count; i++) {
-        registry_import_key_recursive(current_key, file_handle);
+        if (!registry_import_key_recursive(current_key, file_handle, depth + 1)) goto fail;
     }
     
     return current_key;
+    
+fail:
+    // Children are linked into current_key, so freeing the root of the
+    // failed import releases everything. Non-root keys stay linked under
+    // their parent and are released by the caller.
+    if (parent == NULL) {
+        registry_free_key(current_key);
+    }
+    return NULL;
 }
 
 bool registry_hive_import(struct RegistryHive* hive, const char* path) {
@@ -234,7 +277,7 @@ bool registry_hive_import(struct RegistryHive* hive, const char* path) {
     
     // Verify the 4-byte magic header
     char magic[4];
-    if (!vfs_read(file, magic, 4) || memcmp(magic, _REGISTRY_MAGIC_, 4) != 0) {
+    if (!reg_read_exact(file, magic, 4) || memcmp(magic, _REGISTRY_MAGIC_, 4) != 0) {
         vfs_close(file);
         return false; // Invalid or missing header
     }
@@ -247,8 +290,12 @@ bool registry_hive_import(struct RegistryHive* hive, const char* path) {
     
     uint8_t has_root = 0;
     // Read the presence indicator for this specific hive
-    if (vfs_read(file, &has_root, sizeof(has_root)) && has_root) {
-        hive->root = registry_import_key_recursive(NULL, file);
+    if (!reg_read_exact(file, &has_root, sizeof(has_root))) {
+        vfs_close(file);
+        return false;
+    }
+    if (has_root) {
+        hive->root = registry_import_key_recursive(NULL, file, 0);
         if (!hive->root) { // The hive import failed
             vfs_close(file);
             return false;
@@ -279,14 +326,14 @@ bool registry_hive_export(struct RegistryHive* hive, const char* path) {
     if (file == VFS_INVALID_FILE) return false;
     
     // Write the 4-byte magic header string
-    if (!vfs_write(file, _REGISTRY_MAGIC_, 4)) {
+    if (!reg_write_exact(file, _REGISTRY_MAGIC_, 4)) {
         vfs_close(file);
         return false;
     }
     
     uint8_t has_root = (hive->root != NULL) ? 1 : 0;
     
-    if (!vfs_write(file, &has_root, sizeof(has_root))) {
+    if (!reg_write_exact(file, &has_root, sizeof(has_root))) {
         vfs_close(file);
         return false;
     }
@@ -353,29 +400,46 @@ static size_t registry_calculate_total_export_size(struct RegistryHive* hive) {
 }
 
 bool registry_hive_initiate(const char* path) {
+    if (!path) return false;
+    
     char hkr_fpath[REGISTRY_MAX_PATH_LEN];
     char hku_fpath[REGISTRY_MAX_PATH_LEN];
     
     strncpy(hkr_fpath, path, REGISTRY_MAX_PATH_LEN);
     strncpy(hku_fpath, path, REGISTRY_MAX_PATH_LEN);
+    hkr_fpath[REGISTRY_MAX_PATH_LEN - 1] = '\0';
+    hku_fpath[REGISTRY_MAX_PATH_LEN - 1] = '\0';
     
+    // Note: kernel strncat takes the TOTAL buffer size (strlcat semantics)
     strncat(hkr_fpath, "/hkr", REGISTRY_MAX_PATH_LEN);
     strncat(hku_fpath, "/hku", REGISTRY_MAX_PATH_LEN);
     
+    // Remember where each hive lives so registry_hive_save_all() can write it back
+    strncpy(hkr_hive_path, hkr_fpath, REGISTRY_MAX_PATH_LEN);
+    strncpy(hku_hive_path, hku_fpath, REGISTRY_MAX_PATH_LEN);
+    hkr_hive_path[REGISTRY_MAX_PATH_LEN - 1] = '\0';
+    hku_hive_path[REGISTRY_MAX_PATH_LEN - 1] = '\0';
+    
     uint16_t perms = (REGISTRY_PERMISSION_READ | REGISTRY_PERMISSION_WRITE);
+    bool ok = true;
     
     if (!registry_hive_import(&hkey_root, hkr_fpath)) {
         if (vfs_exists(hkr_fpath)) 
             vfs_remove(hkr_fpath);
         
         File file = vfs_open(hkr_fpath, VFS_OPEN_READ | VFS_OPEN_WRITE | VFS_OPEN_CREATE);
-        vfs_close(file);
+        if (file != VFS_INVALID_FILE) vfs_close(file);
         
         // Initiate root registry
         if (!hkey_root.root)  hkey_root.root  = registry_create_key(NULL, "hkey_root",  perms);
         
-        struct RegistryKey* softwareKey = registry_create_key(hkey_root.root, "software", perms);
-        registry_hive_export(&hkey_root, hkr_fpath);
+        if (hkey_root.root) {
+            if (!registry_get_key(hkey_root.root, "software"))
+                registry_create_key(hkey_root.root, "software", perms);
+            if (!registry_hive_export(&hkey_root, hkr_fpath)) ok = false;
+        } else {
+            ok = false;
+        }
     }
     
     if (!registry_hive_import(&hkey_user, hku_fpath)) {
@@ -383,10 +447,30 @@ bool registry_hive_initiate(const char* path) {
             vfs_remove(hku_fpath);
         
         File file = vfs_open(hku_fpath, VFS_OPEN_READ | VFS_OPEN_WRITE | VFS_OPEN_CREATE);
-        vfs_close(file);
+        if (file != VFS_INVALID_FILE) vfs_close(file);
         
         if (!hkey_user.root)  hkey_user.root  = registry_create_key(NULL, "hkey_user", perms);
         
-        registry_hive_export(&hkey_user, hku_fpath);
+        if (hkey_user.root) {
+            if (!registry_hive_export(&hkey_user, hku_fpath)) ok = false;
+        } else {
+            ok = false;
+        }
     }
+    
+    return ok;
+}
+
+bool registry_hive_save_all(void) {
+    // Never initiated: there is nothing loaded and no known file to write to
+    if (hkr_hive_path[0] == '\0' || hku_hive_path[0] == '\0')
+        return false;
+    
+    bool ok = true;
+    
+    // Save both even if the first fails, so one bad hive doesn't cost the other
+    if (!registry_hive_export(&hkey_root, hkr_hive_path)) ok = false;
+    if (!registry_hive_export(&hkey_user, hku_hive_path)) ok = false;
+    
+    return ok;
 }

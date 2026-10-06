@@ -39,21 +39,20 @@ int call_routine_format(int arg_count, char** args) {
     }
     
     // Retrieve active mount context pointer to detect device type (AHCI vs ATA)
+    //
+    // Every context on a device shares its sector buffer (device_address), so
+    // all reads and writes go through the mount's cached context. A temporary
+    // context would leave the cached one with a stale sector_frame.
     struct FSDeviceContext* active_ctx = (struct FSDeviceContext*)knode_get_reference(fs_current.current_directory, 1);
-    if (active_ctx != NULL && active_ctx->device_type != 0) {
-        device_type = active_ctx->device_type;
+    if (active_ctx == NULL || (uint32_t)active_ctx == KMALLOC_NULL) {
+        print(msg_unmounted);
+        return 1;
     }
+    device_type = active_ctx->device_type;
     
-    // Probe existing device partition block using the detected device context type
+    // Probe existing device partition block
     struct FSPartitionBlock existing_part;
-    struct FSDeviceContext temp_ctx;
-    memset(&temp_ctx, 0, sizeof(struct FSDeviceContext));
-    temp_ctx.device_address = device_address;
-    temp_ctx.device_type    = device_type;
-    temp_ctx.sector_frame   = FS_INVALID_FRAME;
-    temp_ctx.frame_offset   = FS_INVALID_FRAME;
-    
-    if (fs_device_get_partition(&temp_ctx, &existing_part) == 0) {
+    if (fs_device_get_partition(active_ctx, &existing_part) == 0) {
         if (existing_part.total_size > 0) {
             total_capacity = existing_part.total_size;
         }
@@ -148,13 +147,11 @@ int call_routine_format(int arg_count, char** args) {
     print_int(sector_size);
     print(msg_sector_size);
     
-    // Create base context required for raw sector reads/writes
-    struct FSDeviceContext ctx;
-    memset(&ctx, 0, sizeof(struct FSDeviceContext));
-    ctx.device_address = device_address;
-    ctx.device_type    = device_type;
-    ctx.sector_frame   = FS_INVALID_FRAME;
-    ctx.frame_offset   = FS_INVALID_FRAME;
+    // Commit anything pending on the old filesystem before overwriting it
+    fs_cache_sync(active_ctx);
+    fs_bitmap_flush(active_ctx);
+    active_ctx->frame_offset = FS_INVALID_FRAME;
+    active_ctx->frame_dirty  = false;
     
     if (!quick_format) {
         print(msg_init_progress);
@@ -174,34 +171,40 @@ int call_routine_format(int arg_count, char** args) {
                     print(msg_percent);
                 }
             }
-            fs_writeb(&ctx, address_range, 0x00);
+            fs_writeb(active_ctx, address_range, 0x00);
         }
-        fs_cache_sync(&ctx);
+        fs_cache_sync(active_ctx);
     } else {
         print(msg_quick_progress);
     }
     
-    // Format device low-level headers & bitmap structures using the active controller type
+    // Format device low-level headers & bitmap structures using the active controller type.
+    // fs_device_format() opens its own contexts on the shared buffer, so the
+    // cached context is refreshed in place afterwards.
     fs_device_format(device_address, total_capacity, sector_size, device_type);
     
-    // Open formatted filesystem context
     struct FSPartitionBlock partition;
-    ctx = fs_device_open(device_address, &partition, device_type);
+    *active_ctx = fs_device_open(device_address, &partition, device_type);
+    if (!active_ctx->is_open) {
+        print("Format failed\n");
+        return 4;
+    }
     
     // Create root directory with context reference
-    uint32_t root_directory = fs_directory_create(&ctx, "root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
+    uint32_t root_directory = fs_directory_create(active_ctx, "root", FS_PERMISSION_READ | FS_PERMISSION_WRITE, FS_NULL);
     
     partition.root_directory = root_directory;
     
     // Commit updated partition header to storage
-    fs_mem_write(&ctx, sizeof(struct FSDeviceHeader), &partition, sizeof(struct FSPartitionBlock));
+    fs_mem_write(active_ctx, sizeof(struct FSDeviceHeader), &partition, sizeof(struct FSPartitionBlock));
     
     // Synchronize filesystem cache and bitmap
-    fs_cache_sync(&ctx);
-    fs_bitmap_flush(&ctx);
+    fs_bitmap_flush(active_ctx);
+    fs_cache_sync(active_ctx);
     
-    // Update active working directory
-    fs_current.mount_root = root_directory;
+    // Update active working directory (the old directory addresses are gone)
+    fs_current.mount_root      = root_directory;
+    fs_current.mount_directory = root_directory;
     kernel_set_working_directory(&fs_current);
     
     display_cursor_set_position(0);
@@ -211,3 +214,4 @@ int call_routine_format(int arg_count, char** args) {
 }
 
 #endif
+

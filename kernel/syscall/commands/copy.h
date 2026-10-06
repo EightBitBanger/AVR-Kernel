@@ -4,20 +4,14 @@
 #include <stdint.h>
 #include <kernel/kernel.h>
 #include <kernel/fs/fs.h>
+#include <kernel/syscall/commands/path_util.h>
 
 int call_routine_copy(int arg_count, char** args) {
     if (arg_count < 2) 
         return 1;
     
     char path[256];
-    memset(path, '\0', sizeof(path));
-    
-    struct WorkingDirectory workingDirectory;
-    kernel_get_working_directory(&workingDirectory);
-    
-    console_get_path(path, sizeof(path), workingDirectory.current_directory, workingDirectory.mount_directory, 256);
-    strncat(path, "/", 256);
-    strncat(path, args[0], 256);
+    command_resolve_path(args[0], path, sizeof(path));
     
     if (!vfs_exists(path)) 
         return 3; // Source does not exist
@@ -26,11 +20,10 @@ int call_routine_copy(int arg_count, char** args) {
         return 4; // Source is a directory
     
     char dest_path[256];
-    strncpy(dest_path, args[1], sizeof(dest_path) - 1);
-    dest_path[sizeof(dest_path) - 1] = '\0';
+    command_resolve_path(args[1], dest_path, sizeof(dest_path));
     
-    if (vfs_exists(args[1])) {
-        if (vfs_directory_check(args[1])) {
+    if (vfs_exists(dest_path)) {
+        if (vfs_directory_check(dest_path)) {
             const char* filename = strrchr(path, '/');
             if (filename == NULL) {
                 filename = path;
@@ -40,9 +33,12 @@ int call_routine_copy(int arg_count, char** args) {
             
             size_t dest_len = strlen(dest_path);
             if (dest_len > 0 && dest_path[dest_len - 1] != '/') {
-                strcat(dest_path, "/");
+                strncat(dest_path, "/", sizeof(dest_path));
             }
-            strcat(dest_path, filename);
+            if (strlen(dest_path) + strlen(filename) >= sizeof(dest_path)) {
+                return 7; // Destination path too long
+            }
+            strncat(dest_path, filename, sizeof(dest_path));
             
             if (vfs_exists(dest_path)) {
                 return 6; // File already exists in destination directory
@@ -83,3 +79,4 @@ int call_routine_copy(int arg_count, char** args) {
 }
 
 #endif
+

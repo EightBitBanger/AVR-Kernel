@@ -12,6 +12,10 @@
 #define REGISTRY_MAX_NAME_LEN     16
 #define REGISTRY_MAX_PATH_LEN    128
 
+// Limits applied when importing a hive file (protects against corrupt/hostile files)
+#define REGISTRY_MAX_VALUE_SIZE   (64U * 1024U)
+#define REGISTRY_MAX_DEPTH        32
+
 struct RegistryValue {
     char name[REGISTRY_MAX_NAME_LEN];
     struct RegistryValue* next;        // Sibling values under the same key
@@ -32,6 +36,12 @@ struct RegistryHive {
     struct RegistryKey* root;
 };
 
+// registry_get/set_permissions() accept either a RegistryKey* or a RegistryValue*
+// and read the field through RegistryKey. That only works while the field sits
+// at the same offset in both structs, so enforce it at compile time.
+_Static_assert(offsetof(struct RegistryKey, permissions) == offsetof(struct RegistryValue, permissions),
+               "RegistryKey/RegistryValue permissions must share an offset");
+
 extern struct RegistryHive hkey_root;
 extern struct RegistryHive hkey_user;
 
@@ -50,4 +60,11 @@ struct RegistryKey* registry_get_key(struct RegistryKey* parent, const char* nam
 bool registry_hive_import(struct RegistryHive* hive, const char* path);
 bool registry_hive_export(struct RegistryHive* hive, const char* path);
 
+// Write both hives back to the files they were loaded from by
+// registry_hive_initiate(). Returns false if either hive failed to save
+// (or the registry was never initiated).
+bool registry_hive_save_all(void);
+
 #endif
+
+

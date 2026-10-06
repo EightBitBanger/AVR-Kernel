@@ -14,8 +14,19 @@ int call_routine_chkdsk(int arg_count, char** args) {
         return 1;
     }
     
+    // Use the mount's cached context (also picks up the right device type)
+    struct FSDeviceContext* ctx =
+        (struct FSDeviceContext*)knode_get_reference(fs_current.current_directory, 1);
+    if (ctx == NULL || (uint32_t)ctx == KMALLOC_NULL) {
+        print("Device unmounted\n");
+        return 1;
+    }
+    
     struct FSPartitionBlock partition;
-    fs_device_open(fs_current.mount_device, &partition, FS_DEVICE_TYPE_ATA);
+    if (fs_device_get_partition(ctx, &partition) != 0 || partition.sector_size == 0) {
+        print("Invalid partition\n");
+        return 1;
+    }
     
     print_int(partition.sector_size);
     print("B per sector\n");
@@ -31,3 +42,4 @@ int call_routine_chkdsk(int arg_count, char** args) {
 }
 
 #endif
+
