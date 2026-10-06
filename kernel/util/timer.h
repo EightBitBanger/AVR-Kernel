@@ -1,5 +1,7 @@
-#ifndef _DELAY_TIMER_H_
-#define _DELAY_TIMER_H_
+#ifndef KERNEL_UTIL_TIMER_H
+#define KERNEL_UTIL_TIMER_H
+
+#include <stdint.h>
 
 void timer_init(void);
 

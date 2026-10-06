@@ -1,5 +1,5 @@
-#ifndef _C_STRING_PARSER_H_
-#define _C_STRING_PARSER_H_
+#ifndef KERNEL_UTIL_PARSER_H
+#define KERNEL_UTIL_PARSER_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -21,7 +21,9 @@ void str_tolower(char *str);
 // Convert a string to uppercase (in place)
 void str_toupper(char *str);
 
-// Return a string with 'to_replace' replaced with 'to_find'
+// Replace the first occurrence of 'to_find' in 'dest' with 'to_replace', in place.
+// max_size is the total size of the dest buffer.
+// Returns 0 on success, -1 if not found (or to_find is empty), -2 if it won't fit.
 int str_replace(char *dest, const char *to_find, const char *to_replace, int max_size);
 
 #endif

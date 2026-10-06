@@ -1,5 +1,5 @@
-#ifndef _SYSTEM_LEVEL_FUNCTIONS_H_
-#define _SYSTEM_LEVEL_FUNCTIONS_H_
+#ifndef KERNEL_UTIL_SYSTEM_H
+#define KERNEL_UTIL_SYSTEM_H
 
 void system_restart(void);
 

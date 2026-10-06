@@ -22,8 +22,7 @@ char* cstr_tok_next(cstr_tok_t *tokenizer) {
     char *str = tokenizer->next_token;
     const char *delim = tokenizer->delim;
     
-    if (str == NULL || *str == '\0') {
-        tokenizer->next_token = NULL;
+    if (str == NULL) {
         return NULL;
     }
     
