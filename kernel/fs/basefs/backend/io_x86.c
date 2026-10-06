@@ -77,6 +77,23 @@ void fs_cache_sync(struct FSDeviceContext* ctx) {
     }
 }
 
+bool fs_cache_flush(struct FSDeviceContext* ctx) {
+    if (!ctx) return false;
+    
+    fs_cache_sync(ctx);
+    if (ctx->sector_dirty)
+        return false;   // The write-back above failed (or no AHCI port)
+    
+    if (ctx->device_type == FS_DEVICE_TYPE_AHCI) {
+        struct AHCI_Port_Registers* ahci_port = ahci_get_active_port();
+        if (!ahci_port) return false;
+        return ahci_flush_cache(ahci_port);
+    }
+    
+    // ATA: ata_write_sector() already issues FLUSH CACHE after every write
+    return true;
+}
+
 uint8_t fs_readb(struct FSDeviceContext* ctx, uint32_t address) {
     if (!ctx) return 0;
     uint32_t target_sector = address / ATA_SECTOR_SIZE;
@@ -117,3 +134,4 @@ void fs_mem_write(struct FSDeviceContext* ctx, uint32_t address, const void* sou
         fs_writeb(ctx, address + i, src_ptr[i]);
     }
 }
+

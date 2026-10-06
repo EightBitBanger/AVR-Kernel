@@ -105,24 +105,48 @@ uint32_t fs_file_get_size(struct FSDeviceContext* ctx, uint32_t address) {
     return file.total_logical_size;
 }
 
+// Copies the stored name into `filename`, which must hold at least
+// FS_NAME_LENGTH_MAX bytes. The result is always NUL-terminated and at most
+// FS_NAME_LENGTH_MAX - 1 characters long.
+//
+// Names written by the old fs_file_set_name could fill all FS_NAME_LENGTH_MAX
+// bytes with no terminator. Those are read back cut to FS_NAME_LENGTH_MAX - 1
+// characters; every path lookup goes through this function, so such a file
+// resolves (and can be renamed or deleted) under the shortened name.
 bool fs_file_get_name(struct FSDeviceContext* ctx, uint32_t address, char* filename) {
-    struct FSFileHeader header;
-    fs_mem_read(ctx, address, &header, sizeof(struct FSFileHeader));
-    strncpy(filename, header.block.name, FS_NAME_LENGTH_MAX);
+    if (filename == NULL) return false;
+    filename[0] = '\0';
+    if (!ctx || address == FS_NULL) return false;
+
+    struct FSBlockHeader block;
+    fs_mem_read(ctx, address, &block, sizeof(struct FSBlockHeader));
+
+    size_t i = 0;
+    while (i < FS_NAME_LENGTH_MAX - 1 && block.name[i] != '\0') {
+        filename[i] = block.name[i];
+        i++;
+    }
+    filename[i] = '\0';
     return true;
 }
 
+// Rejects (instead of silently truncating) names that do not fit in the
+// header together with their terminator.
 bool fs_file_set_name(struct FSDeviceContext* ctx, uint32_t address, const char* filename) {
+    if (!ctx || filename == NULL || address == FS_NULL)
+        return false;
+
+    size_t length = strnlen(filename, FS_NAME_LENGTH_MAX);
+    if (length == 0 || length > FS_NAME_LENGTH_MAX - 1)
+        return false;
+
     struct FSFileHeader header;
     fs_mem_read(ctx, address, &header, sizeof(struct FSFileHeader));
-    uint8_t permissions = header.block.permissions;
-    if (!(permissions & FS_PERMISSION_WRITE)) 
+    if (!(header.block.permissions & FS_PERMISSION_WRITE))
         return false;
-    size_t length = strlen(filename) + 1;
-    if (length > FS_NAME_LENGTH_MAX) 
-        length = FS_NAME_LENGTH_MAX;
-    if (length == 0) 
-        return false;
+
+    // Zero the whole field so no bytes of an old, longer name remain
+    memset(header.block.name, 0x00, sizeof(header.block.name));
     memcpy(header.block.name, filename, length);
     fs_mem_write(ctx, address, &header, sizeof(struct FSFileHeader));
     return true;
@@ -439,3 +463,4 @@ uint32_t fs_file_get_address(const FileHandle* file) {
         return FS_NULL;
     return file->address;
 }
+

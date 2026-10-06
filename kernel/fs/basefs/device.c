@@ -164,9 +164,14 @@ void fs_device_format(uint32_t device_address, uint32_t capacity, uint32_t secto
     uint32_t b_addr = sizeof(devH) + sizeof(partH);
     for (uint32_t i = 0; i < b_size; i++) fs_writeb(&ctx, b_addr + i, 0x00);
     
+    // The next open shares this sector buffer and starts with an invalid
+    // sector_frame, so it would re-read sector 0 over the unwritten header.
+    fs_cache_sync(&ctx);
+    
     ctx = fs_device_open(device_address, &partH, device_type);
     for (uint32_t i = 0; i < res_blocks; i++) fs_bitmap_set(&ctx, i);
     fs_bitmap_flush(&ctx);
+    fs_cache_sync(&ctx);
 }
 
 void fs_device_format_low(uint32_t device_address, uint32_t capacity) {
@@ -179,6 +184,18 @@ void fs_device_format_low(uint32_t device_address, uint32_t capacity) {
     fs_cache_sync(&ctx);
 }
 
+bool fs_device_sync(struct FSDeviceContext* ctx) {
+    if (!ctx) return false;
+    
+    // Order matters: the bitmap frame is written into the sector cache,
+    // which must then be written to the disk, which must then commit its
+    // own cache. Doing it the other way round loses the bitmap.
+    fs_bitmap_flush(ctx);
+    
+    bool ok = fs_cache_flush(ctx);
+    return ok && !ctx->frame_dirty && !ctx->sector_dirty;
+}
+
 bool fs_check_directory_valid(struct FSDeviceContext* ctx, uint32_t address) {
     if (!ctx) return false;
     struct FSFileHeader header;
@@ -187,3 +204,5 @@ bool fs_check_directory_valid(struct FSDeviceContext* ctx, uint32_t address) {
         return true;
     return false;
 }
+
+

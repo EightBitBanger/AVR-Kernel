@@ -39,6 +39,13 @@ void fs_mem_write(uint32_t address, const void* source, uint32_t size) {
         fs_writeb(address + index, bytes[index]);
 }
 
+bool fs_cache_flush(struct FSDeviceContext* ctx) {
+    // EEPROM writes are committed synchronously by fs_writeb()
+    (void)ctx;
+    return true;
+}
+
 void fs_cache_sync(void) {
     
 }
+

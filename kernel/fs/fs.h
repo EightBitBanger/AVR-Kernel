@@ -37,4 +37,10 @@ bool fs_check_directory_valid(struct FSDeviceContext* ctx, uint32_t address);
 
 void fs_cache_sync(struct FSDeviceContext* ctx);
 
+// Push every pending change for a device to stable storage: the cached
+// bitmap frame, the cached sector, and the drive's own write cache.
+// Call before power-off. Returns false if any step failed.
+bool fs_device_sync(struct FSDeviceContext* ctx);
+
 #endif
+

@@ -12,35 +12,16 @@
 #include <kernel/util/tok.h>
 #include <kernel/util/list.h>
 
+// Open-file table. Guarded by the VFS lock (see vfs_internal.h).
 struct list_node* open_files_head = NULL;
 struct list_node* open_files_tail = NULL;
 File next_unique_id = 1;
 
-bool vfs_directory_check(const char* path) {
-    if (path == NULL || path[0] == '\0') 
-        return false;
-    
-    if (vfs_directory_check_mounted(path)) 
-        return true;
-    
-    uint32_t address = resolve_path_to_address(path);
-    if (address == KNODE_NULL || address == FS_NULL) 
-        return false;
-    
-    if (kmalloc_is_valid(address)) {
-        uint8_t k_flags = kmalloc_get_flags(address);
-        if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) 
-            return true;
-    }
-    
-    struct FSDeviceContext* ctx = vfs_device_get_context(path);
-    if (ctx && fs_check_directory_valid(ctx, address)) 
-        return true;
-    
-    return false;
-}
+//
+// Implementations (caller holds the VFS lock)
+//
 
-bool vfs_directory_check_mounted(const char* path) {
+static bool do_directory_check_mounted(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return false;
     uint32_t address = resolve_path_to_address(path);
@@ -64,7 +45,31 @@ bool vfs_directory_check_mounted(const char* path) {
     return false;
 }
 
-uint32_t vfs_directory_get_item_count(const char* path) {
+static bool do_directory_check(const char* path) {
+    if (path == NULL || path[0] == '\0') 
+        return false;
+    
+    if (do_directory_check_mounted(path)) 
+        return true;
+    
+    uint32_t address = resolve_path_to_address(path);
+    if (address == KNODE_NULL || address == FS_NULL) 
+        return false;
+    
+    if (kmalloc_is_valid(address)) {
+        uint8_t k_flags = kmalloc_get_flags(address);
+        if (k_flags & (KMALLOC_FLAG_MOUNT | KMALLOC_FLAG_DIRECTORY)) 
+            return true;
+    }
+    
+    struct FSDeviceContext* ctx = vfs_device_get_context(path);
+    if (ctx && fs_check_directory_valid(ctx, address)) 
+        return true;
+    
+    return false;
+}
+
+static uint32_t do_directory_get_item_count(const char* path) {
     if (path == NULL || path[0] == '\0') 
         return 0;
     uint32_t address = resolve_path_to_address(path);
@@ -79,7 +84,7 @@ uint32_t vfs_directory_get_item_count(const char* path) {
     return 0;
 }
 
-bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out) {
+static bool do_directory_get_item(const char* path, unsigned int index, char* name_out) {
     if (path == NULL || path[0] == '\0') 
         return false;
     uint32_t address = resolve_path_to_address(path);
@@ -96,4 +101,38 @@ bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out
         return true;
     }
     return false;
+}
+
+//
+// Public API
+//
+
+bool vfs_directory_check(const char* path) {
+    vfs_lock();
+    bool result = do_directory_check(path);
+    vfs_unlock();
+    return result;
+}
+
+bool vfs_directory_check_mounted(const char* path) {
+    vfs_lock();
+    bool result = do_directory_check_mounted(path);
+    vfs_unlock();
+    return result;
+}
+
+// Note: count and item are separate calls. To iterate a directory that
+// another thread may be changing, wrap the loop in vfs_lock()/vfs_unlock().
+uint32_t vfs_directory_get_item_count(const char* path) {
+    vfs_lock();
+    uint32_t result = do_directory_get_item_count(path);
+    vfs_unlock();
+    return result;
+}
+
+bool vfs_directory_get_item(const char* path, unsigned int index, char* name_out) {
+    vfs_lock();
+    bool result = do_directory_get_item(path, index, name_out);
+    vfs_unlock();
+    return result;
 }

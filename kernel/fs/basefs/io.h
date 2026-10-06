@@ -16,4 +16,9 @@ void fs_mem_write(struct FSDeviceContext* ctx, uint32_t address, const void* sou
 
 void fs_cache_sync(struct FSDeviceContext* ctx);
 
+// Write back the cached sector (fs_cache_sync) and then tell the drive to
+// commit its own volatile write cache. Returns false if anything failed.
+bool fs_cache_flush(struct FSDeviceContext* ctx);
+
 #endif
+

@@ -1,3 +1,4 @@
+
 #include <kernel/fs/fs.h>
 #include <kernel/fs/basefs/directory.h>
 
@@ -17,6 +18,12 @@ static bool fs_file_alloc_header_read(struct FSDeviceContext* ctx, uint32_t payl
         return false;
     
     return true;
+}
+
+// Upper bound on any extent chain walk. A chain can never have more links
+// than the device has blocks, so a longer walk means a corrupt (cyclic) chain.
+static inline uint32_t fs_directory_walk_limit(struct FSDeviceContext* ctx) {
+    return (ctx && ctx->block_count) ? ctx->block_count : 0xFFFFU;
 }
 
 static uint32_t fs_directory_header_max_refs(struct FSDeviceContext* ctx, uint32_t directory_address) {
@@ -124,6 +131,7 @@ uint32_t fs_directory_create(struct FSDeviceContext* ctx, const char* name, uint
     struct FSDirectoryHeader directory;
     memset(&directory, 0x00, sizeof(struct FSDirectoryHeader));
     strncpy(directory.block.name, name, sizeof(directory.block.name) - 1);
+    directory.block.name[sizeof(directory.block.name) - 1] = '\0';
     directory.block.attributes  = FS_ATTRIBUTE_DIRECTORY;
     directory.block.permissions = permissions;
     directory.parent            = parent_directory;
@@ -143,7 +151,8 @@ bool fs_directory_delete(struct FSDeviceContext* ctx, uint32_t address) {
         return false;
     
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         struct FSDirectoryExtent extent;
         if (!fs_directory_extent_read(ctx, extent_address, &extent))
             break;
@@ -187,7 +196,8 @@ uint8_t fs_directory_add_reference(struct FSDeviceContext* ctx, uint32_t directo
     }
     
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         if (!fs_directory_extent_read(ctx, extent_address, &extent))
             return 3;
         uint32_t ext_max_refs = fs_directory_extent_max_refs(ctx, extent_address);
@@ -286,7 +296,8 @@ uint8_t fs_directory_remove_reference(struct FSDeviceContext* ctx, uint32_t dire
     }
     
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         if (!fs_directory_extent_read(ctx, extent_address, &extent))
             return 3;
         for (index = 0; index < extent.reference_count; index++) {
@@ -339,7 +350,8 @@ uint32_t fs_directory_get_reference(struct FSDeviceContext* ctx, uint32_t direct
     
     index -= directory.reference_count;
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         if (!fs_directory_extent_read(ctx, extent_address, &extent))
             return address;
         if (index < extent.reference_count) {
@@ -360,13 +372,15 @@ uint32_t fs_directory_get_reference_count(struct FSDeviceContext* ctx, uint32_t 
     struct FSDirectoryExtent extent;
     uint32_t                 extent_address;
     uint32_t                 total_count = 0;
+    // Return 0 (not FS_NULL) on failure: callers use this as a loop bound
     if (!fs_directory_header_read(ctx, directory_address, &directory))
-        return FS_NULL;
+        return 0;
     
     total_count = (uint32_t)directory.reference_count;
     
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         if (!fs_directory_extent_read(ctx, extent_address, &extent)) 
             break;
         total_count += (uint32_t)extent.reference_count;
@@ -383,11 +397,18 @@ uint32_t fs_directory_get_parent(struct FSDeviceContext* ctx, uint32_t directory
     return directory.parent;
 }
 
+// Compare an entry's name the same way path lookup does: through
+// fs_file_get_name, so names stored without a terminator still match.
+static bool fs_directory_name_matches(struct FSDeviceContext* ctx, uint32_t address, const char* name) {
+    char stored[FS_NAME_LENGTH_MAX];
+    if (!fs_file_get_name(ctx, address, stored))
+        return false;
+    return strcmp(stored, name) == 0;
+}
+
 uint32_t fs_directory_find(struct FSDeviceContext* ctx, uint32_t directory_address, const char* name) {
     struct FSDirectoryHeader   directory;
     struct FSDirectoryExtent   extent;
-    struct FSBlockHeader object;
-    
     uint32_t reference_address;
     uint32_t extent_address;
     uint32_t index;
@@ -402,14 +423,13 @@ uint32_t fs_directory_find(struct FSDeviceContext* ctx, uint32_t directory_addre
         
         if (reference_address == FS_NULL)
             continue;
-        fs_mem_read(ctx, reference_address, &object, sizeof(struct FSBlockHeader));
-        
-        if (strncmp(object.name, name, sizeof(object.name)) == 0)
+        if (fs_directory_name_matches(ctx, reference_address, name))
             return reference_address;
     }
     
     extent_address = directory.extent.next;
-    while (extent_address != FS_NULL) {
+    uint32_t walk_guard = fs_directory_walk_limit(ctx);
+    while (extent_address != FS_NULL && walk_guard-- > 0) {
         if (!fs_directory_extent_read(ctx, extent_address, &extent))
             return FS_NULL;
         for (index = 0; index < extent.reference_count; index++) {
@@ -418,9 +438,7 @@ uint32_t fs_directory_find(struct FSDeviceContext* ctx, uint32_t directory_addre
             
             if (reference_address == FS_NULL)
                 continue;
-            fs_mem_read(ctx, reference_address, &object, sizeof(struct FSBlockHeader));
-            
-            if (strncmp(object.name, name, sizeof(object.name)) == 0)
+            if (fs_directory_name_matches(ctx, reference_address, name))
                 return reference_address;
         }
         
@@ -428,4 +446,92 @@ uint32_t fs_directory_find(struct FSDeviceContext* ctx, uint32_t directory_addre
     }
     
     return FS_NULL;
+}
+
+
+
+
+// True if `address` is a live allocation holding a directory header.
+static bool fs_directory_is_directory(struct FSDeviceContext* ctx, uint32_t address) {
+    struct FSDirectoryHeader directory;
+    if (!fs_directory_header_read(ctx, address, &directory))
+        return false;
+    return (directory.block.attributes & FS_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+// Delete a directory together with everything below it, then the directory
+// itself. If `parent_directory` is not FS_NULL the directory is unlinked from
+// it first, so an interrupted delete leaves orphaned blocks rather than a
+// parent entry pointing at freed storage.
+//
+// The walk is iterative (no recursion on the kernel stack): it always works
+// on the last entry of the current directory, descends into non-empty
+// subdirectories, and climbs back up through the `parent` field once a
+// directory has been emptied.
+//
+// Only directories whose `parent` field names the directory they were found
+// in are descended into and freed. Anything else (a corrupt or cross-linked
+// entry, or a link back to the directory being deleted) is only unlinked,
+// never freed, so the walk cannot escape the subtree or loop forever.
+//
+// Permissions are not checked here; that is the caller's job.
+// Refuses to delete the partition's root directory.
+bool fs_directory_delete_recursive(struct FSDeviceContext* ctx, uint32_t address, uint32_t parent_directory) {
+    if (!ctx || address == FS_NULL)
+        return false;
+    if (!fs_directory_is_directory(ctx, address))
+        return false;
+    
+    struct FSPartitionBlock partition;
+    if (fs_device_get_partition(ctx, &partition) != 0)
+        return false;
+    if (address == partition.root_directory)
+        return false;
+    
+    if (parent_directory != FS_NULL)
+        fs_directory_remove_reference(ctx, parent_directory, address);
+    
+    // Every step frees an allocation, unlinks an entry or descends once into
+    // a directory that will later be freed, so a sane tree needs far fewer
+    // steps than this. Running out means the structure is corrupt.
+    uint32_t steps = fs_directory_walk_limit(ctx) * 4U;
+    uint32_t current = address;
+    
+    while (steps-- > 0) {
+        uint32_t count = fs_directory_get_reference_count(ctx, current);
+        
+        if (count == 0) {
+            if (current == address) {
+                fs_directory_delete(ctx, current);
+                return true;
+            }
+            // Emptied a subdirectory: unlink it, free it, climb back up
+            uint32_t up = fs_directory_get_parent(ctx, current);
+            if (up == FS_NULL || fs_directory_remove_reference(ctx, up, current) != 0)
+                return false;
+            fs_directory_delete(ctx, current);
+            current = up;
+            continue;
+        }
+        
+        uint32_t child = fs_directory_get_reference(ctx, current, count - 1U);
+        
+        if (child != FS_NULL && child != address && child != current &&
+            fs_directory_is_directory(ctx, child) &&
+            fs_directory_get_parent(ctx, child) == current) {
+            // Owned subdirectory: empty it first (unlinked when we come back)
+            current = child;
+            continue;
+        }
+        
+        // A file, a foreign/corrupt entry, or an empty slot: unlink it
+        // (An FS_NULL slot inside the count can't be removed and would be
+        // retried forever, so a failed unlink stops the walk.)
+        if (fs_directory_remove_reference(ctx, current, child) != 0)
+            return false;
+        if (child != FS_NULL && fs_file_check(ctx, child))
+            fs_file_delete(ctx, child);
+    }
+    
+    return false;
 }

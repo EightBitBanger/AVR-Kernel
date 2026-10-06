@@ -11,7 +11,11 @@
 #include <kernel/util/tok.h>
 #include <kernel/util/list.h>
 
-bool vfs_set_permissions(const char* path, uint8_t perm) {
+//
+// Implementations (caller holds the VFS lock)
+//
+
+static bool do_set_permissions(const char* path, uint8_t perm) {
     if (path == NULL || path[0] == '\0') 
         return false;
     uint32_t address = resolve_path_to_address(path);
@@ -39,7 +43,7 @@ bool vfs_set_permissions(const char* path, uint8_t perm) {
     return false;
 }
 
-bool vfs_get_permissions(const char* path, uint8_t* perm) {
+static bool do_get_permissions(const char* path, uint8_t* perm) {
     if (path == NULL || path[0] == '\0' || perm == NULL) 
         return false;
     uint32_t address = resolve_path_to_address(path);
@@ -66,4 +70,22 @@ bool vfs_get_permissions(const char* path, uint8_t* perm) {
         return true;
     }
     return false;
+}
+
+//
+// Public API
+//
+
+bool vfs_set_permissions(const char* path, uint8_t perm) {
+    vfs_lock();
+    bool result = do_set_permissions(path, perm);
+    vfs_unlock();
+    return result;
+}
+
+bool vfs_get_permissions(const char* path, uint8_t* perm) {
+    vfs_lock();
+    bool result = do_get_permissions(path, perm);
+    vfs_unlock();
+    return result;
 }

@@ -53,7 +53,8 @@ uint32_t resolve_path_to_address(const char* path) {
                 if ((uint32_t)device_context != KMALLOC_NULL && device_context != NULL) {
                     if (device_address != KMALLOC_NULL && device_address != 0) {
                         struct FSPartitionBlock partition;
-                        fs_device_get_partition(device_context, &partition);
+                        if (fs_device_get_partition(device_context, &partition) != 0)
+                            return 0xFFFFFFFF;   // Bad magic: don't walk garbage
                         
                         if (device_context->is_open == true) {
                             current_fs_node = partition.root_directory;
@@ -85,10 +86,10 @@ uint32_t resolve_path_to_address(const char* path) {
                     uint32_t reference = fs_directory_get_reference(current_ctx, current_fs_node, i);
                     if (reference == FS_NULL) continue;
                     
-                    char item_name[32];
+                    char item_name[FS_NAME_LENGTH_MAX];   // fs_file_get_name always terminates
                     fs_file_get_name(current_ctx, reference, item_name);
                     
-                    if (strncmp(item_name, token, 32) == 0) {
+                    if (strcmp(item_name, token) == 0) {
                         found_ref = reference;
                         break;
                     }
@@ -186,7 +187,7 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
     strncpy(path_scratch, path, sizeof(path_scratch) - 1);
     path_scratch[sizeof(path_scratch) - 1] = '\0';
     uint32_t parent_fs_node = 0;
-    char last_token[16] = {0};
+    char last_token[32] = {0};
     
     cstr_tok_t tok;
     cstr_tok_init(&tok, path_scratch, "/");
@@ -217,9 +218,11 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
                 uint32_t device_address = knode_get_reference(current_knode, 0);
                 struct FSDeviceContext* device_context = (struct FSDeviceContext*)knode_get_reference(current_knode, 1);
                 
-                if (device_address != KNODE_NULL && device_address != 0) {
+                if (device_context != NULL && (uint32_t)device_context != KMALLOC_NULL &&
+                    device_address != KNODE_NULL && device_address != 0) {
                     struct FSPartitionBlock partition;
-                    fs_device_get_partition(device_context, &partition);
+                    if (fs_device_get_partition(device_context, &partition) != 0)
+                        return false;   // Bad magic: don't walk garbage
                     if (device_context->is_open == true) {
                         current_fs_node = partition.root_directory;
                         current_ctx = device_context;
@@ -248,7 +251,7 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
                     uint32_t reference = fs_directory_get_reference(current_ctx, current_fs_node, i);
                     if (reference == FS_NULL) continue;
                     
-                    char item_name[16]; 
+                    char item_name[FS_NAME_LENGTH_MAX];   // same comparison as resolve_path_to_address()
                     fs_file_get_name(current_ctx, reference, item_name);
                     
                     if (strcmp(item_name, token) == 0) {
@@ -261,6 +264,11 @@ bool vfs_parse_path(const char* path, uint16_t flags, uint32_t* out_knode, uint3
                 if (found_ref == 0 || found_ref == FS_NULL) {
                     char* next_token = cstr_tok_next(&tok);
                     if (next_token == NULL && in_file_system && (flags & VFS_OPEN_CREATE)) {
+                        // Refuse names that would be cut short (the file would
+                        // be created under a different name than requested)
+                        if (strlen(token) > VFS_NAME_MAX || strlen(token) >= sizeof(last_token)) {
+                            return false;
+                        }
                         uint8_t default_perms = FS_PERMISSION_READ | FS_PERMISSION_WRITE;
                         uint32_t new_file_address = fs_file_create(current_ctx, last_token, default_perms, 0, parent_fs_node);
                         
