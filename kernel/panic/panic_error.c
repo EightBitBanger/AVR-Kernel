@@ -50,6 +50,14 @@ static void clear_screen(uint32_t color) {
 void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t type, const char* extra) {
     __asm__ __volatile__("cli");
     
+    // A panic before draw_set_info()/draw_set_frame_front_buffer() (e.g. from
+    // pmm_init) would otherwise fault on a NULL pointer and triple-fault.
+    if (vinfo == NULL || front_buffer == NULL) {
+        while (1) {
+            __asm__ volatile("cli; hlt");
+        }
+    }
+    
     clear_screen(COLOR_BG);
     
     TextContext ctx = {
@@ -72,13 +80,24 @@ void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t typ
         case PT_PAGE_FAULT:                 iso_print(&ctx, "   PAGE FAULT\n"); break;
         case PT_SEG_FAULT:                  iso_print(&ctx, "   SEGMENTATION FAULT\n"); break;
         case PT_OUT_OF_MEMORY:              iso_print(&ctx, "   OUT-OF-MEMORY\n"); break;
+        case PT_CPU_EXCEPTION:              iso_print(&ctx, "   CPU EXCEPTION\n"); break;
         default:                            iso_print(&ctx, "   UNKNOWN KERNEL FAULT\n"); break;
     }
     
     //
     // General & page faults
     
-    if (type == PT_GENERAL_PROTECTION_FAULT || type == PT_PAGE_FAULT) {
+    if (type == PT_GENERAL_PROTECTION_FAULT) {
+        // #GP error code is a segment selector (0 if not segment related), not PF bits
+        iso_print(&ctx, "\n\n FAULTING EIP: 0x");
+        iso_print_hex32(&ctx, faulting_address);
+        iso_print(&ctx, "\n\n SELECTOR ERROR CODE: 0x");
+        iso_print_hex32(&ctx, error_code);
+        iso_print(&ctx, "\n");
+        
+    } else 
+    
+    if (type == PT_PAGE_FAULT) {
         iso_print(&ctx, "\n\n ACCESS VIOLATION: ");
         iso_print(&ctx, (error_code & PF_WRITE) ? "[WRITE] @ " : "[READ] @ ");
         
@@ -116,6 +135,19 @@ void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t typ
         
         if (extra) iso_print(&ctx, extra);
         
+    } else 
+    
+    //
+    // Other CPU exceptions
+    
+    if (type == PT_CPU_EXCEPTION) {
+        iso_print(&ctx, "\n\n ");
+        if (extra) iso_print(&ctx, extra);
+        iso_print(&ctx, "\n\n EIP: 0x");
+        iso_print_hex32(&ctx, faulting_address);
+        iso_print(&ctx, "\n\n ERROR CODE: 0x");
+        iso_print_hex32(&ctx, error_code);
+        iso_print(&ctx, "\n");
     }
     
     // Force write memory fence ensuring pixels have hit VRAM
@@ -181,3 +213,4 @@ void iso_print_hex32(TextContext* ctx, uint32_t val) {
     
     iso_print(ctx, buffer);
 }
+

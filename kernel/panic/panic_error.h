@@ -21,7 +21,9 @@
 #define PT_PAGE_FAULT                  0x01
 #define PT_SEG_FAULT                   0x02
 #define PT_OUT_OF_MEMORY               0x03
+#define PT_CPU_EXCEPTION               0x04  // faulting_address = EIP, extra = exception name
 
 void kernel_crashout(uint32_t error_code, uint32_t faulting_address, uint8_t type, const char* extra);
 
 #endif
+
